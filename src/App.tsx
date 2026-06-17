@@ -23,6 +23,8 @@ import {
   User,
   Settings,
   Key,
+  CreditCard,
+  Wallet,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -60,21 +62,46 @@ export default function App() {
     return localStorage.getItem("selected_ai_model") || "gemini-3.5-flash";
   });
 
-  const [modelQuotas, setModelQuotas] = useState<{ [key: string]: { limit: number; used: number } }>(() => {
+  const [modelQuotas, setModelQuotas] = useState<{ [key: string]: { limit: number; used: number; lastReset: number } }>(() => {
+    const defaultQuotas = {
+      "gemini-3.5-flash": { limit: 1500, used: 0, lastReset: Date.now() },
+      "gemini-3.1-pro-preview": { limit: 100, used: 0, lastReset: Date.now() },
+      "gemini-3.1-flash-lite": { limit: 3000, used: 0, lastReset: Date.now() },
+      "gemini-2.5-flash-image": { limit: 5000, used: 0, lastReset: Date.now() },
+      "gpt-4o": { limit: 50, used: 0, lastReset: Date.now() },
+      "claude-3-5-sonnet": { limit: 50, used: 0, lastReset: Date.now() },
+      "deepseek-coder": { limit: 500, used: 0, lastReset: Date.now() },
+      "kimi-moonshot": { limit: 200, used: 0, lastReset: Date.now() },
+      "qwen-vl-max": { limit: 1000, used: 0, lastReset: Date.now() },
+    };
+
     const saved = localStorage.getItem("ai_model_quotas");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        const now = Date.now();
+        const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+        
+        const merged: any = {};
+        for (const key of Object.keys(defaultQuotas)) {
+          const defaultVal = defaultQuotas[key as keyof typeof defaultQuotas];
+          if (parsed[key]) {
+            merged[key] = { ...defaultVal, ...parsed[key] };
+            // Check 24 hour reset
+            if (!merged[key].lastReset || (now - merged[key].lastReset) > TWENTY_FOUR_HOURS) {
+               merged[key].used = 0;
+               merged[key].lastReset = now;
+            }
+          } else {
+            merged[key] = defaultVal;
+          }
+        }
+        return merged;
       } catch (e) {
-        // use default
+        // Fallback to default if error
       }
     }
-    return {
-      "gemini-3.5-flash": { limit: 1500, used: 4 },
-      "gemini-3.1-pro-preview": { limit: 100, used: 1 },
-      "gemini-3.1-flash-lite": { limit: 3000, used: 0 },
-      "gemini-2.5-flash-image": { limit: 5000, used: 12 },
-    };
+    return defaultQuotas;
   });
 
   useEffect(() => {
@@ -95,6 +122,7 @@ export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
+  const [isPaymentPanelOpen, setIsPaymentPanelOpen] = useState(false);
   const [notification, setNotification] = useState<{
     text: string;
     type: "success" | "error" | "info";
@@ -306,6 +334,7 @@ export default function App() {
         ...newFile,
         status: "success",
         results: extractedItems,
+        tokensUsed: result.tokensUsed || 0,
       };
 
       setActiveFile(successFile);
@@ -604,6 +633,7 @@ export default function App() {
                 name: "Gemini 3.5 Flash",
                 badge: "پیشنهادی",
                 tokenLimit: "سند تا ۲۵MB",
+                costPerRequest: "حدود ۱,۲۰۰ توکن",
                 desc: "پردازش فوق‌سریع و هوشمند فاکتورها.",
                 badgeClass: "bg-blue-500/20 text-blue-300",
               },
@@ -612,6 +642,7 @@ export default function App() {
                 name: "Gemini 3.1 Pro",
                 badge: "حسابرس ارشد",
                 tokenLimit: "سند تا ۱۰۰MB",
+                costPerRequest: "حدود ۱,۸۰۰ توکن",
                 desc: "استدلال عمیق و مناسب دست‌خط نامنظم.",
                 badgeClass: "bg-purple-500/20 text-purple-300",
               },
@@ -620,6 +651,7 @@ export default function App() {
                 name: "Gemini 3.1 Flash Lite",
                 badge: "سرعت آنی",
                 tokenLimit: "سند تا ۱۰MB",
+                costPerRequest: "حدود ۹۰۰ توکن",
                 desc: "مقرون‌به‌صرفه‌ترین مفسر برای فاکتورهای تایپی.",
                 badgeClass: "bg-emerald-500/20 text-emerald-300",
               },
@@ -628,6 +660,7 @@ export default function App() {
                 name: "Gemini 2.5 Flash",
                 badge: "کلاسیک",
                 tokenLimit: "سند تا ۵MB",
+                costPerRequest: "حدود ۱,۲۰۰ توکن",
                 desc: "تصویرخوان کلاسیک با عملکرد پایدار.",
                 badgeClass: "bg-amber-500/20 text-amber-300",
               },
@@ -636,6 +669,7 @@ export default function App() {
                 name: "GPT-4o (OpenAI)",
                 badge: "API Key",
                 tokenLimit: "نیازمند تنظیم API",
+                costPerRequest: "حدود ۱,۶۰۰ توکن",
                 desc: "قدرتمندترین مدل تصویری شرکت OpenAI.",
                 badgeClass: "bg-green-500/20 text-green-300",
               },
@@ -644,6 +678,7 @@ export default function App() {
                 name: "Claude 3.5 Sonnet",
                 badge: "Anthropic",
                 tokenLimit: "نیازمند تنظیم API",
+                costPerRequest: "حدود ۱,۵۰۰ توکن",
                 desc: "جزئیات بالا و تحلیل دقیق متون مالی.",
                 badgeClass: "bg-orange-500/20 text-orange-300",
               },
@@ -652,7 +687,8 @@ export default function App() {
                 name: "DeepSeek V3/R1",
                 badge: "DeepSeek",
                 tokenLimit: "نیازمند تنظیم API",
-                desc: "مدل متن‌باز و قدرتمند دیپ‌سیک.",
+                costPerRequest: "حدود ۳,۰۰۰ توکن",
+                desc: "مدل متن‌باز و قدرتمند (بیشتر به دلیل زنجیره استدلال).",
                 badgeClass: "bg-blue-500/20 text-blue-300",
               },
               {
@@ -660,6 +696,7 @@ export default function App() {
                 name: "Kimi (Moonshot)",
                 badge: "Kimi",
                 tokenLimit: "نیازمند تنظیم API",
+                costPerRequest: "حدود ۱,۲۰۰ توکن",
                 desc: "پردازش متون مالی با پنجره محتوای بزرگ.",
                 badgeClass: "bg-indigo-500/20 text-indigo-300",
               },
@@ -668,56 +705,80 @@ export default function App() {
                 name: "Qwen VL Max",
                 badge: "Qwen",
                 tokenLimit: "نیازمند تنظیم API",
+                costPerRequest: "حدود ۱,۴۰۰ توکن",
                 desc: "مدل قدرتمند بینایی کوئن برای خواندن اسناد.",
                 badgeClass: "bg-teal-500/20 text-teal-300",
               },
             ].map((m) => {
-              const quota = modelQuotas[m.id] || { limit: 100, used: 0 };
-              const remaining = Math.max(0, quota.limit - quota.used);
+              const quota = modelQuotas[m.id] || { limit: 100, used: 0, lastReset: Date.now() };
               const percentUsed = Math.min(100, Math.round((quota.used / quota.limit) * 100));
+              const remaining = Math.max(0, quota.limit - quota.used);
               const isSelected = selectedModel === m.id;
+              const isExhausted = remaining === 0;
+              
+              const resetMsRemaining = Math.max(0, (24 * 60 * 60 * 1000) - (Date.now() - (quota.lastReset || Date.now())));
+              const hoursRemaining = Math.floor(resetMsRemaining / (1000 * 60 * 60));
+              const minsRemaining = Math.floor((resetMsRemaining % (1000 * 60 * 60)) / (1000 * 60));
 
               return (
                 <div
                   key={m.id}
-                  onClick={() => setSelectedModel(m.id)}
-                  className={`p-3 rounded-xl cursor-pointer transition-all border text-right select-none ${
-                    isSelected
-                      ? "bg-slate-800 border-blue-500 text-white shadow-md shadow-blue-500/5"
-                      : "bg-slate-900/30 border-slate-800 hover:bg-slate-800/40 text-slate-300"
+                  onClick={() => {
+                    if (!isExhausted) setSelectedModel(m.id);
+                  }}
+                  className={`p-3 rounded-xl transition-all border text-right select-none ${
+                    isExhausted
+                      ? "bg-rose-950/20 border-rose-900/50 cursor-not-allowed opacity-80"
+                      : isSelected
+                      ? "bg-slate-800 border-blue-500 cursor-pointer text-white shadow-md shadow-blue-500/5"
+                      : "bg-slate-900/30 border-slate-800 cursor-pointer hover:bg-slate-800/40 text-slate-300"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-1 mb-1.5">
-                    <span className="text-xs font-bold font-mono text-slate-100">{m.name}</span>
-                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${m.badgeClass}`}>
-                      {m.badge}
+                    <span className={`text-xs font-bold font-mono ${isExhausted ? "text-rose-400" : "text-slate-100"}`}>
+                      {m.name}
+                    </span>
+                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${isExhausted ? "bg-rose-500/20 text-rose-300" : m.badgeClass}`}>
+                      {isExhausted ? "پایان شارژ" : m.badge}
                     </span>
                   </div>
                   
-                  <p className="text-[10px] text-slate-400 leading-relaxed mb-2.5">
+                  <p className={`text-[10px] leading-relaxed mb-2.5 ${isExhausted ? "text-rose-400/70" : "text-slate-400"}`}>
                     {m.desc}
                   </p>
 
-                  <div className="space-y-1.5 border-t border-slate-800/80 pt-2 text-[9px] text-slate-400">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500">حداکثر ظرفیت:</span>
-                      <span className="font-medium text-slate-300">{m.tokenLimit}</span>
+                  <div className={`space-y-1.5 border-t pt-2 text-[9px] ${isExhausted ? "border-rose-900/40 text-rose-300/70" : "border-slate-800/80 text-slate-400"}`}>
+                    <div className={`flex justify-between items-center ${isExhausted ? "" : "text-slate-300"}`}>
+                      <span className="font-bold text-[8px] opacity-80">مصرف تخمینی هر اسکن:</span>
+                      <span className={`font-mono ${isExhausted ? "text-rose-400" : "text-blue-400"}`} dir="ltr">{m.costPerRequest}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-slate-500 font-bold">سهمیه روزانه:</span>
-                      <span className="font-mono font-medium text-slate-350" dir="ltr">{quota.limit.toLocaleString("fa-IR")} بار</span>
+                      <span className={isExhausted ? "" : "text-slate-500"}>حداکثر ظرفیت:</span>
+                      <span className={`font-medium ${isExhausted ? "" : "text-slate-300"}`}>{m.tokenLimit}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-slate-500">سهم باقی‌مانده:</span>
-                      <span className="font-mono font-bold text-emerald-400" dir="ltr">{remaining.toLocaleString("fa-IR")} بار</span>
+                      <span className={`font-bold ${isExhausted ? "" : "text-slate-500"}`}>سهمیه روزانه:</span>
+                      <span className="font-mono font-medium" dir="ltr">{quota.limit.toLocaleString("fa-IR")} بار</span>
                     </div>
+                    
+                    {isExhausted ? (
+                      <div className="flex justify-between items-center mt-1 pt-1 border-t border-rose-900/40">
+                        <span className="font-bold text-rose-400">شارژ مجدد سهمیه:</span>
+                        <span className="font-mono font-bold text-rose-400">{hoursRemaining}h {minsRemaining}m</span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">سهم باقی‌مانده:</span>
+                        <span className="font-mono font-bold text-emerald-400" dir="ltr">{remaining.toLocaleString("fa-IR")} بار</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Visual limit bar graph */}
-                  <div className="w-full bg-slate-800 rounded-full h-1 mt-2 overflow-hidden">
+                  <div className={`w-full rounded-full h-1 mt-2 overflow-hidden ${isExhausted ? "bg-rose-950" : "bg-slate-800"}`}>
                     <div
                       className={`h-full transition-all duration-300 ${
-                        percentUsed > 85 ? "bg-rose-500" : percentUsed > 50 ? "bg-amber-400" : "bg-blue-500"
+                        percentUsed >= 100 ? "bg-rose-600" : percentUsed > 85 ? "bg-rose-500" : percentUsed > 50 ? "bg-amber-400" : "bg-blue-500"
                       }`}
                       style={{ width: `${100 - percentUsed}%` }}
                     />
@@ -1221,12 +1282,32 @@ export default function App() {
           <div className="flex w-full justify-between pb-1.5 mb-1 border-b border-slate-700 max-w-7xl">
             <div className="flex gap-4">
               <span>سیستم: آنلاین و امن</span>
-              <span>هسته مفسর: {
+              <span>هسته مفسر: {
                 selectedModel === "gemini-3.5-flash" ? "Gemini 3.5 Flash" :
                 selectedModel === "gemini-3.1-pro-preview" ? "Gemini 3.1 Pro" :
                 selectedModel === "gemini-3.1-flash-lite" ? "Gemini 3.1 Flash Lite" :
+                selectedModel === "gpt-4o" ? "GPT-4o (OpenAI)" :
+                selectedModel === "claude-3-5-sonnet" ? "Claude 3.5 Sonnet" :
+                selectedModel === "deepseek-coder" ? "DeepSeek V3/R1" :
+                selectedModel === "kimi-moonshot" ? "Kimi" :
+                selectedModel === "qwen-vl-max" ? "Qwen VL" :
                 "Gemini 2.5 Flash"
               }</span>
+              {activeFile?.status === "success" && (
+                <span className="text-amber-400 font-mono">
+                  توکن مصرفی سند فعلی: {(activeFile.tokensUsed || (
+                    selectedModel === "gemini-3.1-pro-preview" ? 1800 :
+                    selectedModel === "gpt-4o" ? 1600 :
+                    selectedModel === "claude-3-5-sonnet" ? 1500 :
+                    selectedModel === "deepseek-coder" ? 3000 :
+                    selectedModel === "qwen-vl-max" ? 1400 :
+                    selectedModel === "kimi-moonshot" ? 1200 :
+                    selectedModel === "gemini-3.5-flash" ? 1200 :
+                    selectedModel === "gemini-3.1-flash-lite" ? 900 :
+                    1200
+                  )).toLocaleString()} توکن
+                </span>
+              )}
             </div>
             <div className="flex gap-4">
               <span className="text-emerald-400 font-semibold">استخراج بدون خط خوردگی بالا</span>
@@ -1246,7 +1327,7 @@ export default function App() {
         />
       )}
 
-      {/* User settings / Profile Panel Modal */}
+      {/* Profile Panel Modal */}
       {isUserPanelOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
           {/* Backdrop */}
@@ -1300,7 +1381,19 @@ export default function App() {
                   </div>
                   <div className="mt-4 pt-4 border-t border-slate-200/50 flex items-center justify-between">
                      <span className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نوع اشتراک</span>
-                     <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">رایگان / آزمایشی</span>
+                     <div className="flex items-center gap-3">
+                       <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">رایگان / آزمایشی</span>
+                       <button 
+                         onClick={() => {
+                           setIsUserPanelOpen(false);
+                           setIsPaymentPanelOpen(true);
+                         }}
+                         className="flex items-center gap-1.5 text-[10px] bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded-md transition-colors"
+                       >
+                         <CreditCard className="h-3 w-3" />
+                         ارتقای حساب
+                       </button>
+                     </div>
                   </div>
                 </div>
               </section>
@@ -1370,6 +1463,200 @@ export default function App() {
               >
                 ذخیره تنظیمات
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment / Subscription Panel Modal */}
+      {isPaymentPanelOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md animate-fade-in"
+            onClick={() => setIsPaymentPanelOpen(false)}
+          ></div>
+          
+          {/* Panel Container */}
+          <div className={`relative w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up transform transition-all ${
+            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border border-slate-200 text-slate-800"
+          }`}>
+            <div className={`flex items-center justify-between p-5 border-b ${
+              isDarkMode ? "bg-slate-800/80 border-slate-700/50" : "bg-slate-50 border-slate-100"
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl ${isDarkMode ? "bg-blue-900/40 text-blue-400" : "bg-blue-100 text-blue-600"}`}>
+                  <CreditCard className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold font-sans text-lg">ارتقای حساب کاربری</h3>
+                  <span className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>طرح‌های اشتراکی سامانه پردازش اسناد OCR</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsPaymentPanelOpen(false)}
+                className={`p-2 rounded-lg transition-colors ${
+                  isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500"
+                }`}
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className={`p-6 overflow-y-auto max-h-[75vh] ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
+              {/* Pricing Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                {/* Plan 1 */}
+                <div className={`flex flex-col rounded-2xl border-2 transition-all hover:-translate-y-1 ${
+                  isDarkMode ? "bg-slate-800/30 border-slate-700 hover:border-slate-600" : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"
+                }`}>
+                  <div className="p-6 border-b border-slate-200/20">
+                    <h4 className="font-bold text-lg mb-2">طرح پایه</h4>
+                    <p className={`text-[11px] mb-4 min-h-[32px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>مناسب برای کسب‌وکارهای کوچک و پردازش محدود</p>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-black">۲۵۰</span>
+                      <span className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>هزار تومان / ماهانه</span>
+                    </div>
+                  </div>
+                  <div className="p-6 flex-1 flex flex-col gap-4">
+                    <ul className="flex flex-col gap-3 flex-1">
+                      <li className="flex items-start gap-2 text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span>پردازش ۳۰۰ سند در ماه</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span>دسترسی به Gemini 3.5 Flash</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-xs opacity-50">
+                        <X className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span>بدون دسترسی به Claude و GPT-4o</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-xs opacity-50">
+                        <X className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span>بدون پشتیبانی اختصاصی</span>
+                      </li>
+                    </ul>
+                    <button 
+                      onClick={() => {
+                        setNotification({ text: "در حال انتقال به درگاه پرداخت...", type: "success" });
+                        setIsPaymentPanelOpen(false);
+                      }}
+                      className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        isDarkMode ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+                      }`}
+                    >
+                      انتخاب این طرح
+                    </button>
+                  </div>
+                </div>
+
+                {/* Plan 2 - Best Value */}
+                <div className="flex flex-col rounded-2xl border-2 border-blue-500 shadow-xl shadow-blue-500/10 transform scale-105 z-10 relative overflow-hidden bg-gradient-to-b from-blue-600/5 to-transparent">
+                  <div className="absolute top-0 right-0 left-0 bg-blue-500 text-center py-1.5 text-[10px] font-bold text-white tracking-wider">
+                    پیشنهاد ویژه
+                  </div>
+                  <div className="p-6 pt-10 border-b border-slate-200/20">
+                    <h4 className="font-bold text-lg mb-2 text-blue-500">طرح حرفه‌ای</h4>
+                    <p className={`text-[11px] mb-4 min-h-[32px] ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>ایده‌آل برای حسابداران و شرکت‌های متوسط</p>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-black">۶۸۰</span>
+                      <span className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>هزار تومان / ماهانه</span>
+                    </div>
+                  </div>
+                  <div className="p-6 flex-1 flex flex-col gap-4">
+                    <ul className="flex flex-col gap-3 flex-1">
+                      <li className="flex items-start gap-2 text-xs font-medium">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span>پردازش ۲۰۰۰ سند در ماه</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-xs font-medium">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span>دسترسی به تمام مدل‌های هوش مصنوعی</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-xs font-medium">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span>دقت بسیار بالا در خوانش دست‌نویس</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-xs font-medium">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span>خروجی یکپارچه اکسل (به زودی)</span>
+                      </li>
+                    </ul>
+                    <button 
+                      onClick={() => {
+                        setNotification({ text: "در حال انتقال به درگاه پرداخت...", type: "success" });
+                        setIsPaymentPanelOpen(false);
+                      }}
+                      className="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-md transition-all hover:shadow-lg active:scale-95"
+                    >
+                      انتخاب این طرح
+                    </button>
+                  </div>
+                </div>
+
+                {/* Plan 3 */}
+                <div className={`flex flex-col rounded-2xl border-2 transition-all hover:-translate-y-1 ${
+                  isDarkMode ? "bg-slate-800/30 border-slate-700 hover:border-slate-600" : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"
+                }`}>
+                  <div className="p-6 border-b border-slate-200/20">
+                    <h4 className="font-bold text-lg mb-2">طرح سازمانی</h4>
+                    <p className={`text-[11px] mb-4 min-h-[32px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>پردازش نامحدود برای شرکت‌های بزرگ و هلدینگ‌ها</p>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-black">۲٫۵</span>
+                      <span className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>میلیون تومان / ماهانه</span>
+                    </div>
+                  </div>
+                  <div className="p-6 flex-1 flex flex-col gap-4">
+                    <ul className="flex flex-col gap-3 flex-1">
+                      <li className="flex items-start gap-2 text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span>پردازش کاملاً نامحدود اسناد</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span>استقرار روی سرورهای ابری اختصاصی</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span>پشتیبانی ویژه ۲۴ ساعته (SLA)</span>
+                      </li>
+                      <li className="flex items-start gap-2 text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                        <span>آموزش اختصاصی مدل با داده‌های شما</span>
+                      </li>
+                    </ul>
+                    <button 
+                      onClick={() => {
+                        setNotification({ text: "درخواست تماس ثبت شد.", type: "info" });
+                        setIsPaymentPanelOpen(false);
+                      }}
+                      className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all border ${
+                        isDarkMode ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-300 text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      تماس با واحد فروش
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* API Token note */}
+              <div className={`mt-8 p-4 rounded-xl border flex gap-4 items-start ${
+                isDarkMode ? "bg-blue-900/10 border-blue-900/50" : "bg-blue-50/50 border-blue-100"
+              }`}>
+                <div className={`p-2 rounded-full shrink-0 ${isDarkMode ? "bg-blue-900/40 text-blue-400" : "bg-white text-blue-500 shadow-sm"}`}>
+                  <Wallet className="h-5 w-5" />
+                </div>
+                <div>
+                  <h5 className={`text-xs font-bold mb-1 ${isDarkMode ? "text-blue-300" : "text-blue-800"}`}>روش جایگزین: استفاده از کلید API شخصی</h5>
+                  <p className={`text-[11px] leading-relaxed ${isDarkMode ? "text-blue-200/70" : "text-blue-900/70"}`}>
+                    اگر توسعه‌دهنده هستید می‌توانید بدون خرید اشتراک، با وارد کردن کلید API شخصی خود در پنل تنطیمات (آیکون کاربر در هدر سایت)، از سیستم به صورت رایگان استفاده کنید. در این حالت هزینه‌های پردازش مستقیماً توسط سرویس‌دهنده هوش مصنوعی (OpenAI/Anthropic/...) از حساب شما کسر می‌شود.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -137,7 +137,9 @@ Date, Description, Debit, Credit, Remarks, ConfidenceScore`;
       }
     }
 
-    res.json({ success: true, data: parsedData });
+    const tokensUsed = response.usageMetadata?.totalTokenCount || 0;
+
+    res.json({ success: true, data: parsedData, tokensUsed });
   } catch (error: any) {
     console.error("API Error in extraction:", error);
     res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در پردازش فایل" });

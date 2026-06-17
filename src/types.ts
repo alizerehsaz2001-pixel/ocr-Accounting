@@ -21,6 +21,7 @@ export interface UploadedFile {
   status: 'idle' | 'processing' | 'success' | 'error';
   error: string | null;
   results?: TransactionItem[];
+  tokensUsed?: number;
 }
 
 export interface PreviousScan {
