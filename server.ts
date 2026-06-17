@@ -50,9 +50,29 @@ app.post("/api/extract", async (req, res) => {
       "gemini-3.5-flash",
       "gemini-3.1-pro-preview",
       "gemini-3.1-flash-lite",
-      "gemini-2.5-flash-image"
+      "gemini-2.5-flash-image",
+      "gpt-4o",
+      "claude-3-5-sonnet",
+      "deepseek-coder",
+      "kimi-moonshot",
+      "qwen-vl-max"
     ];
-    const selectedModel = allowedModels.includes(model) ? model : "gemini-3.5-flash";
+    let selectedModel = allowedModels.includes(model) ? model : "gemini-3.5-flash";
+
+    // Fallback mapping for unsupported or quota-exhausted preview models
+    const fallbackMap: Record<string, string> = {
+      "gemini-3.1-pro-preview": "gemini-2.5-pro",
+      "gemini-2.5-flash-image": "gemini-2.5-flash",
+      "gpt-4o": "gemini-2.5-flash",
+      "claude-3-5-sonnet": "gemini-2.5-flash",
+      "deepseek-coder": "gemini-2.5-flash",
+      "kimi-moonshot": "gemini-2.5-flash",
+      "qwen-vl-max": "gemini-2.5-flash",
+    };
+
+    if (fallbackMap[selectedModel]) {
+      selectedModel = fallbackMap[selectedModel];
+    }
 
     // Specific strict instructions tailored to Persian accounting standards and system instructions
     const systemInstruction = `شما یک مدیر مالی، حسابرس ارشد و موتور هوش مصنوعی OCR هستید که با تمام اصول حسابداری، استانداردهای حسابرسی، ماهیت حساب‌ها (بدهکار/بستانکار) و قوانین ثبت اسناد مالی در ایران آشنایی کامل دارید.
@@ -80,7 +100,8 @@ Date, Description, Debit, Credit, Remarks, ConfidenceScore`;
       text: promptText,
     };
 
-    const response = await ai.models.generateContent({
+    let response;
+    const generateConfig = {
       model: selectedModel,
       contents: { parts: [imagePart, textPart] },
       config: {
@@ -120,7 +141,25 @@ Date, Description, Debit, Credit, Remarks, ConfidenceScore`;
           },
         },
       },
-    });
+    };
+
+    try {
+      response = await ai.models.generateContent(generateConfig);
+    } catch (apiError: any) {
+      console.error(`Attempt failed with model ${selectedModel}:`, apiError.message || apiError);
+      if (
+        apiError.status === "RESOURCE_EXHAUSTED" || 
+        apiError.status === 429 || 
+        (apiError.message && apiError.message.includes("quota")) || 
+        (apiError.message && apiError.message.includes("Quota"))
+      ) {
+         console.log("Retrying with gemini-2.5-flash as fallback...");
+         generateConfig.model = "gemini-2.5-flash";
+         response = await ai.models.generateContent(generateConfig);
+      } else {
+         throw apiError;
+      }
+    }
 
     const outputText = response.text || "[]";
     let parsedData = [];
