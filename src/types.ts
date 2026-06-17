@@ -22,3 +22,10 @@ export interface UploadedFile {
   error: string | null;
   results?: TransactionItem[];
 }
+
+export interface PreviousScan {
+  id: string;
+  file: UploadedFile;
+  transactions: TransactionItem[];
+  timestamp: number;
+}

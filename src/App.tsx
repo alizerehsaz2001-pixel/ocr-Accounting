@@ -15,12 +15,21 @@ import {
   HelpCircle,
   Trash2,
   RotateCcw,
+  FileEdit,
+  History,
+  FileText,
+  Sun,
+  Moon,
 } from "lucide-react";
-import { TransactionItem, UploadedFile } from "./types";
+import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
 
 export default function App() {
   // Main data states
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem("theme") === "dark";
+  });
+
   const [transactions, setTransactions] = useState<TransactionItem[]>(() => {
     const saved = localStorage.getItem("extracted_transactions");
     return saved ? JSON.parse(saved) : [];
@@ -29,6 +38,18 @@ export default function App() {
   const [activeFile, setActiveFile] = useState<UploadedFile | null>(() => {
     const saved = localStorage.getItem("active_uploaded_file");
     return saved ? JSON.parse(saved) : null;
+  });
+
+  const [previousScans, setPreviousScans] = useState<PreviousScan[]>(() => {
+    const saved = localStorage.getItem("previous_scans");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error reading previous scans:", e);
+      }
+    }
+    return [];
   });
 
   // AI Model Selection & Daily Quota States
@@ -80,6 +101,14 @@ export default function App() {
 
   // Sync state to local storage
   useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [isDarkMode]);
+
+  useEffect(() => {
     localStorage.setItem("extracted_transactions", JSON.stringify(transactions));
   }, [transactions]);
 
@@ -90,6 +119,38 @@ export default function App() {
       localStorage.removeItem("active_uploaded_file");
     }
   }, [activeFile]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("previous_scans", JSON.stringify(previousScans));
+    } catch (e) {
+      console.warn("Storage limit reached or error writing previous scans:", e);
+    }
+  }, [previousScans]);
+
+  useEffect(() => {
+    if (activeFile && activeFile.status === "success") {
+      setPreviousScans((prevScans) => {
+        const index = prevScans.findIndex((scan) => scan.id === activeFile.id);
+        if (index === -1) return prevScans;
+        
+        const scan = prevScans[index];
+        const diffDetected = JSON.stringify(scan.transactions) !== JSON.stringify(transactions);
+        if (!diffDetected) return prevScans;
+
+        const updated = [...prevScans];
+        updated[index] = {
+          ...scan,
+          file: {
+            ...scan.file,
+            results: transactions,
+          },
+          transactions: transactions,
+        };
+        return updated;
+      });
+    }
+  }, [transactions, activeFile?.id]);
 
   // Synchronize rawJsonText from transactions when modified by the API extraction
   useEffect(() => {
@@ -237,10 +298,25 @@ export default function App() {
       // Set transactions directly to current document extracted rows only
       setTransactions(extractedItems);
       
-      setActiveFile({
+      const successFile: UploadedFile = {
         ...newFile,
         status: "success",
         results: extractedItems,
+      };
+
+      setActiveFile(successFile);
+
+      setPreviousScans((prev) => {
+        const filtered = prev.filter((s) => s.file.name !== fileName);
+        return [
+          {
+            id: successFile.id,
+            file: successFile,
+            transactions: extractedItems,
+            timestamp: Date.now(),
+          },
+          ...filtered,
+        ].slice(0, 5);
       });
 
       showNotification("داده‌های مالی با موفقیت استخراج و خروجی صادر شد!", "success");
@@ -357,9 +433,39 @@ export default function App() {
     showNotification("سند جاری پاک‌سازی شد.", "info");
   };
 
+  const selectPreviousScan = (scan: PreviousScan) => {
+    setActiveFile(scan.file);
+    setTransactions(scan.transactions);
+    setRawJsonText(JSON.stringify(scan.transactions, null, 2));
+    setJsonError(null);
+    showNotification(`سند قبلی بازیابی شد: ${scan.file.name}`, "success");
+  };
+
+  const deletePreviousScan = (scanId: string) => {
+    setPreviousScans((prev) => prev.filter((s) => s.id !== scanId));
+    showNotification("سند از تاریخچه اسکن‌ها حذف شد.", "info");
+  };
+
+  const isRowEdited = (current: TransactionItem, index: number) => {
+    if (!activeFile || !activeFile.results) return false;
+    const original = activeFile.results[index];
+    if (!original) return true; // Manually added row
+
+    return (
+      String(current.Date || "").trim() !== String(original.Date || "").trim() ||
+      String(current.Description || "").trim() !== String(original.Description || "").trim() ||
+      Number(current.Debit) !== Number(original.Debit) ||
+      Number(current.Credit) !== Number(original.Credit) ||
+      String(current.Remarks || "").trim() !== String(original.Remarks || "").trim() ||
+      Number(current.ConfidenceScore ?? 100) !== Number(original.ConfidenceScore ?? 100)
+    );
+  };
+
   return (
     <div
-      className="flex h-screen w-full overflow-hidden bg-[#F0F2F5] text-[#1A1A1B] font-sans selection:bg-blue-100 selection:text-blue-900"
+      className={`flex h-screen w-full overflow-hidden font-sans selection:bg-blue-100 selection:text-blue-900 transition-colors duration-300 ${
+        isDarkMode ? "bg-[#0B0F19] text-[#E2E8F0]" : "bg-[#F0F2F5] text-[#1A1A1B]"
+      }`}
       dir="rtl"
     >
       {/* Toast Notifications */}
@@ -368,10 +474,10 @@ export default function App() {
           id="toast-notification"
           className={`fixed top-4 left-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm transition-all animate-bounce ${
             notification.type === "success"
-              ? "bg-emerald-50 border-emerald-100 text-emerald-800"
+              ? isDarkMode ? "bg-emerald-950/90 border-emerald-800 text-emerald-300" : "bg-emerald-50 border-emerald-100 text-emerald-800"
               : notification.type === "error"
-              ? "bg-rose-50 border-rose-100 text-rose-800"
-              : "bg-blue-50 border-blue-100 text-blue-800"
+              ? isDarkMode ? "bg-rose-950/90 border-rose-800 text-rose-300" : "bg-rose-50 border-rose-100 text-rose-800"
+              : isDarkMode ? "bg-blue-950/90 border-blue-800 text-blue-300" : "bg-blue-50 border-blue-100 text-blue-800"
           }`}
         >
           {notification.type === "success" ? (
@@ -425,6 +531,64 @@ export default function App() {
             </button>
           )}
 
+          {/* Recent successful extractions */}
+          <div className="px-4 pt-6 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-t border-slate-700/60 mt-4 flex items-center justify-between">
+            <span>تاریخچه اسکن‌های اخیر</span>
+            <History className="h-3.5 w-3.5 text-slate-500" />
+          </div>
+
+          <div className="px-2 space-y-1 overflow-y-auto max-h-[220px]">
+            {previousScans.length > 0 ? (
+              previousScans.map((scan) => {
+                const isActive = activeFile?.id === scan.id;
+                const timeStr = new Date(scan.timestamp).toLocaleTimeString("fa-IR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+                return (
+                  <div
+                    key={scan.id}
+                    onClick={() => selectPreviousScan(scan)}
+                    className={`group relative flex items-center justify-between p-2 rounded-lg cursor-pointer transition select-none ${
+                      isActive
+                        ? "bg-blue-600/20 text-blue-300 border-r-4 border-blue-500 font-medium"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
+                      <FileText className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-blue-400" : "text-slate-500"}`} />
+                      <div className="flex flex-col text-right truncate min-w-0">
+                        <span className="text-[11px] font-semibold truncate leading-tight" title={scan.file.name}>
+                          {scan.file.name}
+                        </span>
+                        <div className="flex gap-1.5 items-center text-[8.5px] text-slate-500 mt-1 font-mono">
+                          <span className="text-emerald-500 font-bold">{scan.transactions.length} ردیف</span>
+                          <span>•</span>
+                          <span>{timeStr}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deletePreviousScan(scan.id);
+                      }}
+                      className="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-700 rounded transition opacity-0 group-hover:opacity-100 shrink-0 ml-1"
+                      title="حذف از تاریخچه"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="px-3 py-4 text-center rounded-lg border border-dashed border-slate-800/20 text-[10px] text-slate-500 italic">
+                سندی اخیراً اسکن نشده است.
+              </div>
+            )}
+          </div>
+
           <div className="px-4 pt-6 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-t border-slate-700/60 mt-4">
             تنظیم موتور هوش مصنوعی (مدل)
           </div>
@@ -462,6 +626,46 @@ export default function App() {
                 tokenLimit: "سند تا ۵MB",
                 desc: "تصویرخوان کلاسیک با عملکرد پایدار.",
                 badgeClass: "bg-amber-500/20 text-amber-300",
+              },
+              {
+                id: "gpt-4o",
+                name: "GPT-4o (OpenAI)",
+                badge: "API Key",
+                tokenLimit: "نیازمند تنظیم API",
+                desc: "قدرتمندترین مدل تصویری شرکت OpenAI.",
+                badgeClass: "bg-green-500/20 text-green-300",
+              },
+              {
+                id: "claude-3-5-sonnet",
+                name: "Claude 3.5 Sonnet",
+                badge: "Anthropic",
+                tokenLimit: "نیازمند تنظیم API",
+                desc: "جزئیات بالا و تحلیل دقیق متون مالی.",
+                badgeClass: "bg-orange-500/20 text-orange-300",
+              },
+              {
+                id: "deepseek-coder",
+                name: "DeepSeek V3/R1",
+                badge: "DeepSeek",
+                tokenLimit: "نیازمند تنظیم API",
+                desc: "مدل متن‌باز و قدرتمند دیپ‌سیک.",
+                badgeClass: "bg-blue-500/20 text-blue-300",
+              },
+              {
+                id: "kimi-moonshot",
+                name: "Kimi (Moonshot)",
+                badge: "Kimi",
+                tokenLimit: "نیازمند تنظیم API",
+                desc: "پردازش متون مالی با پنجره محتوای بزرگ.",
+                badgeClass: "bg-indigo-500/20 text-indigo-300",
+              },
+              {
+                id: "qwen-vl-max",
+                name: "Qwen VL Max",
+                badge: "Qwen",
+                tokenLimit: "نیازمند تنظیم API",
+                desc: "مدل قدرتمند بینایی کوئن برای خواندن اسناد.",
+                badgeClass: "bg-teal-500/20 text-teal-300",
               },
             ].map((m) => {
               const quota = modelQuotas[m.id] || { limit: 100, used: 0 };
@@ -569,18 +773,22 @@ export default function App() {
         {/* Workspace body */}
         <div className="flex-1 overflow-y-auto p-6 flex flex-col">
           {guideOpen && (
-            <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-4 shadow-sm animate-fade-in flex items-start gap-3 mb-6 shrink-0">
-              <HelpCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+            <div className={`p-4 shadow-sm animate-fade-in flex items-start gap-3 mb-6 shrink-0 rounded-xl border transition-colors ${
+              isDarkMode 
+                ? "bg-blue-950/20 border-blue-900/60 text-blue-200" 
+                : "bg-blue-50/70 border-blue-100 text-blue-900"
+            }`}>
+              <HelpCircle className={`h-5 w-5 shrink-0 mt-0.5 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} />
               <div className="flex-1">
-                <h3 className="font-bold text-xs text-blue-900">رهنمودهای حسابداری هوشمند:</h3>
-                <ul className="list-disc list-inside text-[11px] text-blue-800 mt-2 space-y-1">
+                <h3 className={`font-bold text-xs ${isDarkMode ? "text-blue-100" : "text-blue-900"}`}>رهنمودهای حسابداری هوشمند:</h3>
+                <ul className={`list-disc list-inside text-[11px] mt-2 space-y-1 ${isDarkMode ? "text-blue-300" : "text-blue-800"}`}>
                   <li>تصویر سند، عکس دست‌نویسی یا فاکتور را آپلود کنید تا بلافاصله به داده ساختاریافته فارسی مطابق اصول حسابداری تبدیل شود.</li>
                   <li>خروجی مستقیما در قالب آرایه JSON با فیلدهای استاندارد حسابداری در اختیار شماست.</li>
                   <li>امکان ویرایش مستقیم ساختار متنی JSON برای اصلاح مقادیر و نگهداری صحت کامل وجود دارد.</li>
-                  <li className="font-semibold text-blue-900">توجه: هرچه تصویر ارسال شده باکیفیت‌تر، خوش‌خط‌تر و تمیزتر باشد، نتایج آنالیز و استخراج داده نیز دقیق‌تر و باکیفیت‌تر خواهد بود.</li>
+                  <li className={`font-semibold ${isDarkMode ? "text-blue-200" : "text-blue-900"}`}>توجه: هرچه تصویر ارسال شده باکیفیت‌تر، خوش‌خط‌تر و تمیزتر باشد، نتایج آنالیز و استخراج داده نیز دقیق‌تر و باکیفیت‌تر خواهد بود.</li>
                 </ul>
               </div>
-              <button onClick={() => setGuideOpen(false)} className="text-blue-500 hover:text-blue-700">
+              <button onClick={() => setGuideOpen(false)} className={`${isDarkMode ? "text-blue-400 hover:text-blue-200" : "text-blue-500 hover:text-blue-700"}`}>
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -589,12 +797,18 @@ export default function App() {
           {/* Conditional Layout: Hidden when no file is uploaded! */}
           {!activeFile ? (
             <div className="flex-1 flex items-center justify-center">
-              <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-8 max-w-xl w-full text-center animate-fade-in">
-                <div className="rounded-2xl bg-blue-50 p-4 shadow-inner text-blue-600 inline-block mb-4">
+              <div className={`rounded-2xl shadow-md border p-8 max-w-xl w-full text-center animate-fade-in transition-colors duration-300 ${
+                isDarkMode 
+                  ? "bg-[#1E293B] border-slate-800 text-slate-100" 
+                  : "bg-white border-slate-200 text-slate-800"
+              }`}>
+                <div className={`rounded-2xl p-4 shadow-inner inline-block mb-4 ${
+                  isDarkMode ? "bg-slate-800 text-blue-400" : "bg-blue-50 text-blue-600"
+                }`}>
                   <UploadCloud className="h-10 w-10" />
                 </div>
-                <h2 className="text-base font-bold text-slate-800 mb-2">سامانه حسابرسی و استخراج هوشمند اسناد مالی</h2>
-                <p className="text-xs text-slate-500 leading-relaxed mb-6">
+                <h2 className={`text-base font-bold mb-2 ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>سامانه حسابرسی و استخراج هوشمند اسناد مالی</h2>
+                <p className={`text-xs leading-relaxed mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
                   تصویر فاکتور، سند دست‌نویس یا دفتر روزنامه خود را آپلود کنید تا هوش مصنوعی پردازش و آرایه منطبق حسابداری JSON را بی‌درنگ تولید نماید.
                 </p>
 
@@ -607,6 +821,8 @@ export default function App() {
                   className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-all ${
                     dragActive
                       ? "border-blue-500 bg-blue-50/30"
+                      : isDarkMode
+                      ? "border-slate-700 bg-slate-900/40 hover:bg-slate-900/70"
                       : "border-slate-250 bg-slate-50 hover:bg-slate-100"
                   }`}
                 >
@@ -617,14 +833,14 @@ export default function App() {
                     accept="image/*"
                     className="hidden"
                   />
-                  <p className="text-xs font-bold text-slate-700">سند یا فاکتور را به اینجا بکشید</p>
-                  <p className="text-[10px] text-slate-400 mt-1">با کلیک روی این کادر می‌توانید فایل را از هارد انتخاب کنید</p>
+                  <p className={`text-xs font-bold ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>سند یا فاکتور را به اینجا بکشید</p>
+                  <p className={`text-[10px] mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>با کلیک روی این کادر می‌توانید فایل را از هارد انتخاب کنید</p>
                 </div>
 
                 <div className="mt-4 flex gap-3">
                   <button
                     onClick={() => setIsCameraOpen(true)}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-slate-800 py-3 text-xs font-semibold text-slate-100 hover:bg-slate-700 transition"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-slate-800 py-3 text-xs font-semibold text-slate-100 hover:bg-slate-750 transition"
                   >
                     <Camera className="h-4 w-4 text-blue-400" />
                     اسکن مستقیم با دوربین دستگاه
@@ -636,9 +852,17 @@ export default function App() {
             <div className="flex-1 flex flex-col lg:flex-row gap-6">
               {/* Column 1: Image view & control info */}
               <section className="w-full lg:w-[35%] flex flex-col gap-6 shrink-0">
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col animate-fade-in">
-                  <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <span className="text-[11px] font-bold text-slate-700">سند مالی بارگذاری شده</span>
+                <div className={`rounded-xl shadow-sm border overflow-hidden flex flex-col animate-fade-in transition-colors duration-300 ${
+                  isDarkMode 
+                    ? "bg-[#1E293B] border-slate-800" 
+                    : "bg-white border-slate-200"
+                }`}>
+                  <div className={`p-3 border-b flex justify-between items-center transition-colors ${
+                    isDarkMode 
+                      ? "border-slate-800 bg-slate-800/40 text-slate-200" 
+                      : "border-slate-100 bg-slate-50/50 text-slate-700"
+                  }`}>
+                    <span className="text-[11px] font-bold">سند مالی بارگذاری شده</span>
                     <button
                       onClick={clearCurrentFile}
                       className="text-slate-400 hover:text-slate-600 rounded p-1"
@@ -648,8 +872,12 @@ export default function App() {
                     </button>
                   </div>
 
-                  <div className="p-4 bg-slate-100 flex items-center justify-center min-h-[220px]">
-                    <div className="relative w-full max-h-[300px] overflow-hidden rounded-lg border border-slate-200 flex items-center justify-center bg-white shadow-sm">
+                  <div className={`p-4 flex items-center justify-center min-h-[220px] transition-colors ${
+                    isDarkMode ? "bg-slate-900/60" : "bg-slate-100"
+                  }`}>
+                    <div className={`relative w-full max-h-[300px] overflow-hidden rounded-lg border flex items-center justify-center shadow-sm transition-colors ${
+                      isDarkMode ? "bg-[#1E293B] border-slate-800" : "bg-white border-slate-200"
+                    }`}>
                       <img
                         src={activeFile.preview}
                         alt={activeFile.name}
@@ -666,7 +894,9 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="p-3 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+                  <div className={`p-3 border-t flex items-center justify-between text-[10px] transition-colors ${
+                    isDarkMode ? "border-slate-800 bg-slate-800/25 text-slate-400" : "border-slate-100 bg-slate-50/50 text-slate-500"
+                  }`}>
                     <span className="truncate max-w-[180px]">فایل: {activeFile.name}</span>
                     <span>حجم: {Math.round(activeFile.size / 1024)} KB</span>
                   </div>
@@ -682,13 +912,17 @@ export default function App() {
               {/* Column 2: Interactive Tabs - JSON Code vs Visual Audit Analysis */}
               <section className="flex-1 flex flex-col gap-4 overflow-hidden">
                 {/* Tab Navigation header */}
-                <div className="flex bg-slate-200/80 p-1 rounded-xl border border-slate-300/60 w-fit shrink-0 gap-1 select-none">
+                <div className={`flex p-1 rounded-xl border w-fit shrink-0 gap-1 select-none transition-all duration-300 ${
+                  isDarkMode 
+                    ? "bg-[#1E293B] border-slate-800" 
+                    : "bg-slate-200/80 border-slate-300/60"
+                }`}>
                   <button
                     onClick={() => setActiveTab("analysis")}
                     className={`px-4 py-2 rounded-lg text-[11px] font-bold transition-all flex items-center gap-2 ${
                       activeTab === "analysis"
-                        ? "bg-white text-blue-700 shadow-sm"
-                        : "text-slate-600 hover:text-slate-950"
+                        ? isDarkMode ? "bg-slate-800 text-blue-400 shadow-sm" : "bg-white text-blue-700 shadow-sm"
+                        : isDarkMode ? "text-slate-400 hover:text-[#f1f5f9]" : "text-slate-600 hover:text-slate-950"
                     }`}
                   >
                     <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
@@ -698,8 +932,8 @@ export default function App() {
                     onClick={() => setActiveTab("json")}
                     className={`px-4 py-2 rounded-lg text-[11px] font-bold transition-all flex items-center gap-2 ${
                       activeTab === "json"
-                        ? "bg-white text-blue-700 shadow-sm"
-                        : "text-slate-600 hover:text-slate-950"
+                        ? isDarkMode ? "bg-slate-800 text-blue-400 shadow-sm" : "bg-white text-blue-700 shadow-sm"
+                        : isDarkMode ? "text-slate-400 hover:text-[#f1f5f9]" : "text-slate-600 hover:text-slate-950"
                     }`}
                   >
                     <FileJson className="h-4 w-4 text-blue-600" />
@@ -715,13 +949,13 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <FileJson className="h-4 w-4 text-blue-400" />
                         <span className="text-xs text-slate-200 font-bold tracking-wider">
-                          خروجی آرایه JSON منطبق بر سند
+                          خروکی آرایه JSON منطبق بر سند
                         </span>
                       </div>
                       {activeFile.status === "success" && (
                         <button 
-                          onClick={copyJSONToClipboard}
-                          className="text-[10px] bg-slate-700 text-slate-200 px-3 py-1 rounded-lg hover:bg-slate-600 transition"
+                           onClick={copyJSONToClipboard}
+                           className="text-[10px] bg-slate-700 text-slate-200 px-3 py-1 rounded-lg hover:bg-slate-600 transition"
                         >
                           کپی متن تفکیک شده
                         </button>
@@ -765,16 +999,22 @@ export default function App() {
                   </div>
                 ) : (
                   /* Visual Audit and Confidence Analysis Tab */
-                  <div className="bg-white rounded-xl border border-slate-200 flex-1 flex flex-col overflow-hidden shadow-sm">
+                  <div className={`rounded-xl border flex-1 flex flex-col overflow-hidden shadow-sm transition-all duration-300 ${
+                    isDarkMode 
+                      ? "bg-[#1E293B] border-slate-800 text-slate-100" 
+                      : "bg-white border-slate-200 text-[#1A1A1B]"
+                  }`}>
                     {/* Header Summary */}
-                    <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-4 items-center justify-between">
+                    <div className={`p-4 border-b flex flex-wrap gap-4 items-center justify-between transition-colors duration-300 ${
+                      isDarkMode ? "bg-[#162032] border-slate-800" : "bg-slate-50 border-slate-200"
+                    }`}>
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
+                        <div className={`p-2 rounded-lg shrink-0 ${isDarkMode ? "bg-blue-950/40 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
                           <Sparkles className="h-5 w-5" />
                         </div>
                         <div>
-                          <h4 className="text-xs font-bold text-slate-800">تحلیل میزان اطمینان استخراج داده‌ها</h4>
-                          <p className="text-[10px] text-slate-500 mt-1">تراکنش‌های فاکتور و فیلدهای تفکیک شده مالی همراه با تخمین میزان خوانایی</p>
+                          <h4 className={`text-xs font-bold ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>تحلیل میزان اطمینان استخراج داده‌ها</h4>
+                          <p className={`text-[10px] mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تراکنش‌های فاکتور و فیلدهای تفکیک شده مالی همراه با تخمین میزان خوانایی</p>
                         </div>
                       </div>
 
@@ -782,6 +1022,7 @@ export default function App() {
                         const count = transactions.length;
                         const sumScores = transactions.reduce((acc, current) => acc + (current.ConfidenceScore ?? 100), 0);
                         const avgScore = Math.round(sumScores / count);
+                        const countEdited = transactions.filter((tr, idx) => isRowEdited(tr, idx)).length;
                         
                         let ratingLabel = "بسیار بالا و معتبر";
                         let progressColor = "bg-emerald-500";
@@ -797,7 +1038,17 @@ export default function App() {
                         }
 
                         return (
-                          <div className="flex gap-4 items-center">
+                          <div className="flex gap-4 items-center flex-wrap">
+                            {countEdited > 0 && (
+                              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-center animate-pulse flex items-center gap-2">
+                                <FileEdit className="h-4 w-4 text-amber-600" />
+                                <div>
+                                  <span className="text-[9px] block text-amber-500 font-bold mb-0.5">اصلاح دستی شده</span>
+                                  <span className="text-[11px] font-bold text-amber-700 font-mono" dir="ltr">{countEdited.toLocaleString("fa-IR")} ردیف تغییر یافته</span>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-inner text-center">
                               <span className="text-[9px] block text-slate-400 font-bold mb-0.5">تعداد ردیف‌ها</span>
                               <span className="text-sm font-extrabold text-slate-700 font-mono">{count} ردیف</span>
@@ -830,70 +1081,94 @@ export default function App() {
                           <AlertCircle className="h-8 w-8 text-slate-300 mb-3 animate-bounce" />
                           <span className="text-xs">داده‌ای یافت نشد. فایلی با کیفیت مناسب آپلود نمایید.</span>
                         </div>
-                     ) : (
-                       <table className="w-full text-right border-collapse text-xs">
-                         <thead className="bg-[#FAFBFD] text-slate-600 text-[10px] uppercase font-bold border-b border-slate-150 sticky top-0 bg-white/95 shadow-sm">
-                           <tr>
-                             <th className="p-3 text-center border-l border-slate-200">#</th>
-                             <th className="p-3 border-l border-slate-200">تاریخ تراکنش</th>
-                             <th className="p-3 border-l border-slate-200">شرح / بابت سند</th>
-                             <th className="p-3 border-l border-slate-200 text-left">مبلغ بدهکار (ریال)</th>
-                             <th className="p-3 border-l border-slate-200 text-left">مبلغ بستانکار (ریال)</th>
-                             <th className="p-3 border-l border-slate-200 text-center select-none">میزان اطمینان مفسر</th>
-                             <th className="p-3">توضیحات و ملحقات</th>
-                           </tr>
-                         </thead>
-                         <tbody className="divide-y divide-slate-150">
-                           {transactions.map((tr, index) => {
-                             const score = tr.ConfidenceScore ?? 100;
-                             let badgeBg = "bg-emerald-50 border-emerald-200 text-emerald-800";
-                             let progressBg = "bg-emerald-500";
-                             let scoreDesc = "عالی / بدون ابهام";
-                             if (score < 60) {
-                               badgeBg = "bg-rose-50 border-rose-200 text-rose-800";
-                               progressBg = "bg-rose-500";
-                               scoreDesc = "ناخوانا / نامعتبر";
-                             } else if (score < 85) {
-                               badgeBg = "bg-amber-50 border-amber-200 text-amber-800";
-                               progressBg = "bg-amber-550";
-                               scoreDesc = "دست‌نویس مخدوش";
-                             }
+                      ) : (
+                        <table className="w-full text-right border-collapse text-xs">
+                          <thead className={`text-[10px] uppercase font-bold sticky top-0 shadow-sm transition-colors duration-300 ${
+                            isDarkMode 
+                              ? "bg-[#1E293B] border-b border-slate-800 text-slate-200 bg-opacity-95" 
+                              : "bg-[#FAFBFD] text-slate-600 border-b border-slate-150 bg-white/95"
+                          }`}>
+                            <tr>
+                              <th className={`p-3 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>#</th>
+                              <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>تاریخ تراکنش</th>
+                              <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>شرح / بابت سند</th>
+                              <th className={`p-3 text-left border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>مبلغ بدهکار (ریال)</th>
+                              <th className={`p-3 text-left border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>مبلغ بستانکار (ریال)</th>
+                              <th className={`p-3 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"} select-none`}>میزان اطمینان مفسر</th>
+                              <th className="p-3">توضیحات و ملحقات</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-150">
+                            {transactions.map((tr, index) => {
+                              const score = tr.ConfidenceScore ?? 100;
+                              const isEdited = isRowEdited(tr, index);
+                              let badgeBg = "bg-emerald-50 border-emerald-200 text-emerald-800";
+                              let progressBg = "bg-emerald-500";
+                              let scoreDesc = "عالی / بدون ابهام";
+                              if (score < 60) {
+                                badgeBg = "bg-rose-50 border-rose-200 text-rose-800";
+                                progressBg = "bg-rose-500";
+                                scoreDesc = "ناخوانا / نامعتبر";
+                              } else if (score < 85) {
+                                badgeBg = "bg-amber-50 border-amber-200 text-amber-800";
+                                progressBg = "bg-amber-550";
+                                scoreDesc = "دست‌نویس مخدوش";
+                              }
 
-                             return (
-                               <tr key={tr.id || index} className="hover:bg-slate-50/70 transition-colors">
-                                 <td className="p-3 text-center font-mono font-bold text-slate-400 border-l border-slate-100">{index + 1}</td>
-                                 <td className="p-3 font-mono font-medium text-slate-700 border-l border-slate-100">
-                                   {tr.Date || <span className="text-slate-400">[فاقد تاریخ]</span>}
-                                 </td>
-                                 <td className="p-3 font-semibold text-slate-800 border-l border-slate-100 max-w-[200px] truncate" title={tr.Description || ""}>
-                                   {tr.Description || <span className="text-slate-400 font-normal">[بدون شرح]</span>}
-                                 </td>
-                                 <td className="p-3 border-l border-slate-100 text-left font-mono text-emerald-600 font-semibold">
-                                   {tr.Debit !== null && tr.Debit > 0 ? Number(tr.Debit).toLocaleString("fa-IR") : "۰"}
-                                 </td>
-                                 <td className="p-3 border-l border-slate-100 text-left font-mono text-slate-600 font-semibold">
-                                   {tr.Credit !== null && tr.Credit > 0 ? Number(tr.Credit).toLocaleString("fa-IR") : "۰"}
-                                 </td>
-                                 <td className="p-3 border-l border-slate-100 text-center select-none">
-                                   <div className="flex flex-col items-center justify-center min-w-[70px] gap-1 mx-auto">
-                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}`}>
-                                       {score}%
-                                     </span>
-                                     <div className="w-12 bg-slate-150 rounded-full h-1 overflow-hidden shrink-0">
+                              return (
+                                <tr
+                                  key={tr.id || index}
+                                  className={`transition-colors ${
+                                    isEdited
+                                      ? "bg-amber-50/70 border-r-4 border-r-amber-500 hover:bg-amber-100/60"
+                                      : "hover:bg-slate-50/70"
+                                  }`}
+                                >
+                                  <td className="p-3 text-center border-l border-slate-100">
+                                    <div className="flex items-center justify-center gap-1.5 font-mono font-bold text-slate-450">
+                                      <span>{index + 1}</span>
+                                      {isEdited && (
+                                        <span
+                                          className="p-1 bg-amber-500 text-white rounded shadow-sm"
+                                          title="تغییر یافته توسط کاربر (ویرایش دستی)"
+                                        >
+                                          <FileEdit className="h-3 w-3" />
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="p-3 font-mono font-medium text-slate-700 border-l border-slate-100">
+                                    {tr.Date || <span className="text-slate-400">[فاقد تاریخ]</span>}
+                                  </td>
+                                  <td className="p-3 font-semibold text-slate-800 border-l border-slate-100 max-w-[200px] truncate" title={tr.Description || ""}>
+                                    {tr.Description || <span className="text-slate-400 font-normal">[بدون شرح]</span>}
+                                  </td>
+                                  <td className="p-3 border-l border-slate-100 text-left font-mono text-emerald-600 font-semibold">
+                                    {tr.Debit !== null && tr.Debit > 0 ? Number(tr.Debit).toLocaleString("fa-IR") : "۰"}
+                                  </td>
+                                  <td className="p-3 border-l border-slate-100 text-left font-mono text-slate-600 font-semibold">
+                                    {tr.Credit !== null && tr.Credit > 0 ? Number(tr.Credit).toLocaleString("fa-IR") : "۰"}
+                                  </td>
+                                  <td className="p-3 border-l border-slate-100 text-center select-none">
+                                    <div className="flex flex-col items-center justify-center min-w-[70px] gap-1 mx-auto">
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}`}>
+                                        {score}%
+                                      </span>
+                                      <div className="w-12 bg-slate-150 rounded-full h-1 overflow-hidden shrink-0">
                                         <div className={`h-full ${progressBg}`} style={{ width: `${score}%` }} />
-                                     </div>
-                                     <span className="text-[7.5px] text-slate-400 font-extrabold block shrink-0">{scoreDesc}</span>
-                                   </div>
-                                 </td>
-                                 <td className="p-3 text-slate-500 max-w-[140px] truncate" title={tr.Remarks || ""}>
-                                   {tr.Remarks || <span className="text-slate-300 font-light">-</span>}
-                                 </td>
-                               </tr>
-                             )
-                           })}
-                         </tbody>
-                       </table>
-                     )}
+                                      </div>
+                                      <span className="text-[7.5px] text-slate-400 font-extrabold block shrink-0">{scoreDesc}</span>
+                                    </div>
+                                  </td>
+                                  <td className="p-3 text-slate-500 max-w-[140px] truncate" title={tr.Remarks || ""}>
+                                    {tr.Remarks || <span className="text-slate-300 font-light">-</span>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
                   </div>
                 )}
