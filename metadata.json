@@ -1,6 +1,6 @@
 {
-  "name": "Financial Document Data Extractor",
-  "description": "An AI-powered financial ledger and invoice data extractor tailored for Persian accounting files and receipts.",
+  "name": "ocr Accounting",
+  "description": "An AI-powered OCR for accounting, designed to extract financial ledger and invoice data seamlessly from images.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
