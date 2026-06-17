@@ -68,11 +68,7 @@ export default function App() {
       "gemini-3.1-pro-preview": { limit: 100, used: 0, lastReset: Date.now() },
       "gemini-3.1-flash-lite": { limit: 3000, used: 0, lastReset: Date.now() },
       "gemini-2.5-flash-image": { limit: 5000, used: 0, lastReset: Date.now() },
-      "gpt-4o": { limit: 50, used: 0, lastReset: Date.now() },
-      "claude-3-5-sonnet": { limit: 50, used: 0, lastReset: Date.now() },
-      "deepseek-coder": { limit: 500, used: 0, lastReset: Date.now() },
-      "kimi-moonshot": { limit: 200, used: 0, lastReset: Date.now() },
-      "qwen-vl-max": { limit: 1000, used: 0, lastReset: Date.now() },
+      "gemini-2.5-pro": { limit: 150, used: 0, lastReset: Date.now() },
     };
 
     const saved = localStorage.getItem("ai_model_quotas");
@@ -115,11 +111,17 @@ export default function App() {
   // Raw editable JSON text state and its validation
   const [rawJsonText, setRawJsonText] = useState<string>("");
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [isJsonVerified, setIsJsonVerified] = useState<boolean>(false);
 
   // UI state
   const [activeTab, setActiveTab] = useState<"analysis" | "json">("analysis");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [showTokenDetails, setShowTokenDetails] = useState<boolean>(false);
+
+  // Reset verification on file change
+  useEffect(() => {
+    setIsJsonVerified(false);
+  }, [activeFile?.id]);
   const [dragActive, setDragActive] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
@@ -456,8 +458,12 @@ export default function App() {
 
   const copyJSONToClipboard = () => {
     if (!rawJsonText) return;
+    if (!isJsonVerified) {
+      showNotification("لطفاً ابتدا تیک تایید صحت اطلاعات را فعال کنید.", "error");
+      return;
+    }
     navigator.clipboard.writeText(rawJsonText);
-    showNotification("آرایه به فرمت JSON عینا کپى گردید.", "success");
+    showNotification("آرایه به فرمت JSON عینا کپی گردید.", "success");
   };
 
   const clearCurrentFile = () => {
@@ -667,49 +673,13 @@ export default function App() {
                 badgeClass: "bg-amber-500/20 text-amber-300",
               },
               {
-                id: "gpt-4o",
-                name: "GPT-4o (OpenAI)",
-                badge: "API Key",
-                tokenLimit: "نیازمند تنظیم API",
+                id: "gemini-2.5-pro",
+                name: "Gemini 2.5 Pro",
+                badge: "پایدار و دقیق",
+                tokenLimit: "سند تا ۳۰MB",
                 costPerRequest: "حدود ۱,۶۰۰ توکن",
-                desc: "قدرتمندترین مدل تصویری شرکت OpenAI.",
-                badgeClass: "bg-green-500/20 text-green-300",
-              },
-              {
-                id: "claude-3-5-sonnet",
-                name: "Claude 3.5 Sonnet",
-                badge: "Anthropic",
-                tokenLimit: "نیازمند تنظیم API",
-                costPerRequest: "حدود ۱,۵۰۰ توکن",
-                desc: "جزئیات بالا و تحلیل دقیق متون مالی.",
-                badgeClass: "bg-orange-500/20 text-orange-300",
-              },
-              {
-                id: "deepseek-coder",
-                name: "DeepSeek V3/R1",
-                badge: "DeepSeek",
-                tokenLimit: "نیازمند تنظیم API",
-                costPerRequest: "حدود ۳,۰۰۰ توکن",
-                desc: "مدل متن‌باز و قدرتمند (بیشتر به دلیل زنجیره استدلال).",
-                badgeClass: "bg-blue-500/20 text-blue-300",
-              },
-              {
-                id: "kimi-moonshot",
-                name: "Kimi (Moonshot)",
-                badge: "Kimi",
-                tokenLimit: "نیازمند تنظیم API",
-                costPerRequest: "حدود ۱,۲۰۰ توکن",
-                desc: "پردازش متون مالی با پنجره محتوای بزرگ.",
-                badgeClass: "bg-indigo-500/20 text-indigo-300",
-              },
-              {
-                id: "qwen-vl-max",
-                name: "Qwen VL Max",
-                badge: "Qwen",
-                tokenLimit: "نیازمند تنظیم API",
-                costPerRequest: "حدود ۱,۴۰۰ توکن",
-                desc: "مدل قدرتمند بینایی کوئن برای خواندن اسناد.",
-                badgeClass: "bg-teal-500/20 text-teal-300",
+                desc: "تحلیل محاسباتی و منطقی حسابداری فوق العاده.",
+                badgeClass: "bg-rose-500/20 text-rose-300",
               },
             ].map((m) => {
               const quota = modelQuotas[m.id] || { limit: 100, used: 0, lastReset: Date.now() };
@@ -798,6 +768,7 @@ export default function App() {
                   "gemini-3.1-pro-preview": { limit: 100, used: 0 },
                   "gemini-3.1-flash-lite": { limit: 3000, used: 0 },
                   "gemini-2.5-flash-image": { limit: 5000, used: 0 },
+                  "gemini-2.5-pro": { limit: 150, used: 0 },
                 });
                 showNotification("سهمیه استفاده روزانه مدل‌ها ریست گردید.", "success");
               }}
@@ -851,7 +822,7 @@ export default function App() {
         {/* Workspace body */}
         <div className="flex-1 overflow-y-auto p-6 flex flex-col">
           {guideOpen && (
-            <div className={`p-4 shadow-sm animate-fade-in flex flex-col items-start gap-3 mb-6 shrink-0 rounded-xl border transition-colors ${
+            <div className={`p-5 shadow-sm animate-fade-in flex flex-col items-start gap-4 mb-6 shrink-0 rounded-xl border transition-colors ${
               isDarkMode 
                 ? "bg-blue-950/20 border-blue-900/60 text-blue-200" 
                 : "bg-blue-50/70 border-blue-100 text-blue-900"
@@ -859,13 +830,100 @@ export default function App() {
               <div className="flex items-start gap-3 w-full">
                 <HelpCircle className={`h-5 w-5 shrink-0 mt-0.5 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} />
                 <div className="flex-1 text-right">
-                  <h3 className={`font-bold text-xs ${isDarkMode ? "text-blue-100" : "text-blue-900"}`}>رهنمودهای حسابداری هوشمند:</h3>
-                  <ul className={`list-disc list-inside text-[11px] mt-2 space-y-1 ${isDarkMode ? "text-blue-300" : "text-blue-800"}`}>
-                    <li>تصویر سند، عکس دست‌نویسی یا فاکتور را آپلود کنید تا بلافاصله به داده ساختاریافته فارسی مطابق اصول حسابداری تبدیل شود.</li>
-                    <li>خروجی مستقیما در قالب آرایه JSON با فیلدهای استاندارد حسابداری در اختیار شماست.</li>
-                    <li>امکان ویرایش مستقیم ساختار متنی JSON برای اصلاح مقادیر و نگهداری صحت کامل وجود دارد.</li>
-                    <li className={`font-semibold ${isDarkMode ? "text-blue-200" : "text-blue-900"}`}>توجه: هرچه تصویر ارسال شده باکیفیت‌تر، خوش‌خط‌تر و تمیزتر باشد، نتایج آنالیز و استخراج داده نیز دقیق‌تر و باکیفیت‌تر خواهد بود.</li>
-                  </ul>
+                  <h3 className={`font-bold text-[13px] ${isDarkMode ? "text-blue-100" : "text-blue-900"} flex items-center gap-1.5`}>
+                    <Sparkles className="h-4 w-4 text-amber-400 animate-pulse" />
+                    دستورالعمل‌ها و رهنمودهای حسابداری هوشمند (اصول تراز مالی):
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 text-[11px]">
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>اصل تراز و موازنه دوطرفه:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            هر تراکنش مالی استخراج‌شده بر اساس قاعده بدهکار (Debit) و بستانکار (Credit) تراز می‌شود. مجموع دارایی‌ها/هزینه‌ها باید با بدهی‌ها/حقوق‌مالکان مندرج مطابقت داشته باشد.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>تفکیک مالیات بر ارزش افزوده (VAT) و عوارض:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            نرخ مصوب مالیات ارزش افزوده سال جاری برای فاکتورهای استاندارد به‌صورت جداگانه طبقه‌بندی می‌شود. در پردازش صورت‌حساب‌ها، مالیات بر ارزش افزوده و عوارض به سرفصل حساب دارایی جاری (مالیات خرید بر ارزش افزوده) منتقل می‌شود.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>تشخیص هوشمند تخفیفات فاکتور:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            سیستم مبالغ تخفیف‌های تجاری توصیف‌شده در فاکتورها را قبل از محاسبه مالیات استخراج کرده و مانع از توهم محاسباتی در بهای تمام شده کالای خریداری‌شده می‌گردد.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>اعتبارسنجی الگوهای عددی شناسه ملی و کد اقتصادی:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            سیستم با کنترل الگوی ۱۱ رقمی شناسه ملی و کدهای اقتصادی طرفین معامله در فاکتورهای رسمی، بستر اولیه را برای گزارش‌دهی فصلی موضوع ماده ۱۶۹ قانون مالیات‌های مستقیم تسهیل می‌نماید.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>تشخیص ماهیت حساب بر اساس سرفصل کل و معین:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            با تحلیل اطلاعات اقلام، هوش مصنوعی سرفصل‌های کل و معین متناسب (مانند ملزومات اداری، هزینه اجاره، پیش‌پرداخت یا خرید کالا) را تخصیص می‌دهد تا از خطای ثبتی پیشگیری شود.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>قابلیت خوانش دست‌نویس و اسناد مخدوش:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            برای دست‌نویس‌های اداری، دفاتر معین با خط شکسته و بروشورهای مچاله، پیشنهاد می شود حتماً از مدل‌های پیشرفته پیش‌نمایش (با فعال بودن دکمه مدل) استفاده کنید تا حداقل نرخ خطا محقق گردد.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>شماره سریال سند و تطبیق تاریخی (Audit Trail):</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            عمر تاریخی فاکتور، تاریخ شمسی، سال مالی فعال و شماره سریال مندرج در راستای ردیابی حسابرسی اسناد مالی استخراج می‌شوند تا پرونده‌های مکرر به اشتباه دوباره ثبت نشوند.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>دقت و شفافیت کیفیت بارگذاری:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            کیفیت اسکن، زاویه عمودی عکس و نور محیط نقش بسزایی دارد. در صورت مخدوش بودن اعداد بسیار ریز، از ادیتور متنی JSON در زبانه فیلترها جهت اصلاح دستی مبالغ استفاده فرمایید.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`mt-3 pt-2 text-[10px] italic border-t w-full text-right ${isDarkMode ? "text-slate-400 border-blue-900/30" : "text-slate-700 border-blue-200/50"}`}>
+                    توصیه حسابرسی: همیشه قبل از نهایی‌سازی و کپی نمودن ساختار تفکیک‌شده، از صحت مبالغ کل و بدهکار/بستانکار ثبت شده با چک لیست اطمینان حاصل نمایید.
+                  </div>
                 </div>
                 <button onClick={() => setGuideOpen(false)} className={`${isDarkMode ? "text-blue-400 hover:text-blue-200" : "text-blue-500 hover:text-blue-700"}`}>
                   <X className="h-4 w-4" />
@@ -873,23 +931,19 @@ export default function App() {
               </div>
 
               <div className={`mt-3 pt-3 border-t w-full text-right ${isDarkMode ? "border-blue-900/40" : "border-blue-200/60"}`}>
-                <h3 className={`font-bold text-xs mb-3 ${isDarkMode ? "text-blue-100" : "text-blue-900"}`}>راهنمای کاربرد موتورهای هوش مصنوعی (مدل‌ها):</h3>
+                <h3 className={`font-bold text-xs mb-3 ${isDarkMode ? "text-blue-100" : "text-blue-900"}`}>راهنمای کاربرد موتورهای هوش مصنوعی (مدل‌های گوگل جمینی):</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px]">
                   <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
-                    <strong className="text-blue-500 block mb-1">Gemini (3.5 Flash / 3.1 Pro)</strong>
-                    مدل‌های اصلی و پیش‌فرض گوگل. نسخه Flash برای استخراج سریع روزمره فوق‌العاده است و نسخه Pro برای خواندن دست‌نویس‌های بسیار مخدوش و ناخوانا به کار می‌رود.
+                    <strong className="text-blue-500 block mb-1">Gemini 3.5 Flash / Gemini 3.1 Flash Lite</strong>
+                    مدل‌های پرسرعت و بهینه‌شده گوگل برای پردازش‌های فوری. مناسب برای استخراج سریع روزمره از فاکتورها و سرافرازی در تحلیل اسناد مالی استاندارد با سرعت بالا.
                   </div>
                   <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
-                    <strong className="text-green-500 block mb-1">GPT-4o (OpenAI)</strong>
-                    بهترین مدل درک بصری ترکیبی. مناسب برای فاکتورهای چندصفحه‌ای یا اسناد مالی پیچیده که دارای ساختارهای جدولی شکسته یا فرمت‌های غیرمتعارف هستند.
+                    <strong className="text-rose-400 block mb-1">Gemini 2.5 Pro / Gemini 3.1 Pro</strong>
+                    قوی‌ترین مدل‌های پردازش منطقی و محاسباتی گوگل. مجهز به زنجیره استدلال فوق‌العاده برای حل جداول حسابداری پیچیده، خوانش دست‌نویس‌های بسیار مخدوش و به حداقل رساندن خطای توهمِ عددی.
                   </div>
-                  <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
-                    <strong className="text-orange-500 block mb-1">Claude 3.5 Sonnet</strong>
-                    قوی‌ترین مفسر در زمینه اعداد و محاسبات مالی با کمترین احتمال توهمِ عدد (Hallucination). برای استخراج مبالغ حساس بانکی بهترین دقت را ارائه می‌کند.
-                  </div>
-                  <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
-                    <strong className="text-indigo-400 block mb-1">Kimi, DeepSeek R1 & Qwen</strong>
-                    <span className={isDarkMode ? "text-slate-300" : "text-slate-600"}>مدل‌های شرقی با قابلیت عالی. DeepSeek منطق بسیار قوی دارد. Kimi پنجره کانتکست عظیمی دارد و Qwen در پردازش و خوانش اسناد چند زبانه بسیار کارآمد است.</span>
+                  <div className={`p-2.5 rounded-lg md:col-span-2 ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
+                    <strong className="text-amber-400 block mb-1">Gemini 2.5 Flash Image</strong>
+                    تصویرخوان کلاسیک با عملکرد پایدار و مستحکم جهت پردازش پیکسلی تصاویری که زاویه نامناسب یا نور ضعیف دارند.
                   </div>
                 </div>
               </div>
@@ -1051,18 +1105,44 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <FileJson className="h-4 w-4 text-blue-400" />
                         <span className="text-xs text-slate-200 font-bold tracking-wider">
-                          خروکی آرایه JSON منطبق بر سند
+                          خروجی آرایه JSON منطبق بر سند
                         </span>
                       </div>
                       {activeFile.status === "success" && (
                         <button 
                            onClick={copyJSONToClipboard}
-                           className="text-[10px] bg-slate-700 text-slate-200 px-3 py-1 rounded-lg hover:bg-slate-600 transition"
+                           className={`text-[10px] px-3 py-1 rounded-lg transition font-sans ${
+                             isJsonVerified 
+                               ? "bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer" 
+                               : "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 cursor-pointer"
+                           }`}
                         >
-                          کپی متن تفکیک شده
+                          {isJsonVerified ? "کپی متن تفکیک شده" : "⚠️ نیاز به تایید صحت جهت کپی"}
                         </button>
                       )}
                     </div>
+
+                    {/* Verification & Consent Panel */}
+                    {activeFile.status === "success" && (
+                      <div className={`p-3 border-b select-none transition-colors ${
+                        isJsonVerified 
+                          ? "bg-slate-900/60 border-slate-800 text-slate-300" 
+                          : "bg-amber-950/45 border-amber-900/50 text-amber-100"
+                      }`} dir="rtl">
+                        <label className="flex items-start gap-2.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isJsonVerified}
+                            onChange={(e) => setIsJsonVerified(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-800 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                          />
+                          <div className="text-[11px] leading-relaxed select-none font-sans flex-1 text-right">
+                            <span className="font-bold text-amber-400 block mb-0.5">بررسی مجدد و تایید صحت اطلاعات سند مالی</span>
+                            آیا پس از بررسی دقیق، از صحت تمام اطلاعات بالا اطمینان کامل دارید؟ جهت فعال شدن دکمه کپی آرایه JSON، زدن این تیک الزامی است.
+                          </div>
+                        </label>
+                      </div>
+                    )}
 
                     {/* Textarea containing JSON to directly view/edit */}
                     <div className="flex-1 relative flex flex-col min-h-[300px]">
@@ -1288,11 +1368,7 @@ export default function App() {
                 selectedModel === "gemini-3.5-flash" ? "Gemini 3.5 Flash" :
                 selectedModel === "gemini-3.1-pro-preview" ? "Gemini 3.1 Pro" :
                 selectedModel === "gemini-3.1-flash-lite" ? "Gemini 3.1 Flash Lite" :
-                selectedModel === "gpt-4o" ? "GPT-4o (OpenAI)" :
-                selectedModel === "claude-3-5-sonnet" ? "Claude 3.5 Sonnet" :
-                selectedModel === "deepseek-coder" ? "DeepSeek V3/R1" :
-                selectedModel === "kimi-moonshot" ? "Kimi" :
-                selectedModel === "qwen-vl-max" ? "Qwen VL" :
+                selectedModel === "gemini-2.5-pro" ? "Gemini 2.5 Pro" :
                 "Gemini 2.5 Flash"
               }</span>
               {activeFile?.status === "success" && (
@@ -1300,11 +1376,7 @@ export default function App() {
                   <span className="text-amber-400 font-mono">
                     توکن مصرفی سند فعلی: {(activeFile.tokensUsed || (
                       selectedModel === "gemini-3.1-pro-preview" ? 1800 :
-                      selectedModel === "gpt-4o" ? 1600 :
-                      selectedModel === "claude-3-5-sonnet" ? 1500 :
-                      selectedModel === "deepseek-coder" ? 3000 :
-                      selectedModel === "qwen-vl-max" ? 1400 :
-                      selectedModel === "kimi-moonshot" ? 1200 :
+                      selectedModel === "gemini-2.5-pro" ? 1600 :
                       selectedModel === "gemini-3.5-flash" ? 1200 :
                       selectedModel === "gemini-3.1-flash-lite" ? 900 :
                       1200
@@ -1350,11 +1422,7 @@ export default function App() {
             {(() => {
               const totalTokens = activeFile.tokenDetails?.totalTokenCount || activeFile.tokensUsed || (
                 selectedModel === "gemini-3.1-pro-preview" ? 1800 :
-                selectedModel === "gpt-4o" ? 1600 :
-                selectedModel === "claude-3-5-sonnet" ? 1500 :
-                selectedModel === "deepseek-coder" ? 3000 :
-                selectedModel === "qwen-vl-max" ? 1400 :
-                selectedModel === "kimi-moonshot" ? 1200 :
+                selectedModel === "gemini-2.5-pro" ? 1600 :
                 selectedModel === "gemini-3.5-flash" ? 1200 :
                 selectedModel === "gemini-3.1-flash-lite" ? 900 :
                 1200
