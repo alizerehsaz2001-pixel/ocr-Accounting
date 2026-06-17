@@ -36,7 +36,7 @@ function getGeminiClient(): GoogleGenAI {
 // Persian/Farsi financial documents extraction endpoint
 app.post("/api/extract", async (req, res) => {
   try {
-    const { image, mimeType } = req.body;
+    const { image, mimeType, model } = req.body;
 
     if (!image) {
        res.status(400).json({ error: "تصویر سند ارسال نشده است." });
@@ -44,6 +44,15 @@ app.post("/api/extract", async (req, res) => {
     }
 
     const ai = getGeminiClient();
+
+    // Dynamically select target backend model based on user's selection panel
+    const allowedModels = [
+      "gemini-3.5-flash",
+      "gemini-3.1-pro-preview",
+      "gemini-3.1-flash-lite",
+      "gemini-2.5-flash-image"
+    ];
+    const selectedModel = allowedModels.includes(model) ? model : "gemini-3.5-flash";
 
     // Specific strict instructions tailored to Persian accounting standards and system instructions
     const systemInstruction = `شما یک مدیر مالی، حسابرس ارشد و موتور هوش مصنوعی OCR هستید که با تمام اصول حسابداری، استانداردهای حسابرسی، ماهیت حساب‌ها (بدهکار/بستانکار) و قوانین ثبت اسناد مالی در ایران آشنایی کامل دارید.
@@ -56,7 +65,7 @@ app.post("/api/extract", async (req, res) => {
 ۴. اعداد را فقط و فقط به صورت عدد صحیح (Type Number, بدون کاما، بدون ممیز) برگردانید. اگر عدد ناخوانا بود، آن را صفر (0) قرار دهید.
 ۵. تشخیص دقیق بدهکار (Asset/Expense) و بستانکار (Liability/Revenue/Equity) الزامی است. مبالغ را دقیقاً در ستون مربوطه یادداشت کنید.
 ۶. فرمت خروجی فقط و فقط باید یک آرایه JSON معتبر (بدون تگ مارک‌داون) حاوی کلیدهای انگلیسی زیر باشد: 
-Date, Description, Debit, Credit, Remarks`;
+Date, Description, Debit, Credit, Remarks, ConfidenceScore`;
 
     const promptText = `لطفاً داده‌های موجود در تصویر پیوست شده را با رعایت بی‌نقص استانداردهای حسابداری، عینا و بدون هیچ اضافات، در قالب یک لیست JSON استخراج کن. هیج متنی خارج از JSON تولید نکن.`;
 
@@ -72,7 +81,7 @@ Date, Description, Debit, Credit, Remarks`;
     };
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: selectedModel,
       contents: { parts: [imagePart, textPart] },
       config: {
         systemInstruction: systemInstruction,
@@ -102,8 +111,12 @@ Date, Description, Debit, Credit, Remarks`;
                 type: Type.STRING,
                 description: "توضیحات اضافه نظیر شماره چک، شماره سند، نام دریافت‌کننده یا فیش بانکی. اگر فاقد توضیح بود null بگذارید.",
               },
+              ConfidenceScore: {
+                type: Type.INTEGER,
+                description: "درصد میزان اطمینان از صحت استخراج کل این ردیف (بین 0 تا 100) بر اساس خوانایی و کیفیت خطوط و ارقام در تصویر. برای مقادیر خوانای فاکتورهای مرتب نمره بالا و برای دست‌نوشته‌های مخدوش نمره پایین‌تر اختصاص دهید.",
+              },
             },
-            required: ["Date", "Description", "Debit", "Credit", "Remarks"],
+            required: ["Date", "Description", "Debit", "Credit", "Remarks", "ConfidenceScore"],
           },
         },
       },

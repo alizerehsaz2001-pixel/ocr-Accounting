@@ -10,6 +10,7 @@ export interface TransactionItem {
   Debit: number | null;
   Credit: number | null;
   Remarks: string | null;
+  ConfidenceScore: number | null;
 }
 
 export interface UploadedFile {
