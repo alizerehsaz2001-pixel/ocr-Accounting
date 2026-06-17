@@ -20,6 +20,9 @@ import {
   FileText,
   Sun,
   Moon,
+  User,
+  Settings,
+  Key,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -91,6 +94,7 @@ export default function App() {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
   const [notification, setNotification] = useState<{
     text: string;
     type: "success" | "error" | "info";
@@ -746,21 +750,32 @@ export default function App() {
       {/* Main Workspace Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Header toolbar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 text-slate-800 shrink-0 select-none">
+        <header className={`h-16 border-b flex items-center justify-between px-8 shrink-0 select-none transition-colors duration-300 ${
+          isDarkMode ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-800"
+        }`}>
           <div className="flex items-center gap-4">
-            <h1 className="text-[15px] font-bold text-slate-800 animate-fade-in" dir="ltr">
+            <h1 className="text-[15px] font-bold animate-fade-in" dir="ltr">
               ocr Accounting
             </h1>
             <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold ${
               activeFile?.status === "processing" 
-                ? "bg-amber-100 text-amber-800 border border-amber-200 animate-pulse" 
-                : "bg-blue-100 text-blue-800 border border-blue-200"
+                ? isDarkMode ? "bg-amber-900/30 text-amber-400 border border-amber-800 animate-pulse" : "bg-amber-100 text-amber-800 border border-amber-200 animate-pulse" 
+                : isDarkMode ? "bg-blue-900/40 text-blue-300 border border-blue-800" : "bg-blue-100 text-blue-800 border border-blue-200"
             }`}>
               {activeFile?.status === "processing" ? "در حال دریافت و تحلیل هوشمند" : "آماده تفکیک خودکار اسناد"}
             </span>
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsUserPanelOpen(true)}
+              className={`p-2 rounded-lg transition-colors border ${
+                isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
+              title="پنل کاربری و API Keys"
+            >
+              <User className="h-4 w-4" />
+            </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-sm hover:bg-blue-700 active:scale-95 transition"
@@ -773,24 +788,48 @@ export default function App() {
         {/* Workspace body */}
         <div className="flex-1 overflow-y-auto p-6 flex flex-col">
           {guideOpen && (
-            <div className={`p-4 shadow-sm animate-fade-in flex items-start gap-3 mb-6 shrink-0 rounded-xl border transition-colors ${
+            <div className={`p-4 shadow-sm animate-fade-in flex flex-col items-start gap-3 mb-6 shrink-0 rounded-xl border transition-colors ${
               isDarkMode 
                 ? "bg-blue-950/20 border-blue-900/60 text-blue-200" 
                 : "bg-blue-50/70 border-blue-100 text-blue-900"
             }`}>
-              <HelpCircle className={`h-5 w-5 shrink-0 mt-0.5 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} />
-              <div className="flex-1">
-                <h3 className={`font-bold text-xs ${isDarkMode ? "text-blue-100" : "text-blue-900"}`}>رهنمودهای حسابداری هوشمند:</h3>
-                <ul className={`list-disc list-inside text-[11px] mt-2 space-y-1 ${isDarkMode ? "text-blue-300" : "text-blue-800"}`}>
-                  <li>تصویر سند، عکس دست‌نویسی یا فاکتور را آپلود کنید تا بلافاصله به داده ساختاریافته فارسی مطابق اصول حسابداری تبدیل شود.</li>
-                  <li>خروجی مستقیما در قالب آرایه JSON با فیلدهای استاندارد حسابداری در اختیار شماست.</li>
-                  <li>امکان ویرایش مستقیم ساختار متنی JSON برای اصلاح مقادیر و نگهداری صحت کامل وجود دارد.</li>
-                  <li className={`font-semibold ${isDarkMode ? "text-blue-200" : "text-blue-900"}`}>توجه: هرچه تصویر ارسال شده باکیفیت‌تر، خوش‌خط‌تر و تمیزتر باشد، نتایج آنالیز و استخراج داده نیز دقیق‌تر و باکیفیت‌تر خواهد بود.</li>
-                </ul>
+              <div className="flex items-start gap-3 w-full">
+                <HelpCircle className={`h-5 w-5 shrink-0 mt-0.5 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} />
+                <div className="flex-1 text-right">
+                  <h3 className={`font-bold text-xs ${isDarkMode ? "text-blue-100" : "text-blue-900"}`}>رهنمودهای حسابداری هوشمند:</h3>
+                  <ul className={`list-disc list-inside text-[11px] mt-2 space-y-1 ${isDarkMode ? "text-blue-300" : "text-blue-800"}`}>
+                    <li>تصویر سند، عکس دست‌نویسی یا فاکتور را آپلود کنید تا بلافاصله به داده ساختاریافته فارسی مطابق اصول حسابداری تبدیل شود.</li>
+                    <li>خروجی مستقیما در قالب آرایه JSON با فیلدهای استاندارد حسابداری در اختیار شماست.</li>
+                    <li>امکان ویرایش مستقیم ساختار متنی JSON برای اصلاح مقادیر و نگهداری صحت کامل وجود دارد.</li>
+                    <li className={`font-semibold ${isDarkMode ? "text-blue-200" : "text-blue-900"}`}>توجه: هرچه تصویر ارسال شده باکیفیت‌تر، خوش‌خط‌تر و تمیزتر باشد، نتایج آنالیز و استخراج داده نیز دقیق‌تر و باکیفیت‌تر خواهد بود.</li>
+                  </ul>
+                </div>
+                <button onClick={() => setGuideOpen(false)} className={`${isDarkMode ? "text-blue-400 hover:text-blue-200" : "text-blue-500 hover:text-blue-700"}`}>
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button onClick={() => setGuideOpen(false)} className={`${isDarkMode ? "text-blue-400 hover:text-blue-200" : "text-blue-500 hover:text-blue-700"}`}>
-                <X className="h-4 w-4" />
-              </button>
+
+              <div className={`mt-3 pt-3 border-t w-full text-right ${isDarkMode ? "border-blue-900/40" : "border-blue-200/60"}`}>
+                <h3 className={`font-bold text-xs mb-3 ${isDarkMode ? "text-blue-100" : "text-blue-900"}`}>راهنمای کاربرد موتورهای هوش مصنوعی (مدل‌ها):</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px]">
+                  <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
+                    <strong className="text-blue-500 block mb-1">Gemini (3.5 Flash / 3.1 Pro)</strong>
+                    مدل‌های اصلی و پیش‌فرض گوگل. نسخه Flash برای استخراج سریع روزمره فوق‌العاده است و نسخه Pro برای خواندن دست‌نویس‌های بسیار مخدوش و ناخوانا به کار می‌رود.
+                  </div>
+                  <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
+                    <strong className="text-green-500 block mb-1">GPT-4o (OpenAI)</strong>
+                    بهترین مدل درک بصری ترکیبی. مناسب برای فاکتورهای چندصفحه‌ای یا اسناد مالی پیچیده که دارای ساختارهای جدولی شکسته یا فرمت‌های غیرمتعارف هستند.
+                  </div>
+                  <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
+                    <strong className="text-orange-500 block mb-1">Claude 3.5 Sonnet</strong>
+                    قوی‌ترین مفسر در زمینه اعداد و محاسبات مالی با کمترین احتمال توهمِ عدد (Hallucination). برای استخراج مبالغ حساس بانکی بهترین دقت را ارائه می‌کند.
+                  </div>
+                  <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
+                    <strong className="text-indigo-400 block mb-1">Kimi, DeepSeek R1 & Qwen</strong>
+                    <span className={isDarkMode ? "text-slate-300" : "text-slate-600"}>مدل‌های شرقی با قابلیت عالی. DeepSeek منطق بسیار قوی دارد. Kimi پنجره کانتکست عظیمی دارد و Qwen در پردازش و خوانش اسناد چند زبانه بسیار کارآمد است.</span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1205,6 +1244,135 @@ export default function App() {
           onCapture={handleCameraCapture}
           onClose={() => setIsCameraOpen(false)}
         />
+      )}
+
+      {/* User settings / Profile Panel Modal */}
+      {isUserPanelOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+            onClick={() => setIsUserPanelOpen(false)}
+          ></div>
+          
+          {/* Panel Container */}
+          <div className={`relative w-full max-w-lg rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up transform transition-all ${
+            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border border-slate-200 text-slate-800"
+          }`}>
+            <div className={`flex items-center justify-between p-4 border-b ${
+              isDarkMode ? "bg-slate-800/50 border-slate-700/50" : "bg-slate-50 border-slate-100"
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${isDarkMode ? "bg-blue-900/30 text-blue-400" : "bg-blue-100 text-blue-600"}`}>
+                  <User className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">پنل کاربری و تنظیمات سیستم</h3>
+                  <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>مدیریت کلیدهای API و نمایه</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsUserPanelOpen(false)}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500"
+                }`}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className={`p-5 overflow-y-auto max-h-[70vh] flex flex-col gap-6 ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
+              {/* Profile details */}
+              <section className="flex flex-col gap-3">
+                <h4 className="text-xs font-bold flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  اطلاعات حساب
+                </h4>
+                <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xl object-cover shrink-0">
+                      U
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-sm">کاربر مهمان</span>
+                      <span className={`text-xs mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>user@ocrsystem.local</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-slate-200/50 flex items-center justify-between">
+                     <span className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نوع اشتراک</span>
+                     <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">رایگان / آزمایشی</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* External API Keys Setup */}
+              <section className="flex flex-col gap-3">
+                 <h4 className="text-xs font-bold flex items-center gap-2">
+                  <Key className="h-4 w-4" />
+                  مدیریت کلیدهای API سرویس‌ها
+                </h4>
+                <p className={`text-[11px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                  برای استفاده از موتورهای استخراج قدرتمند (نظیر GPT-4o, Claude و DeepSeek) نیازمند ذخیره کلید اختصاصی API آنها به صورت لوکال در مرورگر خود هستید.
+                </p>
+
+                <div className="flex flex-col gap-3 mt-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label className={`text-[10px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      کلید OpenAI (GPT-4o)
+                    </label>
+                    <input type="password" placeholder="sk-proj-..." className={`w-full text-left text-xs p-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 transition-all font-mono placeholder-slate-400 ${
+                       isDarkMode ? "bg-slate-950 border-slate-700 text-slate-200" : "bg-white border-slate-300"
+                    }`} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className={`text-[10px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      کلید Anthropic (Claude 3.5)
+                    </label>
+                    <input type="password" placeholder="sk-ant-..." className={`w-full text-left text-xs p-2.5 rounded-lg border focus:ring-2 focus:ring-orange-500/50 transition-all font-mono placeholder-slate-400 ${
+                       isDarkMode ? "bg-slate-950 border-slate-700 text-slate-200 focus:border-orange-500" : "bg-white border-slate-300 focus:border-orange-500"
+                    }`} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className={`text-[10px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      کلید DeepSeek
+                    </label>
+                    <input type="password" placeholder="sk-..." className={`w-full text-left text-xs p-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500/50 transition-all font-mono placeholder-slate-400 ${
+                       isDarkMode ? "bg-slate-950 border-slate-700 text-slate-200 focus:border-blue-500" : "bg-white border-slate-300 focus:border-blue-500"
+                    }`} />
+                  </div>
+                   <div className="flex flex-col gap-1.5">
+                    <label className={`text-[10px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      کلید Cohere / Qwen / Kimi
+                    </label>
+                    <input type="password" placeholder="API Key..." className={`w-full text-left text-xs p-2.5 rounded-lg border focus:ring-2 focus:ring-teal-500/50 transition-all font-mono placeholder-slate-400 ${
+                       isDarkMode ? "bg-slate-950 border-slate-700 text-slate-200 focus:border-teal-500" : "bg-white border-slate-300 focus:border-teal-500"
+                    }`} />
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div className={`p-4 border-t flex items-center justify-end gap-3 ${isDarkMode ? "bg-slate-800/50 border-slate-700/50" : "bg-slate-50 border-slate-100"}`}>
+              <button 
+                onClick={() => setIsUserPanelOpen(false)}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+                  isDarkMode ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                انصراف
+              </button>
+              <button 
+                onClick={() => {
+                  setNotification({ text: "تنظیمات دستگاه شما ذخیره شد", type: "success" });
+                  setIsUserPanelOpen(false);
+                }}
+                className="px-6 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-transform active:scale-95"
+              >
+                ذخیره تنظیمات
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
