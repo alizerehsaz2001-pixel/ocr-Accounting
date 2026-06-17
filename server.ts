@@ -177,8 +177,13 @@ Date, Description, Debit, Credit, Remarks, ConfidenceScore`;
     }
 
     const tokensUsed = response.usageMetadata?.totalTokenCount || 0;
+    const tokenDetails = {
+      promptTokenCount: response.usageMetadata?.promptTokenCount || 0,
+      candidatesTokenCount: response.usageMetadata?.candidatesTokenCount || 0,
+      totalTokenCount: response.usageMetadata?.totalTokenCount || 0,
+    };
 
-    res.json({ success: true, data: parsedData, tokensUsed });
+    res.json({ success: true, data: parsedData, tokensUsed, tokenDetails });
   } catch (error: any) {
     console.error("API Error in extraction:", error);
     res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در پردازش فایل" });

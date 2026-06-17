@@ -22,6 +22,11 @@ export interface UploadedFile {
   error: string | null;
   results?: TransactionItem[];
   tokensUsed?: number;
+  tokenDetails?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+  };
 }
 
 export interface PreviousScan {

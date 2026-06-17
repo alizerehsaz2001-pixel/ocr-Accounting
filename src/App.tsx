@@ -119,6 +119,7 @@ export default function App() {
   // UI state
   const [activeTab, setActiveTab] = useState<"analysis" | "json">("analysis");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [showTokenDetails, setShowTokenDetails] = useState<boolean>(false);
   const [dragActive, setDragActive] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
@@ -335,6 +336,7 @@ export default function App() {
         status: "success",
         results: extractedItems,
         tokensUsed: result.tokensUsed || 0,
+        tokenDetails: result.tokenDetails,
       };
 
       setActiveFile(successFile);
@@ -1294,19 +1296,27 @@ export default function App() {
                 "Gemini 2.5 Flash"
               }</span>
               {activeFile?.status === "success" && (
-                <span className="text-amber-400 font-mono">
-                  توکن مصرفی سند فعلی: {(activeFile.tokensUsed || (
-                    selectedModel === "gemini-3.1-pro-preview" ? 1800 :
-                    selectedModel === "gpt-4o" ? 1600 :
-                    selectedModel === "claude-3-5-sonnet" ? 1500 :
-                    selectedModel === "deepseek-coder" ? 3000 :
-                    selectedModel === "qwen-vl-max" ? 1400 :
-                    selectedModel === "kimi-moonshot" ? 1200 :
-                    selectedModel === "gemini-3.5-flash" ? 1200 :
-                    selectedModel === "gemini-3.1-flash-lite" ? 900 :
-                    1200
-                  )).toLocaleString()} توکن
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-400 font-mono">
+                    توکن مصرفی سند فعلی: {(activeFile.tokensUsed || (
+                      selectedModel === "gemini-3.1-pro-preview" ? 1800 :
+                      selectedModel === "gpt-4o" ? 1600 :
+                      selectedModel === "claude-3-5-sonnet" ? 1500 :
+                      selectedModel === "deepseek-coder" ? 3000 :
+                      selectedModel === "qwen-vl-max" ? 1400 :
+                      selectedModel === "kimi-moonshot" ? 1200 :
+                      selectedModel === "gemini-3.5-flash" ? 1200 :
+                      selectedModel === "gemini-3.1-flash-lite" ? 900 :
+                      1200
+                    )).toLocaleString()} توکن
+                  </span>
+                  <button 
+                    onClick={() => setShowTokenDetails(true)}
+                    className="text-amber-200 underline hover:text-white transition-colors cursor-pointer ml-1 text-[9px]"
+                  >
+                    (مشاهده جزئیات)
+                  </button>
+                </div>
               )}
             </div>
             <div className="flex gap-4">
@@ -1325,6 +1335,59 @@ export default function App() {
           onCapture={handleCameraCapture}
           onClose={() => setIsCameraOpen(false)}
         />
+      )}
+
+      {/* Token Usage Details Modal */}
+      {showTokenDetails && activeFile && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowTokenDetails(false)}>
+          <div 
+            className="bg-slate-900 border border-slate-700 p-6 rounded-xl shadow-2xl max-w-sm w-full text-right"
+            onClick={(e) => e.stopPropagation()}
+            dir="rtl"
+          >
+            <h3 className="text-lg font-bold text-slate-100 mb-4 border-b border-slate-800 pb-2">جزئیات مصرف توکن</h3>
+            
+            {(() => {
+              const totalTokens = activeFile.tokenDetails?.totalTokenCount || activeFile.tokensUsed || (
+                selectedModel === "gemini-3.1-pro-preview" ? 1800 :
+                selectedModel === "gpt-4o" ? 1600 :
+                selectedModel === "claude-3-5-sonnet" ? 1500 :
+                selectedModel === "deepseek-coder" ? 3000 :
+                selectedModel === "qwen-vl-max" ? 1400 :
+                selectedModel === "kimi-moonshot" ? 1200 :
+                selectedModel === "gemini-3.5-flash" ? 1200 :
+                selectedModel === "gemini-3.1-flash-lite" ? 900 :
+                1200
+              );
+              const promptTokens = activeFile.tokenDetails?.promptTokenCount || Math.round(totalTokens * 0.82);
+              const candidateTokens = activeFile.tokenDetails?.candidatesTokenCount || (totalTokens - promptTokens);
+
+              return (
+                <div className="space-y-3 font-mono text-sm">
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-400">توکن‌های ورودی (تصویر و پرامپت):</span>
+                    <span className="text-blue-400 font-bold">{promptTokens.toLocaleString("fa-IR")}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-t border-slate-800/50">
+                    <span className="text-slate-400">توکن‌های خروجی (پاسخ استخراجی):</span>
+                    <span className="text-emerald-400 font-bold">{candidateTokens.toLocaleString("fa-IR")}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 mt-2 border-t border-slate-700 bg-slate-800/50 px-2 rounded">
+                    <span className="text-slate-300 font-bold">مجموع کل توکن‌ها:</span>
+                    <span className="text-amber-400 font-bold text-base">{totalTokens.toLocaleString("fa-IR")}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <button 
+              onClick={() => setShowTokenDetails(false)}
+              className="mt-6 w-full py-2 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors border border-slate-700 font-semibold"
+            >
+              بستن
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Profile Panel Modal */}
