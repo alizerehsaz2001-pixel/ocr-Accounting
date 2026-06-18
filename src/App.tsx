@@ -120,6 +120,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"analysis" | "json">("analysis");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [showTokenDetails, setShowTokenDetails] = useState<boolean>(false);
+  const [isCompressionEnabled, setIsCompressionEnabled] = useState<boolean>(() => {
+    return localStorage.getItem("is_compression_enabled") === "true";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("is_compression_enabled", isCompressionEnabled.toString());
+  }, [isCompressionEnabled]);
 
   // Reset verification on file change
   useEffect(() => {
@@ -128,8 +135,41 @@ export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
-  const [isPaymentPanelOpen, setIsPaymentPanelOpen] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [users, setUsers] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem("system_users");
+      return stored ? JSON.parse(stored) : [
+        { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000 },
+        { id: 2, name: "محمد کریمی (حسابدار ارشد)", role: "user", status: "active", apiUsage: 12400 },
+        { id: 3, name: "حسابدار پاره‌وقت", role: "user", status: "suspended", apiUsage: 850 }
+      ];
+    } catch {
+      return [
+        { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000 },
+        { id: 2, name: "محمد کریمی (حسابدار ارشد)", role: "user", status: "active", apiUsage: 12400 },
+        { id: 3, name: "حسابدار پاره‌وقت", role: "user", status: "suspended", apiUsage: 850 }
+      ];
+    }
+  });
+
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+     try {
+       const stored = localStorage.getItem("current_user");
+       return stored ? JSON.parse(stored) : { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000 };
+     } catch {
+       return { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000 };
+     }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("system_users", JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem("current_user", JSON.stringify(currentUser));
+  }, [currentUser]);
+
   const [notification, setNotification] = useState<{
     text: string;
     type: "success" | "error" | "info";
@@ -195,12 +235,15 @@ export default function App() {
   useEffect(() => {
     if (activeFile && activeFile.status === "success") {
       const cleanJSON = transactions.map((t) => ({
-        Date: t.Date,
-        Description: t.Description,
-        Debit: t.Debit,
-        Credit: t.Credit,
-        Remarks: t.Remarks,
-        ConfidenceScore: t.ConfidenceScore !== undefined && t.ConfidenceScore !== null ? Number(t.ConfidenceScore) : 100,
+        تاریخ: t.تاریخ,
+        شماره_سند: t.شماره_سند,
+        نام_طرف_حساب: t.نام_طرف_حساب,
+        شرح: t.شرح,
+        مبلغ_بدهکار: t.مبلغ_بدهکار,
+        مبلغ_بستانکار: t.مبلغ_بستانکار,
+        نوع_ارز: t.نوع_ارز,
+        توضیحات: t.توضیحات,
+        ضریب_اطمینان: t.ضریب_اطمینان !== undefined && t.ضریب_اطمینان !== null ? Number(t.ضریب_اطمینان) : 100,
       }));
       setRawJsonText(JSON.stringify(cleanJSON, null, 2));
       setJsonError(null);
@@ -234,8 +277,8 @@ export default function App() {
         img.src = event.target?.result as string;
         img.onload = () => {
           const canvas = document.createElement("canvas");
-          const MAX_WIDTH = 1600;
-          const MAX_HEIGHT = 1600;
+          const MAX_WIDTH = isCompressionEnabled ? 800 : 1600;
+          const MAX_HEIGHT = isCompressionEnabled ? 800 : 1600;
           let width = img.width;
           let height = img.height;
 
@@ -266,8 +309,9 @@ export default function App() {
           // Draw image to canvas
           ctx.drawImage(img, 0, 0, width, height);
 
-          // Export as JPEG with 0.82 quality to ensure small size (e.g., <200KB) and crisp OCR resolution
-          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          // Export as JPEG with lower quality if compression is enabled
+          const quality = isCompressionEnabled ? 0.5 : 0.82;
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
           const base64Data = compressedDataUrl.split(",")[1];
           resolve(base64Data);
         };
@@ -326,12 +370,15 @@ export default function App() {
 
       const extractedItems: TransactionItem[] = result.data.map((item: any, idx: number) => ({
         id: `extracted-${Date.now()}-${idx}`,
-        Date: item.Date !== undefined ? item.Date : null,
-        Description: item.Description !== undefined ? item.Description : null,
-        Debit: item.Debit !== null && !isNaN(Number(item.Debit)) ? Number(item.Debit) : 0,
-        Credit: item.Credit !== null && !isNaN(Number(item.Credit)) ? Number(item.Credit) : 0,
-        Remarks: item.Remarks !== undefined ? item.Remarks : null,
-        ConfidenceScore: item.ConfidenceScore !== undefined && item.ConfidenceScore !== null ? Number(item.ConfidenceScore) : 100,
+        تاریخ: item.تاریخ !== undefined ? item.تاریخ : null,
+        شماره_سند: item.شماره_سند !== undefined ? item.شماره_سند : null,
+        نام_طرف_حساب: item.نام_طرف_حساب !== undefined ? item.نام_طرف_حساب : null,
+        شرح: item.شرح !== undefined ? item.شرح : null,
+        مبلغ_بدهکار: item.مبلغ_بدهکار !== null && !isNaN(Number(item.مبلغ_بدهکار)) ? Number(item.مبلغ_بدهکار) : 0,
+        مبلغ_بستانکار: item.مبلغ_بستانکار !== null && !isNaN(Number(item.مبلغ_بستانکار)) ? Number(item.مبلغ_بستانکار) : 0,
+        نوع_ارز: item.نوع_ارز !== undefined ? item.نوع_ارز : null,
+        توضیحات: item.توضیحات !== undefined ? item.توضیحات : null,
+        ضریب_اطمینان: item.ضریب_اطمینان !== undefined && item.ضریب_اطمینان !== null ? Number(item.ضریب_اطمینان) : 100,
       }));
 
       // Set transactions directly to current document extracted rows only
@@ -443,12 +490,15 @@ export default function App() {
       if (Array.isArray(parsed)) {
         const mapped: TransactionItem[] = parsed.map((item: any, idx: number) => ({
           id: `edited-${Date.now()}-${idx}`,
-          Date: item.Date !== undefined ? item.Date : null,
-          Description: item.Description !== undefined ? item.Description : null,
-          Debit: item.Debit !== undefined && !isNaN(Number(item.Debit)) ? Number(item.Debit) : 0,
-          Credit: item.Credit !== undefined && !isNaN(Number(item.Credit)) ? Number(item.Credit) : 0,
-          Remarks: item.Remarks !== undefined ? item.Remarks : null,
-          ConfidenceScore: item.ConfidenceScore !== undefined && item.ConfidenceScore !== null ? Number(item.ConfidenceScore) : 100,
+          تاریخ: item.تاریخ !== undefined ? item.تاریخ : null,
+          شماره_سند: item.شماره_سند !== undefined ? item.شماره_سند : null,
+          نام_طرف_حساب: item.نام_طرف_حساب !== undefined ? item.نام_طرف_حساب : null,
+          شرح: item.شرح !== undefined ? item.شرح : null,
+          مبلغ_بدهکار: item.مبلغ_بدهکار !== undefined && !isNaN(Number(item.مبلغ_بدهکار)) ? Number(item.مبلغ_بدهکار) : 0,
+          مبلغ_بستانکار: item.مبلغ_بستانکار !== undefined && !isNaN(Number(item.مبلغ_بستانکار)) ? Number(item.مبلغ_بستانکار) : 0,
+          نوع_ارز: item.نوع_ارز !== undefined ? item.نوع_ارز : null,
+          توضیحات: item.توضیحات !== undefined ? item.توضیحات : null,
+          ضریب_اطمینان: item.ضریب_اطمینان !== undefined && item.ضریب_اطمینان !== null ? Number(item.ضریب_اطمینان) : 100,
         }));
         setTransactions(mapped);
         setJsonError(null);
@@ -497,12 +547,15 @@ export default function App() {
     if (!original) return true; // Manually added row
 
     return (
-      String(current.Date || "").trim() !== String(original.Date || "").trim() ||
-      String(current.Description || "").trim() !== String(original.Description || "").trim() ||
-      Number(current.Debit) !== Number(original.Debit) ||
-      Number(current.Credit) !== Number(original.Credit) ||
-      String(current.Remarks || "").trim() !== String(original.Remarks || "").trim() ||
-      Number(current.ConfidenceScore ?? 100) !== Number(original.ConfidenceScore ?? 100)
+      String(current.تاریخ || "").trim() !== String(original.تاریخ || "").trim() ||
+      String(current.شماره_سند || "").trim() !== String(original.شماره_سند || "").trim() ||
+      String(current.نام_طرف_حساب || "").trim() !== String(original.نام_طرف_حساب || "").trim() ||
+      String(current.شرح || "").trim() !== String(original.شرح || "").trim() ||
+      Number(current.مبلغ_بدهکار) !== Number(original.مبلغ_بدهکار) ||
+      Number(current.مبلغ_بستانکار) !== Number(original.مبلغ_بستانکار) ||
+      String(current.نوع_ارز || "").trim() !== String(original.نوع_ارز || "").trim() ||
+      String(current.توضیحات || "").trim() !== String(original.توضیحات || "").trim() ||
+      Number(current.ضریب_اطمینان ?? 100) !== Number(original.ضریب_اطمینان ?? 100)
     );
   };
 
@@ -805,15 +858,17 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsAdminPanelOpen(true)}
-              className={`p-2 rounded-lg transition-colors border ${
-                isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
-              title="پنل مدیریت سامانه"
-            >
-              <Shield className="h-4 w-4" />
-            </button>
+            {currentUser?.role === "admin" && (
+              <button
+                onClick={() => setIsAdminPanelOpen(true)}
+                className={`p-2 rounded-lg transition-colors border ${
+                  isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+                title="پنل مدیریت سامانه"
+              >
+                <Shield className="h-4 w-4" />
+              </button>
+            )}
             <button
               onClick={() => setIsUserPanelOpen(true)}
               className={`p-2 rounded-lg transition-colors border ${
@@ -889,6 +944,26 @@ export default function App() {
                           </p>
                         </div>
                       </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>کنترل هزینه‌های غیرقابل قبول مالیاتی:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            هوش مصنوعی قادر به شناسایی و برچسب‌گذاری (Tagging) هوشمند اقلامی است که ممکن است بر اساس استانداردهای حسابداری، هزینه‌های غیرقابل قبول مالیاتی تلقی شوند (مانند جریمه‌های دیرکرد).
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>کنترل حساب‌های ارزی و تسعیر نرخ ارز:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            تشخیص خودکار واحد پولی فاکتورهای ارزی (دلار، یورو و درهم) و ارائه پیشنهاد برای ثبت سند تسعیر نرخ ارز بر اساس تاریخ فاکتور جهت درج دقیق در دفاتر قانونی.
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -918,6 +993,26 @@ export default function App() {
                           <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>شماره سریال سند و تطبیق تاریخی (Audit Trail):</strong>
                           <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
                             عمر تاریخی فاکتور، تاریخ شمسی، سال مالی فعال و شماره سریال مندرج در راستای ردیابی حسابرسی اسناد مالی استخراج می‌شوند تا پرونده‌های مکرر به اشتباه دوباره ثبت نشوند.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>تفکیک خودکار حساب‌های بانکی و تنخواه‌گردان:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            شناسایی ماهیت پرداخت نقد یا نسیه؛ چنانچه پرداخت از طریق فیش بانکی/کارتخوان صورت گرفته باشد، حساب موجودی بانک درگیر می‌شود و اگر فاکتور خرد باشد، در حساب تنخواه‌گردان منظور خواهد شد.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>طبقه‌بندی دارایی‌های ثابت و تعیین هزینه استهلاک:</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            مدل توانایی دارد خریدهای سرمایه‌ای بالای حد نصاب (اموال منقول/غیرمنقول مثل لپ‌تاپ و تجهیزات) را از هزینه‌های جاری تفکیک و به عنوان «اموال و ماشین‌آلات» با ثبت جداگانه لحاظ نماید.
                           </p>
                         </div>
                       </div>
@@ -1215,7 +1310,7 @@ export default function App() {
 
                       {activeFile.status === "success" && transactions.length > 0 && (() => {
                         const count = transactions.length;
-                        const sumScores = transactions.reduce((acc, current) => acc + (current.ConfidenceScore ?? 100), 0);
+                        const sumScores = transactions.reduce((acc, current) => acc + (current.ضریب_اطمینان ?? 100), 0);
                         const avgScore = Math.round(sumScores / count);
                         const countEdited = transactions.filter((tr, idx) => isRowEdited(tr, idx)).length;
                         
@@ -1285,17 +1380,20 @@ export default function App() {
                           }`}>
                             <tr>
                               <th className={`p-3 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>#</th>
-                              <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>تاریخ تراکنش</th>
-                              <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>شرح / بابت سند</th>
-                              <th className={`p-3 text-left border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>مبلغ بدهکار (ریال)</th>
-                              <th className={`p-3 text-left border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>مبلغ بستانکار (ریال)</th>
-                              <th className={`p-3 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"} select-none`}>میزان اطمینان مفسر</th>
-                              <th className="p-3">توضیحات و ملحقات</th>
+                              <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>تاریخ</th>
+                              <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>شماره سند</th>
+                              <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>طرف حساب</th>
+                              <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>شرح / بابت</th>
+                              <th className={`p-3 text-left border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>بدهکار</th>
+                              <th className={`p-3 text-left border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>بستانکار</th>
+                              <th className={`p-3 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>ارز</th>
+                              <th className={`p-3 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"} select-none`}>دقت استخراج</th>
+                              <th className="p-3">توضیحات تکمیلی</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-150">
                             {transactions.map((tr, index) => {
-                              const score = tr.ConfidenceScore ?? 100;
+                              const score = tr.ضریب_اطمینان ?? 100;
                               const isEdited = isRowEdited(tr, index);
                               let badgeBg = "bg-emerald-50 border-emerald-200 text-emerald-800";
                               let progressBg = "bg-emerald-500";
@@ -1332,17 +1430,26 @@ export default function App() {
                                       )}
                                     </div>
                                   </td>
-                                  <td className="p-3 font-mono font-medium text-slate-700 border-l border-slate-100">
-                                    {tr.Date || <span className="text-slate-400">[فاقد تاریخ]</span>}
+                                  <td className="p-3 font-mono font-medium text-slate-700 border-l border-slate-100 max-w-[120px] truncate" title={tr.تاریخ || ""}>
+                                    {tr.تاریخ || <span className="text-slate-400">[فاقد تاریخ]</span>}
                                   </td>
-                                  <td className="p-3 font-semibold text-slate-800 border-l border-slate-100 max-w-[200px] truncate" title={tr.Description || ""}>
-                                    {tr.Description || <span className="text-slate-400 font-normal">[بدون شرح]</span>}
+                                  <td className="p-3 font-mono text-slate-700 border-l border-slate-100 max-w-[100px] truncate" title={tr.شماره_سند || ""}>
+                                    {tr.شماره_سند || <span className="text-slate-400">-</span>}
+                                  </td>
+                                  <td className="p-3 font-semibold text-slate-800 border-l border-slate-100 max-w-[140px] truncate" title={tr.نام_طرف_حساب || ""}>
+                                    {tr.نام_طرف_حساب || <span className="text-slate-400">-</span>}
+                                  </td>
+                                  <td className="p-3 text-slate-800 border-l border-slate-100 max-w-[180px] truncate" title={tr.شرح || ""}>
+                                    {tr.شرح || <span className="text-slate-400 font-normal">[بدون شرح]</span>}
                                   </td>
                                   <td className="p-3 border-l border-slate-100 text-left font-mono text-emerald-600 font-semibold">
-                                    {tr.Debit !== null && tr.Debit > 0 ? Number(tr.Debit).toLocaleString("fa-IR") : "۰"}
+                                    {tr.مبلغ_بدهکار !== null && tr.مبلغ_بدهکار > 0 ? Number(tr.مبلغ_بدهکار).toLocaleString("fa-IR") : "۰"}
                                   </td>
                                   <td className="p-3 border-l border-slate-100 text-left font-mono text-slate-600 font-semibold">
-                                    {tr.Credit !== null && tr.Credit > 0 ? Number(tr.Credit).toLocaleString("fa-IR") : "۰"}
+                                    {tr.مبلغ_بستانکار !== null && tr.مبلغ_بستانکار > 0 ? Number(tr.مبلغ_بستانکار).toLocaleString("fa-IR") : "۰"}
+                                  </td>
+                                  <td className="p-3 border-l border-slate-100 text-center font-semibold text-[10px]">
+                                    {tr.نوع_ارز || <span className="text-slate-400">-</span>}
                                   </td>
                                   <td className="p-3 border-l border-slate-100 text-center select-none">
                                     <div className="flex flex-col items-center justify-center min-w-[70px] gap-1 mx-auto">
@@ -1355,8 +1462,8 @@ export default function App() {
                                       <span className="text-[7.5px] text-slate-400 font-extrabold block shrink-0">{scoreDesc}</span>
                                     </div>
                                   </td>
-                                  <td className="p-3 text-slate-500 max-w-[140px] truncate" title={tr.Remarks || ""}>
-                                    {tr.Remarks || <span className="text-slate-300 font-light">-</span>}
+                                  <td className="p-3 text-slate-500 max-w-[140px] truncate" title={tr.توضیحات || ""}>
+                                    {tr.توضیحات || <span className="text-slate-300 font-light">-</span>}
                                   </td>
                                 </tr>
                               );
@@ -1510,81 +1617,72 @@ export default function App() {
               {/* Profile details */}
               <section className="flex flex-col gap-3">
                 <h4 className="text-xs font-bold flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  اطلاعات حساب
+                  <User className="h-4 w-4" />
+                  حساب کاربری فعلی
                 </h4>
                 <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
                   <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xl object-cover shrink-0">
-                      U
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shrink-0">
+                      {currentUser?.name.charAt(0) || "U"}
                     </div>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-sm">کاربر مهمان</span>
-                      <span className={`text-xs mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>user@ocrsystem.local</span>
+                    <div className="flex flex-col flex-1">
+                      <select 
+                        value={currentUser?.id}
+                        onChange={(e) => {
+                           const user = users.find(u => u.id === parseInt(e.target.value));
+                           if (user) {
+                             if (user.status === "suspended") {
+                                setNotification({text: "این اکانت مسدود شده است", type: "error"});
+                                return;
+                             }
+                             setCurrentUser(user);
+                           }
+                        }}
+                        className={`text-sm font-bold bg-transparent outline-none cursor-pointer ${isDarkMode ? "text-white" : "text-slate-800"}`}
+                      >
+                         {users.map(u => (
+                            <option key={u.id} value={u.id} className={isDarkMode ? "bg-slate-800" : "bg-white"}>{u.name}</option>
+                         ))}
+                      </select>
+                      <span className={`text-[10px] mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تغییر سریع کاربر (شبیه‌ساز)</span>
                     </div>
                   </div>
                   <div className="mt-4 pt-4 border-t border-slate-200/50 flex items-center justify-between">
-                     <span className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نوع اشتراک</span>
+                     <span className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>سطح دسترسی</span>
                      <div className="flex items-center gap-3">
-                       <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">رایگان / آزمایشی</span>
-                       <button 
-                         onClick={() => {
-                           setIsUserPanelOpen(false);
-                           setIsPaymentPanelOpen(true);
-                         }}
-                         className="flex items-center gap-1.5 text-[10px] bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded-md transition-colors"
-                       >
-                         <CreditCard className="h-3 w-3" />
-                         ارتقای حساب
-                       </button>
+                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                          currentUser?.role === "admin" ? "text-purple-600 bg-purple-500/10" : "text-blue-500 bg-blue-500/10"
+                       }`}>
+                         {currentUser?.role === "admin" ? "مدیر کل سیستم" : "همکار حسابدار"}
+                       </span>
                      </div>
                   </div>
                 </div>
               </section>
 
-              {/* External API Keys Setup */}
+              {/* Optimization Setup */}
               <section className="flex flex-col gap-3">
                  <h4 className="text-xs font-bold flex items-center gap-2">
-                  <Key className="h-4 w-4" />
-                  مدیریت کلیدهای API سرویس‌ها
+                  <Settings className="h-4 w-4" />
+                  بهینه‌سازی و مصرف توکن
                 </h4>
-                <p className={`text-[11px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                  برای استفاده از موتورهای استخراج قدرتمند (نظیر GPT-4o, Claude و DeepSeek) نیازمند ذخیره کلید اختصاصی API آنها به صورت لوکال در مرورگر خود هستید.
-                </p>
-
-                <div className="flex flex-col gap-3 mt-2">
-                  <div className="flex flex-col gap-1.5">
-                    <label className={`text-[10px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                      کلید OpenAI (GPT-4o)
-                    </label>
-                    <input type="password" placeholder="sk-proj-..." className={`w-full text-left text-xs p-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 transition-all font-mono placeholder-slate-400 ${
-                       isDarkMode ? "bg-slate-950 border-slate-700 text-slate-200" : "bg-white border-slate-300"
-                    }`} />
+                <div className={`p-4 flex items-center justify-between rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-xs">فشرده‌سازی خودکار تصاویر</span>
+                    <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      کاهش کیفیت و ابعاد عکس برای مصرف بسیار کمتر توکن
+                    </span>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className={`text-[10px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                      کلید Anthropic (Claude 3.5)
-                    </label>
-                    <input type="password" placeholder="sk-ant-..." className={`w-full text-left text-xs p-2.5 rounded-lg border focus:ring-2 focus:ring-orange-500/50 transition-all font-mono placeholder-slate-400 ${
-                       isDarkMode ? "bg-slate-950 border-slate-700 text-slate-200 focus:border-orange-500" : "bg-white border-slate-300 focus:border-orange-500"
+                  <button 
+                    onClick={() => setIsCompressionEnabled(!isCompressionEnabled)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      isCompressionEnabled ? "bg-blue-600" : "bg-slate-300"
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      isCompressionEnabled ? "-translate-x-6" : "-translate-x-1"
                     }`} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className={`text-[10px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                      کلید DeepSeek
-                    </label>
-                    <input type="password" placeholder="sk-..." className={`w-full text-left text-xs p-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500/50 transition-all font-mono placeholder-slate-400 ${
-                       isDarkMode ? "bg-slate-950 border-slate-700 text-slate-200 focus:border-blue-500" : "bg-white border-slate-300 focus:border-blue-500"
-                    }`} />
-                  </div>
-                   <div className="flex flex-col gap-1.5">
-                    <label className={`text-[10px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                      کلید Cohere / Qwen / Kimi
-                    </label>
-                    <input type="password" placeholder="API Key..." className={`w-full text-left text-xs p-2.5 rounded-lg border focus:ring-2 focus:ring-teal-500/50 transition-all font-mono placeholder-slate-400 ${
-                       isDarkMode ? "bg-slate-950 border-slate-700 text-slate-200 focus:border-teal-500" : "bg-white border-slate-300 focus:border-teal-500"
-                    }`} />
-                  </div>
+                  </button>
                 </div>
               </section>
             </div>
@@ -1612,202 +1710,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Payment / Subscription Panel Modal */}
-      {isPaymentPanelOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md animate-fade-in"
-            onClick={() => setIsPaymentPanelOpen(false)}
-          ></div>
-          
-          {/* Panel Container */}
-          <div className={`relative w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up transform transition-all ${
-            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border border-slate-200 text-slate-800"
-          }`}>
-            <div className={`flex items-center justify-between p-5 border-b ${
-              isDarkMode ? "bg-slate-800/80 border-slate-700/50" : "bg-slate-50 border-slate-100"
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl ${isDarkMode ? "bg-blue-900/40 text-blue-400" : "bg-blue-100 text-blue-600"}`}>
-                  <CreditCard className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-bold font-sans text-lg">ارتقای حساب کاربری</h3>
-                  <span className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>طرح‌های اشتراکی سامانه پردازش اسناد OCR</span>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsPaymentPanelOpen(false)}
-                className={`p-2 rounded-lg transition-colors ${
-                  isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500"
-                }`}
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-            
-            <div className={`p-6 overflow-y-auto max-h-[75vh] ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
-              {/* Pricing Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                {/* Plan 1 */}
-                <div className={`flex flex-col rounded-2xl border-2 transition-all hover:-translate-y-1 ${
-                  isDarkMode ? "bg-slate-800/30 border-slate-700 hover:border-slate-600" : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"
-                }`}>
-                  <div className="p-6 border-b border-slate-200/20">
-                    <h4 className="font-bold text-lg mb-2">طرح پایه</h4>
-                    <p className={`text-[11px] mb-4 min-h-[32px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>مناسب برای کسب‌وکارهای کوچک و پردازش محدود</p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-black">۲۵۰</span>
-                      <span className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>هزار تومان / ماهانه</span>
-                    </div>
-                  </div>
-                  <div className="p-6 flex-1 flex flex-col gap-4">
-                    <ul className="flex flex-col gap-3 flex-1">
-                      <li className="flex items-start gap-2 text-xs">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>پردازش ۳۰۰ سند در ماه</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-xs">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>دسترسی به Gemini 3.5 Flash</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-xs opacity-50">
-                        <X className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span>بدون دسترسی به Claude و GPT-4o</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-xs opacity-50">
-                        <X className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span>بدون پشتیبانی اختصاصی</span>
-                      </li>
-                    </ul>
-                    <button 
-                      onClick={() => {
-                        setNotification({ text: "در حال انتقال به درگاه پرداخت...", type: "success" });
-                        setIsPaymentPanelOpen(false);
-                      }}
-                      className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all ${
-                        isDarkMode ? "bg-slate-800 text-white hover:bg-slate-700" : "bg-slate-100 text-slate-800 hover:bg-slate-200"
-                      }`}
-                    >
-                      انتخاب این طرح
-                    </button>
-                  </div>
-                </div>
-
-                {/* Plan 2 - Best Value */}
-                <div className="flex flex-col rounded-2xl border-2 border-blue-500 shadow-xl shadow-blue-500/10 transform scale-105 z-10 relative overflow-hidden bg-gradient-to-b from-blue-600/5 to-transparent">
-                  <div className="absolute top-0 right-0 left-0 bg-blue-500 text-center py-1.5 text-[10px] font-bold text-white tracking-wider">
-                    پیشنهاد ویژه
-                  </div>
-                  <div className="p-6 pt-10 border-b border-slate-200/20">
-                    <h4 className="font-bold text-lg mb-2 text-blue-500">طرح حرفه‌ای</h4>
-                    <p className={`text-[11px] mb-4 min-h-[32px] ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>ایده‌آل برای حسابداران و شرکت‌های متوسط</p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-black">۶۸۰</span>
-                      <span className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>هزار تومان / ماهانه</span>
-                    </div>
-                  </div>
-                  <div className="p-6 flex-1 flex flex-col gap-4">
-                    <ul className="flex flex-col gap-3 flex-1">
-                      <li className="flex items-start gap-2 text-xs font-medium">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>پردازش ۲۰۰۰ سند در ماه</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-xs font-medium">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>دسترسی به تمام مدل‌های هوش مصنوعی</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-xs font-medium">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>دقت بسیار بالا در خوانش دست‌نویس</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-xs font-medium">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>خروجی یکپارچه اکسل (به زودی)</span>
-                      </li>
-                    </ul>
-                    <button 
-                      onClick={() => {
-                        setNotification({ text: "در حال انتقال به درگاه پرداخت...", type: "success" });
-                        setIsPaymentPanelOpen(false);
-                      }}
-                      className="w-full py-2.5 rounded-xl text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-md transition-all hover:shadow-lg active:scale-95"
-                    >
-                      انتخاب این طرح
-                    </button>
-                  </div>
-                </div>
-
-                {/* Plan 3 */}
-                <div className={`flex flex-col rounded-2xl border-2 transition-all hover:-translate-y-1 ${
-                  isDarkMode ? "bg-slate-800/30 border-slate-700 hover:border-slate-600" : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"
-                }`}>
-                  <div className="p-6 border-b border-slate-200/20">
-                    <h4 className="font-bold text-lg mb-2">طرح سازمانی</h4>
-                    <p className={`text-[11px] mb-4 min-h-[32px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>پردازش نامحدود برای شرکت‌های بزرگ و هلدینگ‌ها</p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-black">۲٫۵</span>
-                      <span className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>میلیون تومان / ماهانه</span>
-                    </div>
-                  </div>
-                  <div className="p-6 flex-1 flex flex-col gap-4">
-                    <ul className="flex flex-col gap-3 flex-1">
-                      <li className="flex items-start gap-2 text-xs">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>پردازش کاملاً نامحدود اسناد</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-xs">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>استقرار روی سرورهای ابری اختصاصی</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-xs">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>پشتیبانی ویژه ۲۴ ساعته (SLA)</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-xs">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>آموزش اختصاصی مدل با داده‌های شما</span>
-                      </li>
-                    </ul>
-                    <button 
-                      onClick={() => {
-                        setNotification({ text: "درخواست تماس ثبت شد.", type: "info" });
-                        setIsPaymentPanelOpen(false);
-                      }}
-                      className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all border ${
-                        isDarkMode ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-300 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      تماس با واحد فروش
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* API Token note */}
-              <div className={`mt-8 p-4 rounded-xl border flex gap-4 items-start ${
-                isDarkMode ? "bg-blue-900/10 border-blue-900/50" : "bg-blue-50/50 border-blue-100"
-              }`}>
-                <div className={`p-2 rounded-full shrink-0 ${isDarkMode ? "bg-blue-900/40 text-blue-400" : "bg-white text-blue-500 shadow-sm"}`}>
-                  <Wallet className="h-5 w-5" />
-                </div>
-                <div>
-                  <h5 className={`text-xs font-bold mb-1 ${isDarkMode ? "text-blue-300" : "text-blue-800"}`}>روش جایگزین: استفاده از کلید API شخصی</h5>
-                  <p className={`text-[11px] leading-relaxed ${isDarkMode ? "text-blue-200/70" : "text-blue-900/70"}`}>
-                    اگر توسعه‌دهنده هستید می‌توانید بدون خرید اشتراک، با وارد کردن کلید API شخصی خود در پنل تنطیمات (آیکون کاربر در هدر سایت)، از سیستم به صورت رایگان استفاده کنید. در این حالت هزینه‌های پردازش مستقیماً توسط سرویس‌دهنده هوش مصنوعی (OpenAI/Anthropic/...) از حساب شما کسر می‌شود.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Admin Panel Modal */}
-      {isAdminPanelOpen && (
+      {isAdminPanelOpen && currentUser?.role === "admin" && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
           <div 
             className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
@@ -1860,12 +1764,12 @@ export default function App() {
                         URL.revokeObjectURL(url);
                         setNotification({ text: "فایل پشتیبان با موفقیت دانلود شد.", type: "success" });
                       }}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition border flex items-center justify-center gap-2 ${
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
                         isDarkMode ? "bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"
                       }`}
                     >
-                      <Download className="h-4 w-4" />
-                      استخراج فایل (Export)
+                      <Download className="h-3 w-3" />
+                      تهیه نسخه JSON
                     </button>
                     <button
                       onClick={() => {
@@ -1891,14 +1795,102 @@ export default function App() {
                         };
                         input.click();
                       }}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition border flex items-center justify-center gap-2 ${
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
                         isDarkMode ? "bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"
                       }`}
                     >
-                      <Upload className="h-4 w-4" />
+                      <Upload className="h-3 w-3" />
                       بارگذاری (Import)
                     </button>
                   </div>
+                  <button
+                      onClick={() => {
+                        const escapeCsv = (str: any) => {
+                          if (str == null) return "";
+                          const s = String(str);
+                          if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+                            return '"' + s.replace(/"/g, '""') + '"';
+                          }
+                          return s;
+                        };
+                        const csvHeader = "\uFEFF" + "ردیف,تاریخ,شماره_سند,نام_طرف_حساب,شرح,مبلغ_بدهکار,مبلغ_بستانکار,نوع_ارز,توضیحات,ضریب_اطمینان\n";
+                        const csvRows = transactions.map((t, idx) => 
+                          `${idx + 1},${escapeCsv(t.تاریخ)},${escapeCsv(t.شماره_سند)},${escapeCsv(t.نام_طرف_حساب)},${escapeCsv(t.شرح)},${t.مبلغ_بدهکار || 0},${t.مبلغ_بستانکار || 0},${escapeCsv(t.نوع_ارز)},${escapeCsv(t.توضیحات)},${t.ضریب_اطمینان || 100}`
+                        ).join("\n");
+                        const blob = new Blob([csvHeader + csvRows], { type: "text/csv;charset=utf-8;" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `CSV-Export-${new Date().toISOString().split('T')[0]}.csv`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        setNotification({ text: "فایل CSV با موفقیت اکسپورت شد.", type: "success" });
+                      }}
+                      className={`w-full py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 mt-1 ${
+                        isDarkMode ? "bg-emerald-900/30 border-emerald-800/50 text-emerald-300 hover:bg-emerald-900/50" : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                      }`}
+                    >
+                      <Download className="h-3 w-3" />
+                      خروجی مستقیم اکسل (CSV) از تراکنش‌های فعلی
+                    </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>تزریق داده نمونه (Mock Data Seed)</h4>
+                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                  <p className={`text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                    جهت بررسی عملکرد جداول، ماشین حساب تراز و استایل‌ها، می‌توانید تراکنش‌های فرضی حسابداری به برنامه تزریق کنید.
+                  </p>
+                  <button
+                    onClick={() => {
+                        const newMock = [
+                            {   
+                                id: "mock-" + Date.now() + 1,
+                                تاریخ: "۱۴۰۳/۰۲/۱۵",
+                                شماره_سند: "۱۰۵۵۰",
+                                نام_طرف_حساب: "شرکت تجهیزات شبکه مبین",
+                                شرح: "خرید سرورهای اچ‌پی جهت ارتقا زیرساخت مرکز داده",
+                                مبلغ_بدهکار: 580000000,
+                                مبلغ_بستانکار: 0,
+                                نوع_ارز: "ریال",
+                                توضیحات: "تسویه قطعی طی چک صیادی دو ماهه",
+                                ضریب_اطمینان: 92
+                            },
+                            {   
+                                id: "mock-" + Date.now() + 2,
+                                تاریخ: "۱۴۰۳/۰۲/۱۸",
+                                شماره_سند: "۱۰۵۵۱",
+                                نام_طرف_حساب: "حساب‌های دریافتنی / مشتریان خرد",
+                                شرح: "وصول مطالبات از صورتحساب فروش قطعات ماه قبل",
+                                مبلغ_بدهکار: 0,
+                                مبلغ_بستانکار: 125000000,
+                                نوع_ارز: "ریال",
+                                توضیحات: "واریز نقدی به حساب جاری بانک سامان",
+                                ضریب_اطمینان: 98
+                            },
+                            {   
+                                id: "mock-" + Date.now() + 3,
+                                تاریخ: "۱۴۰۳/۰۲/۲۰",
+                                شماره_سند: "۱۰۵۵۲",
+                                نام_طرف_حساب: "سازمان امور مالیاتی",
+                                شرح: "پرداخت علی‌الحساب مالیات بر ارزش افزوده دوره زمستان",
+                                مبلغ_بدهکار: 325000000,
+                                مبلغ_بستانکار: 0,
+                                نوع_ارز: "ریال",
+                                توضیحات: "دارای فیش واریزی شبا",
+                                ضریب_اطمینان: 100
+                            }
+                        ];
+                        setTransactions(prev => [...prev, ...newMock]);
+                        setNotification({ text: "داده‌های مالی نمونه با موفقیت افزوده شدند.", type: "success" });
+                    }}
+                    className={`w-full py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 ${
+                        isDarkMode ? "bg-blue-900/30 border border-blue-800 text-blue-300 hover:bg-blue-900/50" : "bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100"
+                    }`}
+                  >
+                    + تزریق تراکنش‌های آماده حسابداری
+                  </button>
                 </div>
               </div>
 
@@ -1950,10 +1942,13 @@ export default function App() {
               </div>
 
               <div className="space-y-3">
-                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>مدیریت سهمیه‌ها</h4>
+                <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>
+                  <Settings className="h-4 w-4" />
+                  مدیریت سهمیه‌ها و محدودیت‌ها
+                </h4>
                 <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
                   <p className={`text-xs mb-3 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-                    ریست سریع سهمیه محاسبه شده برای همه مدل‌ها.
+                    در صورت تجاوز از محدودیت مصرف روزانه API، می‌توانید سهمیه محاسبه شده سیستم را به صورت دستی بازنشانی کنید تا امکان ارسال ریکوئست مجدد فراهم شود.
                   </p>
                   <button
                     onClick={() => {
@@ -1970,21 +1965,101 @@ export default function App() {
                       isDarkMode ? "border-slate-600 text-slate-300 hover:bg-slate-700" : "border-slate-300 text-slate-700 hover:bg-slate-200"
                     }`}
                   >
-                    ریست توکن‌های مصرفی
+                    ریست توکن‌های مصرفی (بازنشانی Quota)
                   </button>
                 </div>
               </div>
               
               <div className="space-y-3">
-                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>آمار سیستم</h4>
+                <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>
+                  <Shield className="h-4 w-4" />
+                  مدیریت و کنترل کاربران سیستم
+                </h4>
+                <div className={`rounded-xl border overflow-hidden ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                  <table className="w-full text-right text-[11px]">
+                     <thead className={`${isDarkMode ? "bg-slate-800/80" : "bg-slate-100/80"}`}>
+                        <tr>
+                           <th className="p-3">کاربر</th>
+                           <th className="p-3 text-center">نقش</th>
+                           <th className="p-3 text-center">وضعیت</th>
+                           <th className="p-3 text-left">توکن مصرفی</th>
+                           <th className="p-3 text-center">دسترسی</th>
+                        </tr>
+                     </thead>
+                     <tbody className={`divide-y ${isDarkMode ? "divide-slate-700/50" : "divide-slate-200"}`}>
+                        {users.map(u => (
+                           <tr key={u.id} className={`${isDarkMode ? "hover:bg-slate-800/50" : "hover:bg-slate-100/50"}`}>
+                              <td className="p-3 font-semibold">{u.name}</td>
+                              <td className="p-3 text-center">
+                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                    u.role === "admin" 
+                                    ? "bg-purple-100 text-purple-700" 
+                                    : "bg-blue-100 text-blue-700"
+                                 }`}>{u.role === "admin" ? "مدیر" : "کاربر"}</span>
+                              </td>
+                              <td className="p-3 text-center">
+                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                    u.status === "active" 
+                                    ? "bg-emerald-100 text-emerald-700" 
+                                    : "bg-rose-100 text-rose-700"
+                                 }`}>{u.status === "active" ? "فعال" : "مسدود"}</span>
+                              </td>
+                              <td className="p-3 text-left font-mono text-[10px]">{u.apiUsage.toLocaleString("fa-IR")}</td>
+                              <td className="p-3 text-center">
+                                 <button
+                                     onClick={() => {
+                                        setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, status: usr.status === "active" ? "suspended" : "active"} : usr));
+                                        setNotification({text: `وضعیت کاربر ${u.name} تغییر یافت.`, type: 'success'});
+                                     }}
+                                     className={`px-2 py-1 rounded border text-[9px] font-bold transition-colors ${
+                                        u.status === "active"
+                                        ? "border-rose-200 text-rose-600 hover:bg-rose-50"
+                                        : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                                     }`}
+                                 >
+                                     {u.status === "active" ? "مسدود کن" : "فعال کن"}
+                                 </button>
+                              </td>
+                           </tr>
+                        ))}
+                     </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                  <Shield className="h-4 w-4" />
+                  آمار لحظه‌ای سیستم
+                </h4>
                 <div className={`p-4 rounded-xl border grid grid-cols-2 gap-4 ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
-                    <div className="text-center">
-                        <div className={`text-2xl font-black mb-1 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>{previousScans.length}</div>
-                        <div className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کل اسناد پردازش شده</div>
+                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
+                        <div className={`text-2xl font-black mb-1 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>{previousScans.length}</div>
+                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کل اسناد پردازش شده</div>
                     </div>
-                    <div className="text-center">
-                        <div className={`text-2xl font-black mb-1 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>{transactions.length}</div>
-                        <div className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تراکنش‌های استخراجی</div>
+                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
+                        <div className={`text-2xl font-black mb-1 ${isDarkMode ? "text-emerald-400" : "text-emerald-600"}`}>{transactions.length}</div>
+                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تراکنش‌های استخراجی</div>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
+                        {(() => {
+                           let totalStorage = 0;
+                           for (let i = 0; i < localStorage.length; i++) {
+                             const key = localStorage.key(i);
+                             if (key) totalStorage += localStorage.getItem(key)?.length || 0;
+                           }
+                           const kb = (totalStorage / 1024).toFixed(1);
+                           return <div className={`text-lg font-black mb-1 ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>{kb} KB</div>;
+                        })()}
+                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>حجم دیتابیس محلی</div>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
+                        {(() => {
+                           let totalTokens = 0;
+                           Object.values(modelQuotas).forEach((q: any) => totalTokens += q.used);
+                           return <div className={`text-lg font-black mb-1 ${isDarkMode ? "text-orange-400" : "text-orange-600"}`}>{totalTokens}</div>;
+                        })()}
+                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کل درخواست‌های API</div>
                     </div>
                 </div>
               </div>

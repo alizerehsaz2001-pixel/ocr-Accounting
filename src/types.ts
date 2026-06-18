@@ -5,12 +5,15 @@
 
 export interface TransactionItem {
   id: string; // client-side unique tracker
-  Date: string | null;
-  Description: string | null;
-  Debit: number | null;
-  Credit: number | null;
-  Remarks: string | null;
-  ConfidenceScore: number | null;
+  تاریخ: string | null;
+  شماره_سند: string | null;
+  نام_طرف_حساب: string | null;
+  شرح: string | null;
+  مبلغ_بدهکار: number | null;
+  مبلغ_بستانکار: number | null;
+  نوع_ارز: string | null;
+  توضیحات: string | null;
+  ضریب_اطمینان: number | null;
 }
 
 export interface UploadedFile {

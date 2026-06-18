@@ -48,9 +48,11 @@ export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps
       setDevices(videoDevices);
     } catch (err: any) {
       console.error("Camera access error:", err);
-      setError(
-        "امکان دسترسی به دوربین وجود ندارد. لطفا مطمئن شوید که دسترسی به دوربین را تایید کرده‌اید و دستگاه دیگری در حال استفاده از آن نیست."
-      );
+      let errorMessage = "امکان دسترسی به دوربین وجود ندارد. لطفا مطمئن شوید که دسترسی به دوربین را تایید کرده‌اید.";
+      if (err.name === "NotAllowedError" || err.message === "Permission dismissed") {
+        errorMessage = "دسترسی به دوربین رد شد. اگر در محیط مرورگر یا پیش‌نمایش هستید، لطفاً برنامه را در یک تب جدید باز کنید (Open in New Tab) و دسترسی دوربین را فعال کنید.";
+      }
+      setError(errorMessage);
     }
   };
 
