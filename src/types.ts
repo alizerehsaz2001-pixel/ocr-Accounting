@@ -29,6 +29,7 @@ export interface UploadedFile {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
     totalTokenCount?: number;
+    cachedContentTokenCount?: number;
   };
 }
 

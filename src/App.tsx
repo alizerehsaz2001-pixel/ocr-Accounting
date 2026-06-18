@@ -124,9 +124,38 @@ export default function App() {
     return localStorage.getItem("is_compression_enabled") === "true";
   });
 
+  const [tokenSettings, setTokenSettings] = useState<{
+    imageResolution: "super-eco" | "balanced" | "high";
+    ecoPromptEnabled: boolean;
+    maxRowsToExtract: "unlimited" | "5" | "10" | "20";
+    skipSecondaryFields: boolean;
+  }>(() => {
+    try {
+      const saved = localStorage.getItem("token_optimization_settings");
+      return saved ? JSON.parse(saved) : {
+        imageResolution: "balanced",
+        ecoPromptEnabled: true,
+        maxRowsToExtract: "unlimited",
+        skipSecondaryFields: false
+      };
+    } catch {
+      return {
+        imageResolution: "balanced",
+        ecoPromptEnabled: true,
+        maxRowsToExtract: "unlimited",
+        skipSecondaryFields: false
+      };
+    }
+  });
+
   useEffect(() => {
-    localStorage.setItem("is_compression_enabled", isCompressionEnabled.toString());
-  }, [isCompressionEnabled]);
+    localStorage.setItem("is_compression_enabled", (tokenSettings.imageResolution !== "high").toString());
+    setIsCompressionEnabled(tokenSettings.imageResolution !== "high");
+  }, [tokenSettings.imageResolution]);
+
+  useEffect(() => {
+    localStorage.setItem("token_optimization_settings", JSON.stringify(tokenSettings));
+  }, [tokenSettings]);
 
   // Reset verification on file change
   useEffect(() => {
@@ -277,8 +306,24 @@ export default function App() {
         img.src = event.target?.result as string;
         img.onload = () => {
           const canvas = document.createElement("canvas");
-          const MAX_WIDTH = isCompressionEnabled ? 800 : 1600;
-          const MAX_HEIGHT = isCompressionEnabled ? 800 : 1600;
+          let MAX_WIDTH = 1600;
+          let MAX_HEIGHT = 1600;
+          let quality = 0.82;
+
+          if (tokenSettings.imageResolution === "super-eco") {
+            MAX_WIDTH = 600;
+            MAX_HEIGHT = 600;
+            quality = 0.35;
+          } else if (tokenSettings.imageResolution === "balanced") {
+            MAX_WIDTH = 1000;
+            MAX_HEIGHT = 1000;
+            quality = 0.55;
+          } else if (tokenSettings.imageResolution === "high") {
+            MAX_WIDTH = 1800;
+            MAX_HEIGHT = 1800;
+            quality = 0.82;
+          }
+
           let width = img.width;
           let height = img.height;
 
@@ -309,8 +354,7 @@ export default function App() {
           // Draw image to canvas
           ctx.drawImage(img, 0, 0, width, height);
 
-          // Export as JPEG with lower quality if compression is enabled
-          const quality = isCompressionEnabled ? 0.5 : 0.82;
+          // Export as JPEG with chosen optimized quality
           const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
           const base64Data = compressedDataUrl.split(",")[1];
           resolve(base64Data);
@@ -347,6 +391,7 @@ export default function App() {
           image: base64Image,
           mimeType: fileMimeType,
           model: selectedModel,
+          tokenSettings,
         }),
       });
 
@@ -1494,19 +1539,20 @@ export default function App() {
               {activeFile?.status === "success" && (
                 <div className="flex items-center gap-2">
                   <span className="text-amber-400 font-mono">
-                    توکن مصرفی سند فعلی: {(activeFile.tokensUsed || (
-                      selectedModel === "gemini-3.1-pro-preview" ? 1800 :
-                      selectedModel === "gemini-2.5-pro" ? 1600 :
-                      selectedModel === "gemini-3.5-flash" ? 1200 :
-                      selectedModel === "gemini-3.1-flash-lite" ? 900 :
-                      1200
-                    )).toLocaleString()} توکن
+                    توکن مصرفی خالص سند: {(() => {
+                      const total = activeFile.tokensUsed || 0;
+                      const cached = activeFile.tokenDetails?.cachedContentTokenCount || 0;
+                      return Math.max(0, total - cached).toLocaleString("fa-IR");
+                    })()} توکن
+                    <span className="text-[10px] text-slate-500 mr-1">
+                      (کل تبادلی: {(activeFile.tokensUsed || 0).toLocaleString("fa-IR")})
+                    </span>
                   </span>
                   <button 
                     onClick={() => setShowTokenDetails(true)}
                     className="text-amber-200 underline hover:text-white transition-colors cursor-pointer ml-1 text-[9px]"
                   >
-                    (مشاهده جزئیات)
+                    (مشاهده جزئیات محاسبه)
                   </button>
                 </div>
               )}
@@ -1549,6 +1595,8 @@ export default function App() {
               );
               const promptTokens = activeFile.tokenDetails?.promptTokenCount || Math.round(totalTokens * 0.82);
               const candidateTokens = activeFile.tokenDetails?.candidatesTokenCount || (totalTokens - promptTokens);
+              const cachedTokens = activeFile.tokenDetails?.cachedContentTokenCount || 0;
+              const netTokens = Math.max(0, totalTokens - cachedTokens);
 
               return (
                 <div className="space-y-3 font-mono text-sm">
@@ -1556,13 +1604,30 @@ export default function App() {
                     <span className="text-slate-400">توکن‌های ورودی (تصویر و پرامپت):</span>
                     <span className="text-blue-400 font-bold">{promptTokens.toLocaleString("fa-IR")}</span>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-t border-slate-800/50">
+                  {cachedTokens > 0 && (
+                    <div className="flex justify-between items-center py-1 text-[11px] text-purple-300 pr-2">
+                      <span>↳ کسر می‌شود (توکن‌های کش شده):</span>
+                      <span className="font-bold">-{cachedTokens.toLocaleString("fa-IR")}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center py-1 border-t border-slate-850/50">
                     <span className="text-slate-400">توکن‌های خروجی (پاسخ استخراجی):</span>
                     <span className="text-emerald-400 font-bold">{candidateTokens.toLocaleString("fa-IR")}</span>
                   </div>
-                  <div className="flex justify-between items-center py-2 mt-2 border-t border-slate-700 bg-slate-800/50 px-2 rounded">
-                    <span className="text-slate-300 font-bold">مجموع کل توکن‌ها:</span>
-                    <span className="text-amber-400 font-bold text-base">{totalTokens.toLocaleString("fa-IR")}</span>
+                  
+                  <div className="flex flex-col gap-1 p-3 mt-2 rounded bg-purple-950/20 border border-purple-900/40">
+                    <div className="flex justify-between items-center">
+                      <span className="text-purple-300 font-bold text-xs">توکن‌های خالص پردازشی (مبنای هزینه):</span>
+                      <span className="text-purple-400 font-bold text-base">{netTokens.toLocaleString("fa-IR")}</span>
+                    </div>
+                    <span className="text-[9px] text-slate-500 text-right leading-normal block font-sans">
+                      * توکن‌های کش مربوط به دستورالعمل‌های طولانی سیستم بوده و از فاکتور هزینه حذف شده‌اند.
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-1 px-1 text-[11px] text-slate-500 border-t border-slate-800/40">
+                    <span>مجموع حجم تبادلی مدل:</span>
+                    <span>{totalTokens.toLocaleString("fa-IR")}</span>
                   </div>
                 </div>
               );
@@ -1664,23 +1729,116 @@ export default function App() {
               <section className="flex flex-col gap-3">
                  <h4 className="text-xs font-bold flex items-center gap-2">
                   <Settings className="h-4 w-4" />
-                  بهینه‌سازی و مصرف توکن
+                  بهینه‌سازی و کنترل مصرف توکن هوشمند
                 </h4>
-                <div className={`p-4 flex items-center justify-between rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
+                
+                {/* 1. Resolution Selection */}
+                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
                   <div className="flex flex-col gap-1">
-                    <span className="font-bold text-xs">فشرده‌سازی خودکار تصاویر</span>
+                    <span className="font-bold text-xs text-blue-500">کیفیت و رزولوشن تصاویر سند</span>
                     <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                      کاهش کیفیت و ابعاد عکس برای مصرف بسیار کمتر توکن
+                      هرچه ابعاد کوچک‌تر باشد، هزینه توکن‌های ورودی (Input Tokens) تا ۷۰٪ کمتر خواهد شد.
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-1">
+                    {(["super-eco", "balanced", "high"] as const).map((res) => {
+                      const labels = {
+                        "super-eco": "فوق اقتصادی (۶۰۰px)",
+                        "balanced": "متوازن (۱۰۰۰px)",
+                        "high": "کیفیت اصلی (۱۸۰۰px)"
+                      };
+                      const isSel = tokenSettings.imageResolution === res;
+                      return (
+                        <button
+                          key={res}
+                          onClick={() => setTokenSettings(prev => ({ ...prev, imageResolution: res }))}
+                          className={`py-2 px-1 rounded-lg text-[10px] font-bold border transition-all ${
+                            isSel 
+                              ? "bg-blue-600 border-blue-500 text-white shadow-sm" 
+                              : isDarkMode
+                                ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
+                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {labels[res]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Compact descriptive words toggle */}
+                <div className={`p-4 flex items-center justify-between rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
+                  <div className="flex flex-col gap-1 flex-1 pl-2 text-right rtl">
+                    <span className="font-bold text-xs text-right block">خلاصه‌سازی متن خروجی (ECO Prompt)</span>
+                    <span className={`text-[10px] block text-right leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      مجبور کردن مدل به فشرده‌سازی متن شرح و توضیحات تا حداکثر ۵ کلمه برای کاهش توکن‌های تولیدی.
                     </span>
                   </div>
                   <button 
-                    onClick={() => setIsCompressionEnabled(!isCompressionEnabled)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      isCompressionEnabled ? "bg-blue-600" : "bg-slate-300"
+                    onClick={() => setTokenSettings(prev => ({ ...prev, ecoPromptEnabled: !prev.ecoPromptEnabled }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 mr-2 ${
+                      tokenSettings.ecoPromptEnabled ? "bg-blue-600" : "bg-slate-300"
                     }`}
                   >
                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      isCompressionEnabled ? "-translate-x-6" : "-translate-x-1"
+                      tokenSettings.ecoPromptEnabled ? "-translate-x-6" : "-translate-x-1"
+                    }`} />
+                  </button>
+                </div>
+
+                {/* 3. Row limitation selection */}
+                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-xs text-indigo-500">محدودیت تعداد ردیف‌های استخراج‌شده</span>
+                    <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      اگر لیست فاکتور شما بسیار طولانی است، می‌توانید تعداد ردیف‌های خروجی را برای صرفه‌جویی شدید توکن محدود کنید.
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 mt-1">
+                    {(["unlimited", "5", "10", "20"] as const).map((limit) => {
+                      const labels = {
+                        "unlimited": "نامحدود",
+                        "5": "۵ ردیف",
+                        "10": "۱۰ ردیف",
+                        "20": "۲۰ ردیف"
+                      };
+                      const isSel = tokenSettings.maxRowsToExtract === limit;
+                      return (
+                        <button
+                          key={limit}
+                          onClick={() => setTokenSettings(prev => ({ ...prev, maxRowsToExtract: limit }))}
+                          className={`py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                            isSel 
+                              ? "bg-indigo-600 border-indigo-500 text-white shadow-sm" 
+                              : isDarkMode
+                                ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
+                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {labels[limit]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4. Omit optional empty fields */}
+                <div className={`p-4 flex items-center justify-between rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
+                  <div className="flex flex-col gap-1 flex-1 pl-2 text-right">
+                    <span className="font-bold text-xs text-right block">حذف توضیحات متنی خالی</span>
+                    <span className={`text-[10px] block text-right leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      عدم ثبت اطلاعات تفصیلی تکراری یا سنگین داکیومنت در ستون توضیحات جهت فشرده نگه داشتن پاسخ مدل.
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => setTokenSettings(prev => ({ ...prev, skipSecondaryFields: !prev.skipSecondaryFields }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 mr-2 ${
+                      tokenSettings.skipSecondaryFields ? "bg-blue-600" : "bg-slate-300"
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      tokenSettings.skipSecondaryFields ? "-translate-x-6" : "-translate-x-1"
                     }`} />
                   </button>
                 </div>
