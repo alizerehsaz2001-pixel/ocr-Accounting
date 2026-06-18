@@ -23,8 +23,11 @@ import {
   User,
   Settings,
   Key,
+  Shield,
   CreditCard,
   Wallet,
+  Download,
+  Upload,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -126,6 +129,7 @@ export default function App() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
   const [isPaymentPanelOpen, setIsPaymentPanelOpen] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [notification, setNotification] = useState<{
     text: string;
     type: "success" | "error" | "info";
@@ -802,6 +806,15 @@ export default function App() {
 
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setIsAdminPanelOpen(true)}
+              className={`p-2 rounded-lg transition-colors border ${
+                isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
+              title="پنل مدیریت سامانه"
+            >
+              <Shield className="h-4 w-4" />
+            </button>
+            <button
               onClick={() => setIsUserPanelOpen(true)}
               className={`p-2 rounded-lg transition-colors border ${
                 isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -892,9 +905,9 @@ export default function App() {
                       <div className="flex items-start gap-1.5">
                         <span className="text-blue-500 select-none">•</span>
                         <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>قابلیت خوانش دست‌نویس و اسناد مخدوش:</strong>
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>قابلیت خوانش فوق‌هوشمندِ خطوط دست‌نویس و اسناد مخدوش:</strong>
                           <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            برای دست‌نویس‌های اداری، دفاتر معین با خط شکسته و بروشورهای مچاله، پیشنهاد می شود حتماً از مدل‌های پیشرفته پیش‌نمایش (با فعال بودن دکمه مدل) استفاده کنید تا حداقل نرخ خطا محقق گردد.
+                            مدل‌ها اکنون با دقت فراوان، خطوط تحریری، اداری مخدوش و شکسته نستعلیق ایرانی را می‌خوانند. موتور مجهز به تحلیل بافتاری برای حدس کلمات ادغام‌شده و بازیابی صفرهای پیوسته سریع از طریق مهندسی معکوسِ جمع کل می‌باشد. پیشنهاد می‌شود برای دست‌نویس‌های کور از نسخه 2.5 Pro استفاده نمایید.
                           </p>
                         </div>
                       </div>
@@ -1788,6 +1801,194 @@ export default function App() {
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Panel Modal */}
+      {isAdminPanelOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+          <div 
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+            onClick={() => setIsAdminPanelOpen(false)}
+          ></div>
+          
+          <div className={`relative w-full max-w-lg rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up transform transition-all ${
+            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border border-slate-200 text-slate-800"
+          }`}>
+            <div className={`flex items-center justify-between p-4 border-b ${
+              isDarkMode ? "bg-slate-800/50 border-slate-700/50" : "bg-slate-50 border-slate-100"
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${isDarkMode ? "bg-purple-900/30 text-purple-400" : "bg-purple-100 text-purple-600"}`}>
+                  <Shield className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">پنل مدیریت ادمین</h3>
+                  <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کنترل سیستم و مدیریت کلی داده‌ها</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsAdminPanelOpen(false)}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto max-h-[60vh] space-y-6">
+              
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>پشتیبان‌گیری از اطلاعات (JSON Backup)</h4>
+                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                  <p className={`text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                    برای امنیت اطلاعات یا انتقال به سیستم دیگر، می‌توانید از تمام تاریخچه اسناد و تراکنش‌ها فایل پشتیبان تهیه کنید و یا فایل قبلی را بارگذاری نمایید.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const data = { transactions, previousScans, modelQuotas };
+                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `CPA-Backup-${new Date().toISOString().split('T')[0]}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        setNotification({ text: "فایل پشتیبان با موفقیت دانلود شد.", type: "success" });
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition border flex items-center justify-center gap-2 ${
+                        isDarkMode ? "bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Download className="h-4 w-4" />
+                      استخراج فایل (Export)
+                    </button>
+                    <button
+                      onClick={() => {
+                        const input = document.createElement("input");
+                        input.type = "file";
+                        input.accept = "application/json";
+                        input.onchange = (e: any) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            try {
+                              const data = JSON.parse(event.target?.result as string);
+                              if (data.transactions) setTransactions(data.transactions);
+                              if (data.previousScans) setPreviousScans(data.previousScans);
+                              if (data.modelQuotas) setModelQuotas(data.modelQuotas);
+                              setNotification({ text: "اطلاعات با موفقیت بازیابی شد.", type: "success" });
+                            } catch (err) {
+                              setNotification({ text: "فرمت فایل پشتیبان نامعتبر است.", type: "error" });
+                            }
+                          };
+                          reader.readAsText(file);
+                        };
+                        input.click();
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition border flex items-center justify-center gap-2 ${
+                        isDarkMode ? "bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Upload className="h-4 w-4" />
+                      بارگذاری (Import)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>پاکسازی حافظه سیستم</h4>
+                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/40 border-red-900/30" : "bg-red-50/50 border-red-100"}`}>
+                  <p className={`text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                    شما می‌توانید تمام اطلاعات محلی، یا بخش‌هایی از آن را بازنشانی کنید. موارد حذف شده غیرقابل بازگشت هستند.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setTransactions([]);
+                        setActiveFile(null);
+                        setRawJsonText("");
+                        setNotification({ text: "جدول تراکنش‌های سیستم پاکسازی شد.", type: "success" });
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
+                        isDarkMode ? "border-slate-600 text-slate-300 hover:bg-slate-700" : "border-slate-300 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      مخزن تراکنش
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPreviousScans([]);
+                        setNotification({ text: "تاریخچه اسناد با موفقیت حذف گردید.", type: "success" });
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
+                        isDarkMode ? "border-slate-600 text-slate-300 hover:bg-slate-700" : "border-slate-300 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      تاریخچه اسناد
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => {
+                        window.localStorage.clear();
+                        window.location.reload();
+                    }}
+                    className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 mt-1"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    پاکسازی کامل دیتابیس (رادیواکتیو)
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>مدیریت سهمیه‌ها</h4>
+                <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                  <p className={`text-xs mb-3 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                    ریست سریع سهمیه محاسبه شده برای همه مدل‌ها.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setModelQuotas({
+                        "gemini-3.5-flash": { limit: 1500, used: 0, lastReset: Date.now() },
+                        "gemini-3.1-pro-preview": { limit: 100, used: 0, lastReset: Date.now() },
+                        "gemini-3.1-flash-lite": { limit: 3000, used: 0, lastReset: Date.now() },
+                        "gemini-2.5-flash-image": { limit: 5000, used: 0, lastReset: Date.now() },
+                        "gemini-2.5-pro": { limit: 150, used: 0, lastReset: Date.now() },
+                      });
+                      setNotification({ text: "سهمیه مدل‌ها با موفقیت ریست شد.", type: "success" });
+                    }}
+                    className={`w-full py-2 rounded-lg text-xs font-bold transition border ${
+                      isDarkMode ? "border-slate-600 text-slate-300 hover:bg-slate-700" : "border-slate-300 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    ریست توکن‌های مصرفی
+                  </button>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>آمار سیستم</h4>
+                <div className={`p-4 rounded-xl border grid grid-cols-2 gap-4 ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                    <div className="text-center">
+                        <div className={`text-2xl font-black mb-1 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>{previousScans.length}</div>
+                        <div className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کل اسناد پردازش شده</div>
+                    </div>
+                    <div className="text-center">
+                        <div className={`text-2xl font-black mb-1 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>{transactions.length}</div>
+                        <div className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تراکنش‌های استخراجی</div>
+                    </div>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
