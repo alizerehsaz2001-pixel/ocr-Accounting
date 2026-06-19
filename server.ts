@@ -48,16 +48,13 @@ app.post("/api/extract", async (req, res) => {
     // Dynamically select target backend model based on user's selection panel
     const allowedModels = [
       "gemini-3.5-flash",
-      "gemini-3.1-pro-preview",
-      "gemini-3.1-flash-lite",
-      "gemini-2.5-flash-image"
+      "gemini-3.1-pro-preview"
     ];
     let selectedModel = allowedModels.includes(model) ? model : "gemini-3.5-flash";
 
     // Fallback mapping for unsupported or quota-exhausted preview models
     const fallbackMap: Record<string, string> = {
-      "gemini-3.1-pro-preview": "gemini-2.5-pro",
-      "gemini-2.5-flash-image": "gemini-2.5-flash",
+      "gemini-3.1-pro-preview": "gemini-1.5-pro"
     };
 
     if (fallbackMap[selectedModel]) {
@@ -226,7 +223,7 @@ app.post("/api/extract", async (req, res) => {
         errorMessage.includes("unavailable")
       ) {
          console.log("Retrying with fallback models...");
-         const fallbackModels = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-1.5-flash"];
+         const fallbackModels = ["gemini-1.5-flash", "gemini-1.5-pro"];
          let fallbackSuccess = false;
          let lastError = apiError;
          

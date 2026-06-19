@@ -69,9 +69,6 @@ export default function App() {
     const defaultQuotas = {
       "gemini-3.5-flash": { limit: 1500, used: 0, lastReset: Date.now() },
       "gemini-3.1-pro-preview": { limit: 100, used: 0, lastReset: Date.now() },
-      "gemini-3.1-flash-lite": { limit: 3000, used: 0, lastReset: Date.now() },
-      "gemini-2.5-flash-image": { limit: 5000, used: 0, lastReset: Date.now() },
-      "gemini-2.5-pro": { limit: 150, used: 0, lastReset: Date.now() },
     };
 
     const saved = localStorage.getItem("ai_model_quotas");
@@ -756,33 +753,6 @@ export default function App() {
                 desc: "استدلال عمیق و مناسب دست‌خط نامنظم.",
                 badgeClass: "bg-purple-500/20 text-purple-300",
               },
-              {
-                id: "gemini-3.1-flash-lite",
-                name: "Gemini 3.1 Flash Lite",
-                badge: "سرعت آنی",
-                tokenLimit: "سند تا ۱۰MB",
-                costPerRequest: "حدود ۹۰۰ توکن",
-                desc: "مقرون‌به‌صرفه‌ترین مفسر برای فاکتورهای تایپی.",
-                badgeClass: "bg-emerald-500/20 text-emerald-300",
-              },
-              {
-                id: "gemini-2.5-flash-image",
-                name: "Gemini 2.5 Flash",
-                badge: "کلاسیک",
-                tokenLimit: "سند تا ۵MB",
-                costPerRequest: "حدود ۱,۲۰۰ توکن",
-                desc: "تصویرخوان کلاسیک با عملکرد پایدار.",
-                badgeClass: "bg-amber-500/20 text-amber-300",
-              },
-              {
-                id: "gemini-2.5-pro",
-                name: "Gemini 2.5 Pro",
-                badge: "پایدار و دقیق",
-                tokenLimit: "سند تا ۳۰MB",
-                costPerRequest: "حدود ۱,۶۰۰ توکن",
-                desc: "تحلیل محاسباتی و منطقی حسابداری فوق العاده.",
-                badgeClass: "bg-rose-500/20 text-rose-300",
-              },
             ].map((m) => {
               const quota = modelQuotas[m.id] || { limit: 100, used: 0, lastReset: Date.now() };
               const percentUsed = Math.min(100, Math.round((quota.used / quota.limit) * 100));
@@ -866,11 +836,8 @@ export default function App() {
             <button
               onClick={() => {
                 setModelQuotas({
-                  "gemini-3.5-flash": { limit: 1500, used: 0 },
-                  "gemini-3.1-pro-preview": { limit: 100, used: 0 },
-                  "gemini-3.1-flash-lite": { limit: 3000, used: 0 },
-                  "gemini-2.5-flash-image": { limit: 5000, used: 0 },
-                  "gemini-2.5-pro": { limit: 150, used: 0 },
+                  "gemini-3.5-flash": { limit: 1500, used: 0, lastReset: Date.now() },
+                  "gemini-3.1-pro-preview": { limit: 100, used: 0, lastReset: Date.now() },
                 });
                 showNotification("سهمیه استفاده روزانه مدل‌ها ریست گردید.", "success");
               }}
@@ -1027,7 +994,7 @@ export default function App() {
                         <div className="flex-1">
                           <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>قابلیت خوانش فوق‌هوشمندِ خطوط دست‌نویس و اسناد مخدوش:</strong>
                           <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            مدل‌ها اکنون با دقت فراوان، خطوط تحریری، اداری مخدوش و شکسته نستعلیق ایرانی را می‌خوانند. موتور مجهز به تحلیل بافتاری برای حدس کلمات ادغام‌شده و بازیابی صفرهای پیوسته سریع از طریق مهندسی معکوسِ جمع کل می‌باشد. پیشنهاد می‌شود برای دست‌نویس‌های کور از نسخه 2.5 Pro استفاده نمایید.
+                            مدل‌ها اکنون با دقت فراوان، خطوط تحریری، اداری مخدوش و شکسته نستعلیق ایرانی را می‌خوانند. موتور مجهز به تحلیل بافتاری برای حدس کلمات ادغام‌شده و بازیابی صفرهای پیوسته سریع از طریق مهندسی معکوسِ جمع کل می‌باشد. پیشنهاد می‌شود برای دست‌نویس‌های کور یا اسناد بسیار درهم‌ریخته از نسخه قدرتمند Gemini 3.1 Pro استفاده نمایید.
                           </p>
                         </div>
                       </div>
@@ -1084,19 +1051,23 @@ export default function App() {
               </div>
 
               <div className={`mt-3 pt-3 border-t w-full text-right ${isDarkMode ? "border-blue-900/40" : "border-blue-200/60"}`}>
-                <h3 className={`font-bold text-xs mb-3 ${isDarkMode ? "text-blue-100" : "text-blue-900"}`}>راهنمای کاربرد موتورهای هوش مصنوعی (مدل‌های گوگل جمینی):</h3>
+                <h3 className={`font-bold text-xs mb-3 ${isDarkMode ? "text-blue-100" : "text-blue-900"}`}>راهنمای موتور هوش مصنوعی و بهینه‌سازی مصرف توکن:</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px]">
                   <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
-                    <strong className="text-blue-500 block mb-1">Gemini 3.5 Flash / Gemini 3.1 Flash Lite</strong>
-                    مدل‌های پرسرعت و بهینه‌شده گوگل برای پردازش‌های فوری. مناسب برای استخراج سریع روزمره از فاکتورها و سرافرازی در تحلیل اسناد مالی استاندارد با سرعت بالا.
+                    <strong className="text-blue-500 block mb-1">Gemini 3.5 Flash (سرعت آنی و بهینه)</strong>
+                    مدل پیش‌فرض و بهینه‌شده برای پردازش‌های فوری حسابداری. سهمیه روزانه بیش از ۱۵۰۰ درخواست، فوق‌العاده مقرون‌به‌صرفه و ایده‌آل برای فاکتورهای تایپی استاندارد.
                   </div>
                   <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
-                    <strong className="text-rose-400 block mb-1">Gemini 2.5 Pro / Gemini 3.1 Pro</strong>
-                    قوی‌ترین مدل‌های پردازش منطقی و محاسباتی گوگل. مجهز به زنجیره استدلال فوق‌العاده برای حل جداول حسابداری پیچیده، خوانش دست‌نویس‌های بسیار مخدوش و به حداقل رساندن خطای توهمِ عددی.
+                    <strong className="text-purple-400 block mb-1">Gemini 3.1 Pro (سطح ممیز ارشد مالی)</strong>
+                    مجهز به عمیق‌ترین زنجیره استدلالی گوگل برای فاکتورهای با دست‌خط ناخوانا، عکس‌های مخدوش، و تسعیر حساب‌های ارزی پیچیده.
                   </div>
                   <div className={`p-2.5 rounded-lg md:col-span-2 ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
-                    <strong className="text-amber-400 block mb-1">Gemini 2.5 Flash Image</strong>
-                    تصویرخوان کلاسیک با عملکرد پایدار و مستحکم جهت پردازش پیکسلی تصاویری که زاویه نامناسب یا نور ضعیف دارند.
+                    <strong className="text-emerald-400 block mb-1">راهنمای بهینه‌سازی مصرف توکن (قابل تنظیم در پنل تنظیمات):</strong>
+                    <ul className="list-disc pl-4 pr-1 mt-1 space-y-1 leading-normal text-slate-400">
+                      <li><strong className="text-slate-300">رزولوشن تصاویر:</strong> با فعال‌سازی رزولوشن فوق اقتصادی یا متوازن، ابعاد اسناد تا ۷۰٪ فشرده شده که مانع هدر رفت توکن‌های ورودی می‌شود.</li>
+                      <li><strong className="text-slate-300">خلاصه سازی شرح (ECO Prompt):</strong> توضیحات طولانی تراکنش‌ها را فشرده می‌کند تا خروجی مدل کوتاه شده و سرعت پردازش افزایش یابد.</li>
+                      <li><strong className="text-slate-300">محدودیت سطرها:</strong> تعیین تعداد سطور استخراجی مانع از اسکن بی‌کیفیت یا تکراری اقلام طولانی در فاکتورهای بسیار شلوغ می‌گردد.</li>
+                    </ul>
                   </div>
                 </div>
               </div>
