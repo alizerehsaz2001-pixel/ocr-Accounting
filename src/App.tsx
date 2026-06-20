@@ -40,6 +40,11 @@ import {
   QrCode,
   Link,
   Globe,
+  AlertTriangle,
+  TrendingUp,
+  Calendar,
+  Coins,
+  ShieldCheck,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -2096,32 +2101,88 @@ export default function App() {
                           textColor = "text-amber-600";
                         }
 
+                        const lowConfidenceCount = transactions.filter(tr => (tr.ضریب_اطمینان ?? 100) < 70).length;
+                        const mediumConfidenceCount = transactions.filter(tr => (tr.ضریب_اطمینان ?? 100) >= 70 && (tr.ضریب_اطمینان ?? 100) < 90).length;
+                        const excellentConfidenceCount = transactions.filter(tr => (tr.ضریب_اطمینان ?? 100) >= 90).length;
+                        const sumDebit = transactions.reduce((acc, current) => acc + (current.مبلغ_بدهکار ?? 0), 0);
+                        const sumCredit = transactions.reduce((acc, current) => acc + (current.مبلغ_بستانکار ?? 0), 0);
+                        const isBalanced = count > 0 && sumDebit === sumCredit;
+
                         return (
                           <div className="flex gap-4 items-center flex-wrap">
                             {countEdited > 0 && (
-                              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-center animate-pulse flex items-center gap-2">
-                                <FileEdit className="h-4 w-4 text-amber-600" />
+                              <div className={`border rounded-xl px-4 py-2 text-center animate-pulse flex items-center gap-2 shadow-sm ${isDarkMode ? "bg-amber-900/20 border-amber-800" : "bg-amber-50 border-amber-200"}`}>
+                                <FileEdit className={`h-4 w-4 ${isDarkMode ? "text-amber-400" : "text-amber-600"}`} />
                                 <div>
                                   <span className="text-[9px] block text-amber-500 font-bold mb-0.5">اصلاح دستی شده</span>
-                                  <span className="text-[11px] font-bold text-amber-700 font-mono" dir="ltr">{countEdited.toLocaleString("fa-IR")} ردیف تغییر یافته</span>
+                                  <span className={`text-[11px] font-bold font-mono ${isDarkMode ? "text-amber-300" : "text-amber-700"}`} dir="ltr">{countEdited.toLocaleString("fa-IR")} ردیف تغییر یافته</span>
                                 </div>
                               </div>
                             )}
 
-                            <div className="bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-inner text-center">
-                              <span className="text-[9px] block text-slate-400 font-bold mb-0.5">تعداد ردیف‌ها</span>
-                              <span className="text-sm font-extrabold text-slate-700 font-mono">{count} ردیف</span>
+                            {lowConfidenceCount > 0 && (
+                              <div className={`border rounded-xl px-4 py-2 text-center flex items-center gap-2 shadow-sm ${isDarkMode ? "bg-rose-900/20 border-rose-800" : "bg-rose-50 border-rose-200"}`}>
+                                <AlertTriangle className={`h-4 w-4 animate-pulse ${isDarkMode ? "text-rose-400" : "text-rose-600"}`} />
+                                <div>
+                                  <span className="text-[9px] block text-rose-500 font-bold mb-0.5">نیاز به بازبینی</span>
+                                  <span className={`text-[11px] font-bold font-mono ${isDarkMode ? "text-rose-300" : "text-rose-700"}`} dir="ltr">{lowConfidenceCount.toLocaleString("fa-IR")} ردیف مشکوک</span>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className={`border rounded-xl px-4 py-2 shadow-inner text-center flex flex-col justify-center transition-colors ${
+                              isBalanced 
+                                ? isDarkMode ? "bg-emerald-900/20 border-emerald-800" : "bg-emerald-50 border-emerald-200" 
+                                : isDarkMode ? "bg-rose-900/20 border-rose-800" : "bg-rose-50 border-rose-200"
+                            }`}>
+                              <span className={`text-[9px] block font-bold mb-0.5 ${
+                                isBalanced 
+                                  ? isDarkMode ? "text-emerald-400" : "text-emerald-600"
+                                  : isDarkMode ? "text-rose-400" : "text-rose-600"
+                              }`}>وضعیت تراز حسابداری</span>
+                              <span className={`text-[11px] font-extrabold font-mono flex items-center justify-center gap-1.5 ${
+                                isBalanced 
+                                  ? isDarkMode ? "text-emerald-300" : "text-emerald-700" 
+                                  : isDarkMode ? "text-rose-300" : "text-rose-700"
+                              }`}>
+                                {isBalanced ? (
+                                  <><CheckCircle2 className="h-3.5 w-3.5" /> <span>تراز است</span></>
+                                ) : (
+                                  <><AlertTriangle className="h-3.5 w-3.5" /> <span>مغایرت تراز</span></>
+                                )}
+                              </span>
                             </div>
 
-                            <div className="bg-white border border-slate-150 rounded-xl px-4 py-2 shadow-inner min-w-[140px]">
+                            <div className={`border rounded-xl px-4 py-2 shadow-inner text-center transition-colors ${isDarkMode ? "bg-[#0b0f19] border-slate-800" : "bg-white border-slate-200"}`}>
+                              <span className="text-[9px] block text-slate-400 font-bold mb-0.5">تعداد ردیف‌ها</span>
+                              <span className={`text-sm font-extrabold font-mono ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>{count} ردیف</span>
+                            </div>
+
+                            <div className={`border rounded-xl px-4 py-2 shadow-inner min-w-[140px] flex flex-col justify-center transition-colors ${isDarkMode ? "bg-[#0b0f19] border-slate-800" : "bg-white border-slate-150"}`}>
                               <div className="flex justify-between items-center gap-2 mb-1">
                                 <span className="text-[9px] text-slate-400 font-bold">میانگین اطمینان</span>
                                 <span className={`text-[10px] font-bold ${textColor}`}>{avgScore}%</span>
                               </div>
-                              <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                              <div className={`w-full rounded-full h-1.5 overflow-hidden ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
                                 <div className={`h-full ${progressColor}`} style={{ width: `${avgScore}%` }} />
                               </div>
                               <span className="text-[8px] font-bold text-slate-500 block text-center mt-1">{ratingLabel}</span>
+                            </div>
+
+                            <div className={`border rounded-xl p-2 w-[180px] shadow-inner transition-colors flex flex-col justify-center ${isDarkMode ? "bg-[#0b0f19] border-slate-800" : "bg-white border-slate-150"}`}>
+                              <div className="flex items-center justify-between gap-1 mb-1.5">
+                                <span className="text-[9px] text-slate-400 font-bold block text-center w-full">تفکیک ضرایب اطمینان ردیف‌ها</span>
+                              </div>
+                              <div className={`flex h-1.5 w-full rounded-full overflow-hidden mb-1.5 ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+                                <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${(excellentConfidenceCount / count) * 100}%` }} title="عالی"></div>
+                                <div className="bg-amber-500 transition-all duration-500" style={{ width: `${(mediumConfidenceCount / count) * 100}%` }} title="متوسط"></div>
+                                <div className="bg-rose-500 transition-all duration-500" style={{ width: `${(lowConfidenceCount / count) * 100}%` }} title="ضعیف"></div>
+                              </div>
+                              <div className="flex justify-between items-center text-[9px] font-bold font-mono px-1">
+                                <div className="flex items-center gap-1 text-emerald-500" title="عالی"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>{excellentConfidenceCount}</div>
+                                <div className="flex items-center gap-1 text-amber-500" title="متوسط"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>{mediumConfidenceCount}</div>
+                                <div className="flex items-center gap-1 text-rose-500" title="ضعیف"><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div>{lowConfidenceCount}</div>
+                              </div>
                             </div>
                           </div>
                         );
@@ -2865,6 +2926,221 @@ export default function App() {
                                   <span className="text-[9px] text-slate-405 font-sans leading-relaxed">مبلغ بدهکاری جهت نمایش سهم طرف‌حساب ثبت نشده است.</span>
                                 </div>
                               )}
+                            </div>
+
+                            {/* Anomalies and Financial Statistics Widget */}
+                            <div className={`p-4 rounded-2xl border flex flex-col gap-3 transition-colors ${
+                              isDarkMode ? "bg-slate-900/65 border-slate-800/90 shadow-lg" : "bg-[#f8fafc] border-slate-200/80 shadow-sm"
+                            }`}>
+                              <div className="flex items-center gap-2 pb-2.5 border-b border-slate-200/60 dark:border-slate-800/60">
+                                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                                <span className={`text-[11px] font-extrabold font-sans tracking-wide ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>آمارهای کلیدی طبقه‌بندی استخراج</span>
+                              </div>
+                              
+                              <div className="flex flex-col gap-2 relative text-[10px] font-sans">
+                                {/* Row 1: Highest account value */}
+                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
+                                  isDarkMode 
+                                    ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-emerald-500/30" 
+                                    : "bg-white border-slate-100 hover:border-emerald-200 hover:shadow-sm"
+                                }`}>
+                                  <div className="flex items-center gap-2">
+                                    <div className={`p-1.5 rounded-lg shrink-0 ${
+                                      isDarkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"
+                                    }`}>
+                                      <TrendingUp className="h-3.5 w-3.5" />
+                                    </div>
+                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>بالاترین رقم حساب:</span>
+                                  </div>
+                                  <span className={`font-bold font-mono text-xs ${isDarkMode ? "text-emerald-400" : "text-emerald-600"}`} dir="ltr">
+                                    {Math.max(0, ...filteredTransactions.map(t => Math.max(Number(t.مبلغ_بدهکار) || 0, Number(t.مبلغ_بستانکار) || 0))).toLocaleString("fa-IR")}
+                                  </span>
+                                </div>
+
+                                {/* Row 2: Average amount */}
+                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
+                                  isDarkMode 
+                                    ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-blue-500/30" 
+                                    : "bg-white border-slate-100 hover:border-blue-200 hover:shadow-sm"
+                                }`}>
+                                  <div className="flex items-center gap-2">
+                                    <div className={`p-1.5 rounded-lg shrink-0 ${
+                                      isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600"
+                                    }`}>
+                                      <Wallet className="h-3.5 w-3.5" />
+                                    </div>
+                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>میانگین مبالغ ثبت شده:</span>
+                                  </div>
+                                  <span className={`font-bold font-mono text-xs ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} dir="ltr">
+                                    {(totalSum / ((filteredTransactions.filter(t => (Number(t.مبلغ_بدهکار) || 0) > 0 || (Number(t.مبلغ_بستانکار) || 0) > 0).length) || 1)).toLocaleString("fa-IR", {maximumFractionDigits: 0})}
+                                  </span>
+                                </div>
+
+                                {/* Row 3: Unique scanned docs */}
+                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
+                                  isDarkMode 
+                                    ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-violet-500/30" 
+                                    : "bg-white border-slate-100 hover:border-violet-200 hover:shadow-sm"
+                                }`}>
+                                  <div className="flex items-center gap-2">
+                                    <div className={`p-1.5 rounded-lg shrink-0 ${
+                                      isDarkMode ? "bg-violet-500/10 text-violet-400" : "bg-violet-50 text-violet-600"
+                                    }`}>
+                                      <FileText className="h-3.5 w-3.5" />
+                                    </div>
+                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>اسناد یکتا شناسایی شده:</span>
+                                  </div>
+                                  <span className={`font-extrabold font-mono text-xs ${isDarkMode ? "text-violet-400" : "text-violet-600"}`} dir="ltr">
+                                    {new Set(filteredTransactions.filter(t => t.شماره_سند && t.شماره_سند.trim() !== "").map(t => t.شماره_سند)).size.toLocaleString("fa-IR")}
+                                  </span>
+                                </div>
+
+                                {/* Row 4: Missing dates */}
+                                {(() => {
+                                  const missingDatesCount = filteredTransactions.filter(t => !t.تاریخ || t.تاریخ.trim() === "").length;
+                                  const hasMissingDates = missingDatesCount > 0;
+                                  return (
+                                    <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
+                                      hasMissingDates
+                                        ? isDarkMode ? "bg-amber-950/20 border-amber-800/40 hover:border-amber-500/50" : "bg-amber-50/50 border-amber-100 hover:border-amber-200"
+                                        : isDarkMode ? "bg-slate-950/40 border-slate-800/50" : "bg-white border-slate-100"
+                                    }`}>
+                                      <div className="flex items-center gap-2">
+                                        <div className={`p-1.5 rounded-lg shrink-0 ${
+                                          hasMissingDates
+                                            ? isDarkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-700 font-bold"
+                                            : isDarkMode ? "bg-slate-800 text-slate-500" : "bg-slate-100 text-slate-400"
+                                        }`}>
+                                          <Calendar className="h-3.5 w-3.5" />
+                                        </div>
+                                        <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>تراکنش‌های فاقد تاریخ:</span>
+                                      </div>
+                                      <span className={`font-extrabold font-mono text-xs ${hasMissingDates ? "text-amber-500 animate-pulse" : isDarkMode ? "text-slate-500" : "text-slate-400"}`} dir="ltr">
+                                        {missingDatesCount.toLocaleString("fa-IR")}
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
+
+                                {/* Row 5: Missing descriptions */}
+                                {(() => {
+                                  const missingDescCount = filteredTransactions.filter(t => !t.شرح_تراکنش || t.شرح_تراکنش.trim() === "").length;
+                                  const hasMissingDesc = missingDescCount > 0;
+                                  return (
+                                    <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
+                                      hasMissingDesc
+                                        ? isDarkMode ? "bg-rose-950/20 border-rose-800/40 hover:border-rose-500/50" : "bg-rose-50/50 border-rose-100 hover:border-rose-200"
+                                        : isDarkMode ? "bg-slate-950/40 border-slate-800/50" : "bg-white border-slate-100"
+                                    }`}>
+                                      <div className="flex items-center gap-2">
+                                        <div className={`p-1.5 rounded-lg shrink-0 ${
+                                          hasMissingDesc
+                                            ? isDarkMode ? "bg-rose-500/20 text-rose-400" : "bg-rose-100 text-rose-700 font-bold"
+                                            : isDarkMode ? "bg-slate-800 text-slate-500" : "bg-slate-100 text-slate-400"
+                                        }`}>
+                                          <AlertTriangle className="h-3.5 w-3.5" />
+                                        </div>
+                                        <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>تراکنش‌های فاقد شرح:</span>
+                                      </div>
+                                      <span className={`font-extrabold font-mono text-xs ${hasMissingDesc ? "text-rose-500 animate-pulse font-extrabold" : isDarkMode ? "text-slate-500" : "text-slate-400"}`} dir="ltr">
+                                        {missingDescCount.toLocaleString("fa-IR")}
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
+
+                                {/* Row 6: Total Debit Turnover */}
+                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
+                                  isDarkMode ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-emerald-500/20" : "bg-white border-slate-100 hover:border-emerald-250 hover:shadow-xs"
+                                }`}>
+                                  <div className="flex items-center gap-2">
+                                    <div className={`p-1.5 rounded-lg shrink-0 ${
+                                      isDarkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"
+                                    }`}>
+                                      <PlusCircle className="h-3.5 w-3.5" />
+                                    </div>
+                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>مجموع کل بدهکار (منابع کاربری):</span>
+                                  </div>
+                                  <span className={`font-extrabold font-mono text-xs ${isDarkMode ? "text-emerald-400" : "text-emerald-700"}`} dir="ltr">
+                                    {filteredTransactions.reduce((acc, t) => acc + (Number(t.مبلغ_بدهکار) || 0), 0).toLocaleString("fa-IR")}
+                                  </span>
+                                </div>
+
+                                {/* Row 7: Total Credit Turnover */}
+                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
+                                  isDarkMode ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-rose-500/20" : "bg-white border-slate-100 hover:border-rose-250 hover:shadow-xs"
+                                }`}>
+                                  <div className="flex items-center gap-2">
+                                    <div className={`p-1.5 rounded-lg shrink-0 ${
+                                      isDarkMode ? "bg-rose-500/10 text-rose-400" : "bg-rose-50 text-rose-600"
+                                    }`}>
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </div>
+                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>مجموع کل بستانکار (مصارف کاربری):</span>
+                                  </div>
+                                  <span className={`font-extrabold font-mono text-xs ${isDarkMode ? "text-rose-400" : "text-rose-700"}`} dir="ltr">
+                                    {filteredTransactions.reduce((acc, t) => acc + (Number(t.مبلغ_بستانکار) || 0), 0).toLocaleString("fa-IR")}
+                                  </span>
+                                </div>
+
+                                {/* Row 8: Currency Analysis */}
+                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
+                                  isDarkMode ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-indigo-500/20" : "bg-white border-slate-100 hover:border-indigo-250 hover:shadow-xs"
+                                }`}>
+                                  <div className="flex items-center gap-2">
+                                    <div className={`p-1.5 rounded-lg shrink-0 ${
+                                      isDarkMode ? "bg-indigo-500/10 text-indigo-400" : "bg-indigo-50 text-indigo-600"
+                                    }`}>
+                                      <Coins className="h-3.5 w-3.5" />
+                                    </div>
+                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>ارزهای شناسایی‌شده در فاکتور:</span>
+                                  </div>
+                                  <span className={`font-semibold text-[10px] ${isDarkMode ? "text-indigo-300" : "text-indigo-850"}`}>
+                                    {Array.from(new Set(filteredTransactions.map(t => t.نوع_ارز).filter(Boolean))).join("، ") || "ریال"}
+                                  </span>
+                                </div>
+
+                                {/* Row 9: Smart Risk Assessment */}
+                                {(() => {
+                                  const missingDatesCount = filteredTransactions.filter(t => !t.تاریخ || t.تاریخ.trim() === "").length;
+                                  const missingDescCount = filteredTransactions.filter(t => !t.شرح_تراکنش || t.شرح_تراکنش.trim() === "").length;
+                                  const totalMissing = missingDatesCount + missingDescCount;
+                                  
+                                  const lowConfCount = filteredTransactions.filter(tr => (tr.ضریب_اطمینان ?? 100) < 70).length;
+                                  const sDebit = filteredTransactions.reduce((acc, current) => acc + (current.مبلغ_بدهکار ?? 0), 0);
+                                  const sCredit = filteredTransactions.reduce((acc, current) => acc + (current.مبلغ_بستانکار ?? 0), 0);
+                                  const balanceOK = filteredTransactions.length > 0 && sDebit === sCredit;
+
+                                  let riskLabel = "بسیار کم (سند پایدار)";
+                                  let riskBadgeColor = isDarkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-emerald-50 text-emerald-700 border-emerald-200";
+                                  
+                                  if (!balanceOK || lowConfCount > 2) {
+                                    riskLabel = "بالا (عدم انطباق موازنه یا دقت)";
+                                    riskBadgeColor = isDarkMode ? "bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse" : "bg-rose-50 text-rose-700 border-rose-200 animate-pulse";
+                                  } else if (lowConfCount > 0 || totalMissing > 0) {
+                                    riskLabel = "متوسط (نیازمند بررسی و تکمیل)";
+                                    riskBadgeColor = isDarkMode ? "bg-amber-500/10 text-amber-400 border-amber-500/30" : "bg-amber-50 text-amber-700 border-amber-200";
+                                  }
+
+                                  return (
+                                    <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
+                                      isDarkMode ? "bg-slate-950/40 border-slate-800/50" : "bg-white border-slate-100"
+                                    }`}>
+                                      <div className="flex items-center gap-2">
+                                        <div className={`p-1.5 rounded-lg shrink-0 ${
+                                          isDarkMode ? "bg-[#3b82f6]/10 text-[#3b82f6]" : "bg-blue-50 text-blue-600"
+                                        }`}>
+                                          <ShieldCheck className="h-3.5 w-3.5" />
+                                        </div>
+                                        <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>سطح ریسک مغایرت دفتر جاری:</span>
+                                      </div>
+                                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${riskBadgeColor}`}>
+                                        {riskLabel}
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             </div>
 
                             {/* Accounting Quick Hints Info */}
