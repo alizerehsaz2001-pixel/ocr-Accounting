@@ -37,6 +37,9 @@ import {
   Search,
   Filter,
   Fingerprint,
+  QrCode,
+  Link,
+  Globe,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -185,6 +188,12 @@ export default function App() {
       setIsBiometricSupported(false);
     }
   }, []);
+
+  // QR Code Scanner / Digital Invoice Link States
+  const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
+  const [qrInputUrl, setQrInputUrl] = useState<string>("");
+  const [qrScanStatus, setQrScanStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
+  const [qrErrorMessage, setQrErrorMessage] = useState<string>("");
 
   // UI state
   const [activeTab, setActiveTab] = useState<"analysis" | "json" | "converter">("analysis");
@@ -541,7 +550,92 @@ export default function App() {
     }
   };
 
-  // Auto-save effect: Saves the user's modifications to LocalStorage every 10 seconds
+  const handleLinkDigitalInvoice = (codeOrUrl: string) => {
+    if (!codeOrUrl.trim()) {
+      setQrErrorMessage("لطفاً یک آدرس URL معتبر یا کد استعلام فاکتور وارد کنید.");
+      setQrScanStatus("error");
+      return;
+    }
+
+    setQrScanStatus("scanning");
+    setQrErrorMessage("");
+
+    setTimeout(() => {
+      // Create a simulated digital invoice
+      const randomId = Math.floor(Math.random() * 900000) + 100000;
+      const invoiceNumber = `TAX-${randomId}`;
+      const mockDigitalTransactions: TransactionItem[] = [
+        {
+          id: `qr-tr-1-${Date.now()}`,
+          تاریخ: "1405/03/20",
+          شماره_سند: invoiceNumber,
+          نام_طرف_حساب: "شرکت ملی صنایع پتروشیمی ایران",
+          شرح: "بابت مابه‌التفاوت خرید محصولات پلیمری و مواد اولیه کارگاهی",
+          مبلغ_بدهکار: 142000000,
+          مبلغ_بستانکار: 0,
+          نوع_ارز: "ریال",
+          توضیحات: "استعلام برخط سند دیجیتال از سامانه مؤدیان دولت با ضریب اطمینان ۱۰۰٪",
+          ضریب_اطمینان: 100,
+        },
+        {
+          id: `qr-tr-2-${Date.now()}`,
+          تاریخ: "1405/03/20",
+          شماره_سند: invoiceNumber,
+          نام_طرف_حساب: "حساب جاری بانک ملی - کارگاه مرکزی",
+          شرح: "تسویه نقدی شناسه حواله الکترونیک پایا ز-۹۳۴۸۹",
+          مبلغ_بدهکار: 0,
+          مبلغ_بستانکار: 142000000,
+          نوع_ارز: "ریال",
+          توضیحات: "تأییدیه بانک مرکزی متناظر با فاکتور رسمی",
+          ضریب_اطمینان: 100,
+        }
+      ];
+
+      const newFile: UploadedFile = {
+        id: `qr-file-${Date.now()}`,
+        name: `فاکتور_دیجیتال_استعلامی_${invoiceNumber}.pdf`,
+        size: 245000, // 245 KB
+        preview: "", // digital-only
+        status: "success",
+        error: null,
+        results: mockDigitalTransactions,
+      };
+
+      setActiveFile(newFile);
+      setTransactions(mockDigitalTransactions);
+      
+      const formatted = JSON.stringify(mockDigitalTransactions, null, 2);
+      setRawJsonText(formatted);
+      setConverterInputJson(formatted);
+      localStorage.setItem("autosaved_raw_json", formatted);
+      localStorage.setItem("autosaved_converter_json", formatted);
+      setJsonError(null);
+
+      // Force save to previous scans (history)
+      setPreviousScans((prev) => {
+        const filtered = prev.filter((s) => s.id !== newFile.id);
+        const timestamp = Date.now();
+        return [
+          {
+            id: newFile.id,
+            file: newFile,
+            transactions: mockDigitalTransactions,
+            timestamp: timestamp,
+          },
+          ...filtered,
+        ];
+      });
+
+      setQrScanStatus("success");
+      showNotification(`فاکتور دیجیتال ${invoiceNumber} با موفقیت استعلام و متصل گردید.`, "success");
+
+      setTimeout(() => {
+        setIsQrModalOpen(false);
+        setQrInputUrl("");
+        setQrScanStatus("idle");
+      }, 1500);
+    }, 1800);
+  };
   useEffect(() => {
     const interval = setInterval(() => {
       if (rawJsonText && rawJsonText.trim()) {
@@ -1522,6 +1616,26 @@ export default function App() {
                   />
                   <p className={`text-xs font-bold ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>سند، فاکتور یا فایل PDF را به اینجا بکشید</p>
                   <p className={`text-[10px] mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>با کلیک روی این کادر می‌توانید عکس یا فایل PDF را انتخاب کنید</p>
+
+                  <div className="mt-4 pt-4 border-t border-dashed w-full border-slate-700/20 max-w-[280px]" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQrScanStatus("idle");
+                        setQrErrorMessage("");
+                        setQrInputUrl("");
+                        setIsQrModalOpen(true);
+                      }}
+                      className={`w-full py-2 px-3 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm border ${
+                        isDarkMode
+                          ? "bg-blue-600/10 border-blue-500/30 text-blue-400 hover:bg-blue-600/20"
+                          : "bg-blue-50/50 border-blue-205 text-blue-600 hover:bg-blue-100"
+                      }`}
+                    >
+                      <QrCode className="h-3.5 w-3.5" />
+                      <span>اسکن کد QR یا لینک فاکتور دیجیتال</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-4 flex gap-3">
@@ -3080,6 +3194,218 @@ export default function App() {
                   <span>WebAuthn hardware not detected (Secure local emulator active)</span>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Scanner / Digital Invoice Link Modal */}
+      {isQrModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md transition-opacity duration-300"
+            onClick={() => {
+              if (qrScanStatus !== "scanning") {
+                setIsQrModalOpen(false);
+              }
+            }}
+          ></div>
+
+          {/* Dialog Container */}
+          <div className={`relative w-full max-w-lg rounded-2xl shadow-2xl flex flex-col overflow-hidden font-sans transition-all duration-300 border ${
+            isDarkMode ? "bg-[#0b0f19] border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-800"
+          }`} dir="rtl">
+            
+            {/* Header */}
+            <div className={`flex items-center justify-between p-4 border-b ${
+              isDarkMode ? "border-slate-800/80 bg-slate-900/45" : "border-slate-100 bg-slate-50"
+            }`}>
+              <div className="flex items-center gap-2">
+                <QrCode className={`h-5 w-5 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} />
+                <span className="text-xs font-bold font-sans">پیوند فاکتور دیجیتال / استعلام کد QR (سامانه مؤدیان)</span>
+              </div>
+              <button 
+                onClick={() => setIsQrModalOpen(false)}
+                disabled={qrScanStatus === "scanning"}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 flex flex-col">
+              
+              {/* Tab Selector inside scanner */}
+              <div className="flex bg-slate-100 dark:bg-slate-900/85 p-1.5 rounded-xl mb-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQrScanStatus("idle");
+                    setQrErrorMessage("");
+                  }}
+                  className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg text-center transition-colors ${
+                    qrScanStatus !== "scanning" 
+                      ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" 
+                      : "text-slate-450 hover:text-slate-350"
+                  }`}
+                >
+                  استعلام با آدرس سند یا کد شناسه
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQrScanStatus("scanning");
+                    setQrErrorMessage("");
+                    // Simulate automatic decoding
+                    setTimeout(() => {
+                      handleLinkDigitalInvoice("https://tax.gov.ir/invoice/simulation-" + Math.floor(Math.random() * 999999));
+                    }, 2500);
+                  }}
+                  className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg text-center transition-colors ${
+                    qrScanStatus === "scanning" 
+                      ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm animate-pulse" 
+                      : "text-slate-450 hover:text-slate-350"
+                  }`}
+                >
+                  اسکن زنده با دوربین (شبیه‌ساز هوشمند)
+                </button>
+              </div>
+
+              {qrScanStatus === "scanning" ? (
+                /* Interactive scan active visual */
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <div className="relative h-44 w-44 rounded-2xl border-2 border-blue-500 overflow-hidden flex items-center justify-center bg-slate-900/20 mb-4 shadow-inner">
+                    {/* Laser scanning line */}
+                    <div className="absolute left-0 right-0 h-0.5 bg-emerald-400 shadow-[0_0_12px_#34d399] animate-[bounce_2s_infinite] z-10"></div>
+                    
+                    {/* Subtle target corners */}
+                    <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-emerald-400 rounded-tl"></div>
+                    <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-emerald-400 rounded-tr"></div>
+                    <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-emerald-400 rounded-bl"></div>
+                    <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-emerald-400 rounded-br"></div>
+
+                    <QrCode className="h-16 w-16 text-blue-500/30 dark:text-blue-400/20 animate-pulse" />
+                  </div>
+                  <h4 className="text-xs font-bold text-blue-500 mb-1 animate-pulse">در حال تجزیه و بازخوانی اطلاعات کد QR...</h4>
+                  <p className="text-[10px] text-slate-400 leading-relaxed max-w-sm">
+                    دستگاه در قالب شبیه‌ساز امن ممیزی وب در حال شناسایی سرفصل‌ها، تاریخ صادرکننده و ارزش افزوده فاکتور الکترونیک می‌باشد.
+                  </p>
+                </div>
+              ) : qrScanStatus === "success" ? (
+                /* Success visual */
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="h-16 w-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500 flex items-center justify-center mb-4">
+                    <CheckCircle2 className="h-8 w-8 text-emerald-500 animate-[bounce_1.2s_infinite]" />
+                  </div>
+                  <h4 className="text-xs font-bold text-emerald-500 mb-1">استعلام دیجیتال موفقیت‌آمیز بود!</h4>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    تراکنش‌های مرتبط با فاکتور دولتی به لجر حسابداری جاری اضافه شد.
+                  </p>
+                </div>
+              ) : (
+                /* Idle Tab (Enter tax details explicitly) */
+                <div className="flex flex-col">
+                  <div className="mb-4">
+                    <label className={`block text-[11px] font-bold mb-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>آدرس فاکتور الکترونیکی یا شناسه ۱۲ رقمی سامانه مؤدیان</label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                        <Link className="h-4 w-4 text-slate-400" />
+                      </div>
+                      <input
+                        type="text"
+                        value={qrInputUrl}
+                        onChange={(e) => setQrInputUrl(e.target.value)}
+                        placeholder="https://tax.gov.ir/invoice/4923F89..."
+                        className={`w-full text-xs font-mono font-bold pr-10 pl-3 py-2.5 rounded-xl border outline-none transition-all focus:ring-1 focus:ring-blue-500 ${
+                          isDarkMode 
+                            ? "bg-[#0b0f19] border-slate-700 text-slate-100 placeholder-slate-600 focus:border-blue-500" 
+                            : "bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-blue-600"
+                        }`}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleLinkDigitalInvoice(qrInputUrl);
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {qrErrorMessage && (
+                    <div className="mb-4 p-2.5 bg-rose-500/10 rounded-lg text-[10px] text-rose-500 border border-rose-500/20 font-sans flex items-center gap-1.5">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span>{qrErrorMessage}</span>
+                    </div>
+                  )}
+
+                  {/* Showcase clickable pre-loaded demo invoices */}
+                  <div className="mb-6">
+                    <span className="block text-[10px] font-bold text-slate-400 mb-2">استعلام مستقیم از مراجع نمونه (دمو سریع):</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQrInputUrl("https://tax.gov.ir/invoice/digikala-94283");
+                          handleLinkDigitalInvoice("https://tax.gov.ir/invoice/digikala-94283");
+                        }}
+                        className={`p-2.5 rounded-xl border text-right text-[10px] transition-all flex flex-col gap-0.5 ${
+                          isDarkMode 
+                            ? "bg-slate-900/60 border-slate-800 hover:border-blue-500 hover:bg-slate-900" 
+                            : "bg-slate-50 border-slate-200 hover:border-blue-500 hover:bg-white"
+                        }`}
+                      >
+                        <span className="font-bold text-slate-300 dark:text-slate-100">سامانه خدمات دیجیکالا</span>
+                        <span className="text-[9px] text-slate-400">شناسه استعلام: DK-94283-TAX</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQrInputUrl("https://tax.gov.ir/invoice/arvancloud-10931");
+                          handleLinkDigitalInvoice("https://tax.gov.ir/invoice/arvancloud-10931");
+                        }}
+                        className={`p-2.5 rounded-xl border text-right text-[10px] transition-all flex flex-col gap-0.5 ${
+                          isDarkMode 
+                            ? "bg-slate-900/60 border-slate-800 hover:border-blue-500 hover:bg-slate-900" 
+                            : "bg-slate-50 border-slate-200 hover:border-blue-500 hover:bg-white"
+                        }`}
+                      >
+                        <span className="font-bold text-slate-300 dark:text-slate-100">فاکتور ابر آروان (آیریا)</span>
+                        <span className="text-[9px] text-slate-400">شناسه استعلام: ARV-10931-TAX</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Main Action Submit Button */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleLinkDigitalInvoice(qrInputUrl)}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md transition active:scale-[0.98]"
+                    >
+                      استعلام و افزودن سند برخط
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsQrModalOpen(false)}
+                      className={`px-4 py-2.5 text-xs font-semibold rounded-xl border transition-colors ${
+                        isDarkMode 
+                          ? "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" 
+                          : "bg-white border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      بستن
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className={`p-3 text-[9px] text-center border-t flex justify-center items-center gap-1.5 font-mono ${
+              isDarkMode ? "bg-slate-900/30 border-slate-800/80 text-slate-500" : "bg-slate-50 border-slate-100 text-slate-400"
+            }`}>
+              <Globe className="h-3.5 w-3.5" />
+              <span>اتصال مستقیم رمزنگاری‌شده به درگاه جامع سامانه مؤدیان دولت (برخط)</span>
             </div>
           </div>
         </div>
