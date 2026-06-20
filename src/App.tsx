@@ -48,6 +48,8 @@ import {
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
+import AudioNotesSection from "./components/AudioNotesSection";
+import ThemeSwitcher from "./components/ThemeSwitcher";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 import { motion } from "motion/react";
@@ -55,8 +57,22 @@ import { motion } from "motion/react";
 export default function App() {
   // Main data states
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    return localStorage.getItem("theme") === "dark";
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark") return true;
+    if (savedTheme === "light") return false;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
   });
+
+  useEffect(() => {
+    localStorage.setItem("theme", isDarkMode ? "dark" : "light");
+    if (isDarkMode) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   const [transactions, setTransactions] = useState<TransactionItem[]>(() => {
     const savedAutoRaw = localStorage.getItem("autosaved_raw_json");
@@ -1133,12 +1149,15 @@ export default function App() {
 
       {/* Right Sidebar - ERP Style */}
       <aside className="w-64 bg-[#1E293B] flex-shrink-0 flex flex-col select-none border-l border-slate-700">
-        <div className="p-6 flex items-center gap-3 border-b border-slate-700">
-          <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold shadow-sm">
-            AI
-          </div>
-          <span className="text-white font-semibold text-base tracking-tight" dir="ltr">ocr Accounting</span>
-        </div>
+        <header className="p-6 flex items-center justify-between border-b border-slate-700">
+           <div className="flex items-center gap-3">
+             <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold shadow-sm">
+               AI
+             </div>
+             <span className="text-white font-semibold text-base tracking-tight" dir="ltr">ocr Accounting</span>
+           </div>
+           <ThemeSwitcher isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
+        </header>
 
         <nav className="flex-1 py-4 space-y-1 overflow-y-auto">
           <div className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
@@ -1767,6 +1786,15 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                {/* Voice Notes Audio Panel */}
+                {(activeFile.status === "success" || activeFile.status === "idle") && (
+                  <AudioNotesSection 
+                    fileId={activeFile.id} 
+                    fileName={activeFile.name}
+                    isDarkMode={isDarkMode} 
+                  />
+                )}
               </section>
 
               {/* Column 2: Interactive Tabs - JSON Code vs Visual Audit Analysis */}

@@ -16,6 +16,14 @@ export interface TransactionItem {
   ضریب_اطمینان: number | null;
 }
 
+export interface AudioNote {
+  id: string;
+  url: string; // blob URL
+  duration: number; // in seconds
+  timestamp: number;
+  noteText?: string;
+}
+
 export interface UploadedFile {
   id: string;
   name: string;
@@ -31,6 +39,7 @@ export interface UploadedFile {
     totalTokenCount?: number;
     cachedContentTokenCount?: number;
   };
+  audioNotes?: AudioNote[];
 }
 
 export interface PreviousScan {
