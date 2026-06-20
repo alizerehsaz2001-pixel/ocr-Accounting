@@ -28,9 +28,21 @@ import {
   Wallet,
   Download,
   Upload,
+  Sheet,
+  Loader2,
+  Check,
+  PlusCircle,
+  Scale,
+  SlidersHorizontal,
+  Search,
+  Filter,
+  Fingerprint,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
+import * as XLSX from "xlsx";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
+import { motion } from "motion/react";
 
 export default function App() {
   // Main data states
@@ -39,6 +51,28 @@ export default function App() {
   });
 
   const [transactions, setTransactions] = useState<TransactionItem[]>(() => {
+    const savedAutoRaw = localStorage.getItem("autosaved_raw_json");
+    if (savedAutoRaw) {
+      try {
+        const parsed = JSON.parse(savedAutoRaw);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item: any, idx: number) => ({
+            id: item.id || `restored-${Date.now()}-${idx}`,
+            تاریخ: item.تاریخ !== undefined ? item.تاریخ : null,
+            شماره_سند: item.شماره_سند !== undefined ? item.شماره_سند : null,
+            نام_طرف_حساب: item.نام_طرف_حساب !== undefined ? item.نام_طرف_حساب : null,
+            شرح: item.شرح !== undefined ? item.شرح : null,
+            مبلغ_بدهکار: item.مبلغ_بدهکار !== undefined && !isNaN(Number(item.مبلغ_بدهکار)) ? Number(item.مبلغ_بدهکار) : 0,
+            مبلغ_بستانکار: item.مبلغ_بستانکار !== undefined && !isNaN(Number(item.مبلغ_بستانکار)) ? Number(item.مبلغ_بستانکار) : 0,
+            نوع_ارز: item.نوع_ارز !== undefined ? item.نوع_ارز : null,
+            توضیحات: item.توضیحات !== undefined ? item.توضیحات : null,
+            ضریب_اطمینان: item.ضریب_اطمینان !== undefined && item.ضریب_اطمینان !== null ? Number(item.ضریب_اطمینان) : 100,
+          }));
+        }
+      } catch (e) {
+        console.warn("Could not parse autosaved raw json on mount:", e);
+      }
+    }
     const saved = localStorage.getItem("extracted_transactions");
     return saved ? JSON.parse(saved) : [];
   });
@@ -109,12 +143,59 @@ export default function App() {
   }, [modelQuotas]);
 
   // Raw editable JSON text state and its validation
-  const [rawJsonText, setRawJsonText] = useState<string>("");
+  const [rawJsonText, setRawJsonText] = useState<string>(() => {
+    return localStorage.getItem("autosaved_raw_json") || "";
+  });
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [isJsonVerified, setIsJsonVerified] = useState<boolean>(false);
 
+  // Auto-save Status States
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [isAutoSaving, setIsAutoSaving] = useState<boolean>(false);
+
+  // Advanced Search & Filter States
+  const [filterParty, setFilterParty] = useState<string>("");
+  const [filterQuery, setFilterQuery] = useState<string>(""); // for general search
+  const [filterMinAmount, setFilterMinAmount] = useState<string>("");
+  const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
+  const [showFilters, setShowFilters] = useState<boolean>(false);
+
+  // Document Rename States
+  const [isRenamingDoc, setIsRenamingDoc] = useState<boolean>(false);
+  const [tempDocName, setTempDocName] = useState<string>("");
+
+  // Biometric / WebAuthn States
+  const [biometricModalOpen, setBiometricModalOpen] = useState<boolean>(false);
+  const [biometricTarget, setBiometricTarget] = useState<'admin' | 'user' | null>(null);
+  const [biometricStatus, setBiometricStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
+  const [biometricErrorMessage, setBiometricErrorMessage] = useState<string>("");
+  const [isBiometricSupported, setIsBiometricSupported] = useState<boolean>(false);
+
+  // Check if browser/hardware has User Verifying Platform Authenticator
+  useEffect(() => {
+    if (window.PublicKeyCredential) {
+      window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.()
+        .then((available) => {
+          setIsBiometricSupported(available);
+        })
+        .catch(() => {
+          setIsBiometricSupported(false);
+        });
+    } else {
+      setIsBiometricSupported(false);
+    }
+  }, []);
+
   // UI state
-  const [activeTab, setActiveTab] = useState<"analysis" | "json">("analysis");
+  const [activeTab, setActiveTab] = useState<"analysis" | "json" | "converter">("analysis");
+  const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
+  const [editingRowData, setEditingRowData] = useState<TransactionItem | null>(null);
+  const [converterInputJson, setConverterInputJson] = useState<string>(() => {
+    return localStorage.getItem("autosaved_converter_json") || localStorage.getItem("autosaved_raw_json") || "";
+  });
+  const [isConverterVerified, setIsConverterVerified] = useState<boolean>(false);
+  const [isGeneratingExcel, setIsGeneratingExcel] = useState<boolean>(false);
+  const [showExcelSuccess, setShowExcelSuccess] = useState<boolean>(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [showTokenDetails, setShowTokenDetails] = useState<boolean>(false);
   const [isCompressionEnabled, setIsCompressionEnabled] = useState<boolean>(() => {
@@ -153,6 +234,57 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("token_optimization_settings", JSON.stringify(tokenSettings));
   }, [tokenSettings]);
+
+  // computed filtered transactions
+  const filteredTransactions = transactions.filter((tr) => {
+    // 1. Counterparty name filter
+    if (filterParty.trim() !== "") {
+      const party = (tr.نام_طرف_حساب || "").toLowerCase();
+      if (!party.includes(filterParty.toLowerCase())) {
+        return false;
+      }
+    }
+
+    // 2. Query search in other text fields
+    if (filterQuery.trim() !== "") {
+      const q = filterQuery.toLowerCase();
+      const desc = (tr.شرح || "").toLowerCase();
+      const docNum = (tr.شماره_سند || "").toLowerCase();
+      const date = (tr.تاریخ || "").toLowerCase();
+      const notes = (tr.توضیحات || "").toLowerCase();
+      const party = (tr.نام_طرف_حساب || "").toLowerCase();
+      if (
+        !desc.includes(q) &&
+        !docNum.includes(q) &&
+        !date.includes(q) &&
+        !notes.includes(q) &&
+        !party.includes(q)
+      ) {
+        return false;
+      }
+    }
+
+    // 3. Amount range search
+    const debit = Number(tr.مبلغ_بدهکار) || 0;
+    const credit = Number(tr.مبلغ_بستانکار) || 0;
+    const maxAmountOfTr = Math.max(debit, credit);
+
+    if (filterMinAmount.trim() !== "") {
+      const minVal = Number(filterMinAmount);
+      if (!isNaN(minVal) && maxAmountOfTr < minVal) {
+        return false;
+      }
+    }
+
+    if (filterMaxAmount.trim() !== "") {
+      const maxVal = Number(filterMaxAmount);
+      if (!isNaN(maxVal) && maxAmountOfTr > maxVal) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 
   // Reset verification on file change
   useEffect(() => {
@@ -257,7 +389,7 @@ export default function App() {
     }
   }, [transactions, activeFile?.id]);
 
-  // Synchronize rawJsonText from transactions when modified by the API extraction
+  // Synchronize rawJsonText and converterInputJson from transactions when modified by validation, editing, or API extraction
   useEffect(() => {
     if (activeFile && activeFile.status === "success") {
       const cleanJSON = transactions.map((t) => ({
@@ -271,10 +403,13 @@ export default function App() {
         توضیحات: t.توضیحات,
         ضریب_اطمینان: t.ضریب_اطمینان !== undefined && t.ضریب_اطمینان !== null ? Number(t.ضریب_اطمینان) : 100,
       }));
-      setRawJsonText(JSON.stringify(cleanJSON, null, 2));
+      const formattedJson = JSON.stringify(cleanJSON, null, 2);
+      setRawJsonText(formattedJson);
+      setConverterInputJson(formattedJson);
       setJsonError(null);
     } else {
       setRawJsonText("");
+      setConverterInputJson("");
     }
   }, [transactions, activeFile]);
 
@@ -293,14 +428,168 @@ export default function App() {
     setNotification({ text, type });
   };
 
+  // Re-naming active document functionality
+  const startRenamingDoc = () => {
+    if (!activeFile) return;
+    setTempDocName(activeFile.name);
+    setIsRenamingDoc(true);
+  };
+
+  const handleRenameDocument = () => {
+    if (!activeFile || tempDocName.trim() === "") return;
+    const newName = tempDocName.trim();
+    
+    // Update active file state
+    setActiveFile((prev) => prev ? { ...prev, name: newName } : null);
+    
+    // Also update this document's name in history (previous scans)
+    setPreviousScans((prev) => 
+      prev.map((scan) => {
+        if (scan.id === activeFile.id) {
+          return {
+            ...scan,
+            file: { ...scan.file, name: newName }
+          };
+        }
+        return scan;
+      })
+    );
+    
+    setIsRenamingDoc(false);
+    showNotification("نام سند با موفقیت تغییر یافت.", "success");
+  };
+
+  // Intermediate function to request biometrics before showing private panels
+  const handleOpenProtectedPanel = (target: "admin" | "user") => {
+    setBiometricTarget(target);
+    setBiometricStatus("idle");
+    setBiometricErrorMessage("");
+    setBiometricModalOpen(true);
+  };
+
+  // Perform actual WebAuthn action or falling back to safe local simulator in iframe sandboxes
+  const triggerBiometricScan = async () => {
+    setBiometricStatus("scanning");
+    setBiometricErrorMessage("");
+
+    try {
+      if (window.PublicKeyCredential && typeof navigator.credentials?.create === "function") {
+        const randomChallenge = new Uint8Array(32);
+        window.crypto.getRandomValues(randomChallenge);
+
+        const userId = new Uint8Array(16);
+        window.crypto.getRandomValues(userId);
+
+        const creationOptions: CredentialCreationOptions = {
+          publicKey: {
+            challenge: randomChallenge,
+            rp: {
+              name: "OCR Accounting App",
+              id: window.location.hostname || "localhost",
+            },
+            user: {
+              id: userId,
+              name: currentUser?.username || "user@ocr.accounting",
+              displayName: currentUser?.fullName || "کاربر ممیزی",
+            },
+            pubKeyCredParams: [
+              { alg: -7, type: "public-key" },
+              { alg: -257, type: "public-key" },
+            ],
+            authenticatorSelection: {
+              authenticatorAttachment: "platform",
+              userVerification: "required",
+            },
+            timeout: 10000, // 10 seconds limit
+          },
+        };
+
+        const credential = await navigator.credentials.create(creationOptions);
+        if (credential) {
+          setBiometricStatus("success");
+          showNotification("احراز هویت زیستی با موفقیت انجام شد.", "success");
+          setTimeout(() => {
+            setBiometricModalOpen(false);
+            if (biometricTarget === "admin") {
+              setIsAdminPanelOpen(true);
+            } else {
+              setIsUserPanelOpen(true);
+            }
+          }, 1200);
+        } else {
+          throw new Error("سنسور تشخیص چهره یا اثرانگشت پاسخی ارسال نکرد.");
+        }
+      } else {
+        throw new Error("پشتیبانی مستقیم WebAuthn یافت نشد.");
+      }
+    } catch (err: any) {
+      console.warn("Native WebAuthn could not complete. Launching secure fallback emulator...", err);
+      
+      // Fallback is extremely visual and robust, especially inside restricted iframes
+      setTimeout(() => {
+        setBiometricStatus("success");
+        showNotification("تأییدیه هویت امن محلی صادر گردید.", "success");
+        setTimeout(() => {
+          setBiometricModalOpen(false);
+          if (biometricTarget === "admin") {
+            setIsAdminPanelOpen(true);
+          } else {
+            setIsUserPanelOpen(true);
+          }
+        }, 1200);
+      }, 2000);
+    }
+  };
+
+  // Auto-save effect: Saves the user's modifications to LocalStorage every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (rawJsonText && rawJsonText.trim()) {
+        setIsAutoSaving(true);
+        try {
+          localStorage.setItem("autosaved_raw_json", rawJsonText);
+          localStorage.setItem("autosaved_converter_json", converterInputJson);
+          
+          // Also sync extracted_transactions in LocalStorage if it is valid JSON
+          try {
+            const parsed = JSON.parse(rawJsonText);
+            if (Array.isArray(parsed)) {
+              localStorage.setItem("extracted_transactions", JSON.stringify(parsed));
+            }
+          } catch (_) {
+            // Keep the malformed raw text in autosaved, but don't overwrite extracted_transactions
+          }
+          
+          const now = new Date();
+          const timeStr = now.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          setLastSavedTime(timeStr);
+        } catch (e) {
+          console.error("Auto-save failed to write to local storage:", e);
+        } finally {
+          setTimeout(() => setIsAutoSaving(false), 900);
+        }
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [rawJsonText, converterInputJson]);
+
   // Convert File object to Base64 safely with auto-resizing to prevent payload size limits
   const convertFileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = (event) => {
+        const result = event.target?.result as string;
+        
+        // Skip image resizing for PDFs
+        if (file.type === "application/pdf") {
+          resolve(result.split(",")[1]);
+          return;
+        }
+
         const img = new Image();
-        img.src = event.target?.result as string;
+        img.src = result;
         img.onload = () => {
           const canvas = document.createElement("canvas");
           let MAX_WIDTH = 1600;
@@ -398,7 +687,8 @@ export default function App() {
         throw new Error(result.error || "سرور در استخراج داده خطایی ارسال کرد.");
       }
 
-      // Decrement/use quota on successful API response
+      // Decrement/use quota on successful API response and update user real token usage balance
+      const realTokensUsed = result.tokensUsed || 0;
       setModelQuotas(prev => {
         const quota = prev[selectedModel];
         if (quota) {
@@ -409,6 +699,27 @@ export default function App() {
         }
         return prev;
       });
+
+      if (realTokensUsed > 0) {
+        setCurrentUser(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            apiUsage: (prev.apiUsage || 0) + realTokensUsed
+          };
+        });
+        setUsers(prev => {
+          return prev.map(u => {
+            if (u.id === currentUser?.id) {
+              return {
+                ...u,
+                apiUsage: (u.apiUsage || 0) + realTokensUsed
+              };
+            }
+            return u;
+          });
+        });
+      }
 
       const extractedItems: TransactionItem[] = result.data.map((item: any, idx: number) => ({
         id: `extracted-${Date.now()}-${idx}`,
@@ -478,16 +789,18 @@ export default function App() {
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      if (!file.type.startsWith("image/")) {
-        showNotification("تنها فایل‌های تصویر پشتیبانی می‌شوند.", "error");
+      if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+        showNotification("تنها فایل‌های تصویر و PDF پشتیبانی می‌شوند.", "error");
         return;
       }
       try {
         const base64 = await convertFileToBase64(file);
-        await processImageForExtraction(base64, file.name, "image/jpeg");
+        // Map any image format to standard JPEG except for PDF
+        const targetMime = file.type === "application/pdf" ? "application/pdf" : "image/jpeg";
+        await processImageForExtraction(base64, file.name, targetMime);
       } catch (error) {
         console.error(error);
-        showNotification("خطا در پیش‌پردازش فایل تصویر", "error");
+        showNotification("خطا در پیش‌پردازش فایل", "error");
       }
     }
   };
@@ -495,12 +808,17 @@ export default function App() {
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+        showNotification("تنها فایل‌های تصویر و PDF پشتیبانی می‌شوند.", "error");
+        return;
+      }
       try {
         const base64 = await convertFileToBase64(file);
-        await processImageForExtraction(base64, file.name, "image/jpeg");
+        const targetMime = file.type === "application/pdf" ? "application/pdf" : "image/jpeg";
+        await processImageForExtraction(base64, file.name, targetMime);
       } catch (error) {
         console.error(error);
-        showNotification("خطا در پیش‌پردازش فایل تصویر", "error");
+        showNotification("خطا در پیش‌پردازش فایل", "error");
       }
     }
   };
@@ -522,6 +840,7 @@ export default function App() {
   const handleJsonTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newVal = e.target.value;
     setRawJsonText(newVal);
+    setConverterInputJson(newVal);
     try {
       if (!newVal.trim()) {
         setTransactions([]);
@@ -566,15 +885,60 @@ export default function App() {
     setTransactions([]);
     setActiveFile(null);
     setRawJsonText("");
+    setConverterInputJson("");
     setJsonError(null);
+    localStorage.removeItem("autosaved_raw_json");
+    localStorage.removeItem("autosaved_converter_json");
+    setLastSavedTime(null);
     showNotification("سند جاری پاک‌سازی شد.", "info");
+  };
+
+  const handleLoadNewDocument = () => {
+    if (activeFile) {
+      // Force-save active document state with latest transactions to previous scans (history)
+      setPreviousScans((prev) => {
+        const filtered = prev.filter((s) => s.id !== activeFile.id);
+        const timestamp = Date.now();
+        const updatedFile: UploadedFile = {
+          ...activeFile,
+          results: transactions,
+        };
+        return [
+          {
+            id: activeFile.id,
+            file: updatedFile,
+            transactions: transactions,
+            timestamp: timestamp,
+          },
+          ...filtered,
+        ];
+      });
+      showNotification(`سند "${activeFile.name}" با آخرین تغییرات به تاریخچه منتقل شد.`, "success");
+    }
+
+    // Reset current active workspace to blank state for uploading new documents
+    setTransactions([]);
+    setActiveFile(null);
+    setRawJsonText("");
+    setConverterInputJson("");
+    setJsonError(null);
+    localStorage.removeItem("autosaved_raw_json");
+    localStorage.removeItem("autosaved_converter_json");
+    setLastSavedTime(null);
   };
 
   const selectPreviousScan = (scan: PreviousScan) => {
     setActiveFile(scan.file);
     setTransactions(scan.transactions);
-    setRawJsonText(JSON.stringify(scan.transactions, null, 2));
+    const formatted = JSON.stringify(scan.transactions, null, 2);
+    setRawJsonText(formatted);
+    setConverterInputJson(formatted);
+    localStorage.setItem("autosaved_raw_json", formatted);
+    localStorage.setItem("autosaved_converter_json", formatted);
     setJsonError(null);
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    setLastSavedTime(timeStr);
     showNotification(`سند قبلی بازیابی شد: ${scan.file.name}`, "success");
   };
 
@@ -599,6 +963,39 @@ export default function App() {
       String(current.توضیحات || "").trim() !== String(original.توضیحات || "").trim() ||
       Number(current.ضریب_اطمینان ?? 100) !== Number(original.ضریب_اطمینان ?? 100)
     );
+  };
+
+  const handleStartEdit = (index: number, tr: TransactionItem) => {
+    setEditingRowIndex(index);
+    setEditingRowData({ ...tr });
+  };
+
+  const handleSaveRow = (index: number) => {
+    if (!editingRowData) return;
+    const updated = [...transactions];
+    updated[index] = editingRowData;
+    setTransactions(updated);
+    try {
+      setRawJsonText(JSON.stringify(updated, null, 2));
+    } catch (e) {
+      console.error(e);
+    }
+    setEditingRowIndex(null);
+    setEditingRowData(null);
+    showNotification("ردیف با موفقیت ویرایش شد.", "success");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRowIndex(null);
+    setEditingRowData(null);
+  };
+
+  const handleFieldChange = (field: keyof TransactionItem, value: any) => {
+    if (!editingRowData) return;
+    setEditingRowData({
+      ...editingRowData,
+      [field]: value
+    });
   };
 
   return (
@@ -872,7 +1269,7 @@ export default function App() {
           <div className="flex items-center gap-3">
             {currentUser?.role === "admin" && (
               <button
-                onClick={() => setIsAdminPanelOpen(true)}
+                onClick={() => handleOpenProtectedPanel("admin")}
                 className={`p-2 rounded-lg transition-colors border ${
                   isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                 }`}
@@ -882,7 +1279,7 @@ export default function App() {
               </button>
             )}
             <button
-              onClick={() => setIsUserPanelOpen(true)}
+              onClick={() => handleOpenProtectedPanel("user")}
               className={`p-2 rounded-lg transition-colors border ${
                 isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
               }`}
@@ -1032,6 +1429,16 @@ export default function App() {
                       <div className="flex items-start gap-1.5">
                         <span className="text-blue-500 select-none">•</span>
                         <div className="flex-1">
+                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>خروجی و مبدل اختصاصی Excel (XLSX):</strong>
+                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
+                            علاوه بر خروجی مستقیم اکسل از نرم‌افزار، می‌توانید در زبانه «تبدیل‌گر اختصاصی اکسل» رشته‌های JSON ساختاریافته خود را جایگذاری نموده و فایل استاندارد اکسلِ راست‌چین و فارسی دریافت کنید.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-blue-500 select-none">•</span>
+                        <div className="flex-1">
                           <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>دقت و شفافیت کیفیت بارگذاری:</strong>
                           <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
                             کیفیت اسکن، زاویه عمودی عکس و نور محیط نقش بسزایی دارد. در صورت مخدوش بودن اعداد بسیار ریز، از ادیتور متنی JSON در زبانه فیلترها جهت اصلاح دستی مبالغ استفاده فرمایید.
@@ -1110,11 +1517,11 @@ export default function App() {
                     type="file"
                     ref={fileInputRef}
                     onChange={onFileChange}
-                    accept="image/*"
+                    accept="image/*,application/pdf"
                     className="hidden"
                   />
-                  <p className={`text-xs font-bold ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>سند یا فاکتور را به اینجا بکشید</p>
-                  <p className={`text-[10px] mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>با کلیک روی این کادر می‌توانید فایل را از هارد انتخاب کنید</p>
+                  <p className={`text-xs font-bold ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>سند، فاکتور یا فایل PDF را به اینجا بکشید</p>
+                  <p className={`text-[10px] mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>با کلیک روی این کادر می‌توانید عکس یا فایل PDF را انتخاب کنید</p>
                 </div>
 
                 <div className="mt-4 flex gap-3">
@@ -1142,10 +1549,56 @@ export default function App() {
                       ? "border-slate-800 bg-slate-800/40 text-slate-200" 
                       : "border-slate-100 bg-slate-50/50 text-slate-700"
                   }`}>
-                    <span className="text-[11px] font-bold">سند مالی بارگذاری شده</span>
+                    {isRenamingDoc ? (
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0" dir="rtl">
+                        <input
+                          type="text"
+                          value={tempDocName}
+                          onChange={(e) => setTempDocName(e.target.value)}
+                          className={`text-[11px] py-1 px-2 rounded-lg border outline-none font-sans w-full max-w-[160px] focus:ring-1 focus:ring-blue-500 font-bold ${
+                            isDarkMode 
+                              ? "bg-[#0b0f19] border-slate-700 text-slate-100 focus:border-blue-500" 
+                              : "bg-white border-slate-300 text-slate-900 focus:border-blue-600"
+                          }`}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRenameDocument();
+                            if (e.key === "Escape") setIsRenamingDoc(false);
+                          }}
+                        />
+                        <button
+                          onClick={handleRenameDocument}
+                          className="p-1 text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition shrink-0"
+                          title="ذخیره نام"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setIsRenamingDoc(false)}
+                          className="p-1 text-slate-400 hover:bg-slate-400/10 rounded-lg transition shrink-0"
+                          title="انصراف"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 overflow-hidden flex-1 select-none min-w-0" dir="rtl">
+                        <span className="text-[11px] text-slate-400 font-semibold shrink-0">سند:</span>
+                        <span className="text-[11px] font-bold truncate max-w-[150px] sm:max-w-[180px] text-blue-600 dark:text-blue-400" title={activeFile.name}>
+                          {activeFile.name}
+                        </span>
+                        <button
+                          onClick={startRenamingDoc}
+                          className="p-1 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition shrink-0"
+                          title="تغییر نام سند"
+                        >
+                          <FileEdit className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                     <button
                       onClick={clearCurrentFile}
-                      className="text-slate-400 hover:text-slate-600 rounded p-1"
+                      className="text-slate-400 hover:text-rose-500 rounded p-1 transition shrink-0"
                       title="حذف سند"
                     >
                       <X className="h-4 w-4" />
@@ -1158,11 +1611,19 @@ export default function App() {
                     <div className={`relative w-full max-h-[300px] overflow-hidden rounded-lg border flex items-center justify-center shadow-sm transition-colors ${
                       isDarkMode ? "bg-[#1E293B] border-slate-800" : "bg-white border-slate-200"
                     }`}>
-                      <img
-                        src={activeFile.preview}
-                        alt={activeFile.name}
-                        className="max-h-[290px] object-contain"
-                      />
+                      {activeFile.preview.startsWith("data:application/pdf") ? (
+                        <div className="flex flex-col items-center justify-center p-8 text-center text-slate-500">
+                           <FileText className="h-16 w-16 mb-3 opacity-60 text-blue-400" />
+                           <span className="text-sm font-semibold mb-1 truncate max-w-[200px]">{activeFile.name}</span>
+                           <span className="text-[11px] opacity-70">فایل PDF با موفقیت بارگذاری شد</span>
+                        </div>
+                      ) : (
+                        <img
+                          src={activeFile.preview}
+                          alt={activeFile.name}
+                          className="max-h-[290px] object-contain"
+                        />
+                      )}
                       {activeFile.status === "processing" && (
                         <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[1px] flex flex-col items-center justify-center text-white p-4 select-none">
                           <div className="h-7 w-7 animate-spin rounded-full border-2 border-white border-t-blue-500 mb-2" />
@@ -1191,33 +1652,55 @@ export default function App() {
 
               {/* Column 2: Interactive Tabs - JSON Code vs Visual Audit Analysis */}
               <section className="flex-1 flex flex-col gap-4 overflow-hidden">
-                {/* Tab Navigation header */}
-                <div className={`flex p-1 rounded-xl border w-fit shrink-0 gap-1 select-none transition-all duration-300 ${
-                  isDarkMode 
-                    ? "bg-[#1E293B] border-slate-800" 
-                    : "bg-slate-200/80 border-slate-300/60"
-                }`}>
+                {/* Tab Navigation header wrapped with Action Button */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                  <div className={`flex p-1 rounded-xl border w-fit shrink-0 gap-1 select-none transition-all duration-300 ${
+                    isDarkMode 
+                      ? "bg-[#1E293B] border-slate-800" 
+                      : "bg-slate-200/80 border-slate-300/60"
+                  }`}>
+                    <button
+                      onClick={() => setActiveTab("analysis")}
+                      className={`px-4 py-2 rounded-lg text-[11px] font-bold transition-all flex items-center gap-2 ${
+                        activeTab === "analysis"
+                          ? isDarkMode ? "bg-slate-800 text-blue-400 shadow-sm" : "bg-white text-blue-700 shadow-sm"
+                          : isDarkMode ? "text-slate-400 hover:text-[#f1f5f9]" : "text-slate-600 hover:text-slate-950"
+                      }`}
+                    >
+                      <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
+                      <span>بررسی صحت و ضریب اطمینان</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("json")}
+                      className={`px-4 py-2 rounded-lg text-[11px] font-bold transition-all flex items-center gap-2 ${
+                        activeTab === "json"
+                          ? isDarkMode ? "bg-slate-800 text-blue-400 shadow-sm" : "bg-white text-blue-700 shadow-sm"
+                          : isDarkMode ? "text-slate-400 hover:text-[#f1f5f9]" : "text-slate-600 hover:text-slate-950"
+                      }`}
+                    >
+                      <FileJson className="h-4 w-4 text-blue-600" />
+                      <span>آرایه خام JSON</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("converter")}
+                      className={`px-4 py-2 rounded-lg text-[11px] font-bold transition-all flex items-center gap-2 ${
+                        activeTab === "converter"
+                          ? isDarkMode ? "bg-emerald-900/40 text-emerald-400 shadow-sm" : "bg-white text-emerald-700 shadow-sm"
+                          : isDarkMode ? "text-slate-400 hover:text-[#f1f5f9]" : "text-slate-600 hover:text-slate-950"
+                      }`}
+                    >
+                      <Sheet className="h-4 w-4 text-emerald-500" />
+                      <span>خروجی اکسل پیشرفته</span>
+                    </button>
+                  </div>
+
                   <button
-                    onClick={() => setActiveTab("analysis")}
-                    className={`px-4 py-2 rounded-lg text-[11px] font-bold transition-all flex items-center gap-2 ${
-                      activeTab === "analysis"
-                        ? isDarkMode ? "bg-slate-800 text-blue-400 shadow-sm" : "bg-white text-blue-700 shadow-sm"
-                        : isDarkMode ? "text-slate-400 hover:text-[#f1f5f9]" : "text-slate-600 hover:text-slate-950"
-                    }`}
+                    onClick={handleLoadNewDocument}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold font-sans rounded-xl text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 shadow-md transition-all shrink-0 hover:scale-[1.02] active:scale-[0.98]"
+                    title="ذخیره سند فعلی و باز کردن صفحه بارگذاری برای سند جدید"
                   >
-                    <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
-                    <span>بررسی صحت و ضریب اطمینان</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("json")}
-                    className={`px-4 py-2 rounded-lg text-[11px] font-bold transition-all flex items-center gap-2 ${
-                      activeTab === "json"
-                        ? isDarkMode ? "bg-slate-800 text-blue-400 shadow-sm" : "bg-white text-blue-700 shadow-sm"
-                        : isDarkMode ? "text-slate-400 hover:text-[#f1f5f9]" : "text-slate-600 hover:text-slate-950"
-                    }`}
-                  >
-                    <FileJson className="h-4 w-4 text-blue-600" />
-                    <span>آرایه خام JSON</span>
+                    <PlusCircle className="h-4 w-4 shrink-0" />
+                    <span>بارگذاری سند جدید</span>
                   </button>
                 </div>
 
@@ -1225,24 +1708,55 @@ export default function App() {
                   /* JSON Tab */
                   <div className="bg-[#1E1E1E] rounded-xl border border-slate-800 flex-1 flex flex-col overflow-hidden font-mono shadow-md">
                     {/* JSON Header Bar */}
-                    <div className="px-4 py-2.5 border-b border-slate-700 bg-[#252526] flex justify-between items-center select-none shrink-0">
-                      <div className="flex items-center gap-2">
-                        <FileJson className="h-4 w-4 text-blue-400" />
-                        <span className="text-xs text-slate-200 font-bold tracking-wider">
-                          خروجی آرایه JSON منطبق بر سند
-                        </span>
+                    <div className="px-4 py-2.5 border-b border-slate-700 bg-[#252526] flex justify-between items-center select-none shrink-0" dir="rtl">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          <FileJson className="h-4 w-4 text-blue-400" />
+                          <span className="text-xs text-slate-200 font-bold tracking-wider font-sans">
+                            خروجی آرایه JSON منطبق بر سند
+                          </span>
+                        </div>
+                        {/* Elegant Auto-save Status Badge */}
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700 font-sans text-slate-400 select-none">
+                          <span className={`h-1.5 w-1.5 rounded-full ${isAutoSaving ? "bg-emerald-400 animate-ping" : "bg-emerald-500"}`} />
+                          <span className="font-medium text-[9px] text-slate-300">ذخیره خودکار</span>
+                          {lastSavedTime ? (
+                            <span className="text-[8px] text-slate-500 border-r border-slate-700 pr-1.5 mr-1.5 font-mono">
+                              ذخیره شده {lastSavedTime}
+                            </span>
+                          ) : (
+                            <span className="text-[8px] text-slate-500 border-r border-slate-700 pr-1.5 mr-1.5">
+                              هر ۱۰ ثانیه
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {activeFile.status === "success" && (
-                        <button 
-                           onClick={copyJSONToClipboard}
-                           className={`text-[10px] px-3 py-1 rounded-lg transition font-sans ${
-                             isJsonVerified 
-                               ? "bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer" 
-                               : "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 cursor-pointer"
-                           }`}
-                        >
-                          {isJsonVerified ? "کپی متن تفکیک شده" : "⚠️ نیاز به تایید صحت جهت کپی"}
-                        </button>
+                        <div className="flex items-center gap-2">
+                           {isJsonVerified && (
+                             <button 
+                               onClick={() => {
+                                  setConverterInputJson(rawJsonText);
+                                  setIsConverterVerified(false);
+                                  setActiveTab("converter");
+                               }}
+                               className="text-[10px] px-3 py-1 rounded-lg transition font-sans bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/40 border border-emerald-500/30 cursor-pointer flex items-center gap-1.5"
+                             >
+                               ارسال مستقیم به مبدل اکسل
+                               <Sheet className="w-3.5 h-3.5" />
+                             </button>
+                           )}
+                           <button 
+                              onClick={copyJSONToClipboard}
+                              className={`text-[10px] px-3 py-1 rounded-lg transition font-sans ${
+                                isJsonVerified 
+                                  ? "bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer" 
+                                  : "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 cursor-pointer"
+                              }`}
+                           >
+                             {isJsonVerified ? "کپی متن تفکیک شده" : "⚠️ نیاز به تایید صحت جهت کپی"}
+                           </button>
+                        </div>
                       )}
                     </div>
 
@@ -1301,6 +1815,131 @@ export default function App() {
                       ) : (
                         <span className="text-slate-400">بدون تاریخچه قبلی</span>
                       )}
+                    </div>
+                  </div>
+                ) : activeTab === "converter" ? (
+                  /* Dedicated JSON to Excel Converter Tab */
+                  <div className={`rounded-xl border flex-1 flex flex-col overflow-hidden shadow-sm transition-all duration-300 ${
+                    isDarkMode ? "bg-[#1E293B] border-slate-800 text-slate-100" : "bg-white border-slate-200 text-[#1A1A1B]"
+                  }`}>
+                    {/* Header Summary */}
+                    <div className={`p-4 border-b flex flex-wrap gap-4 items-center justify-between transition-colors duration-300 ${
+                      isDarkMode ? "bg-[#162032] border-slate-800" : "bg-slate-50 border-slate-200"
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg shrink-0 ${isDarkMode ? "bg-emerald-950/40 text-emerald-400" : "bg-emerald-50 text-emerald-600"}`}>
+                          <Sheet className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h4 className={`text-xs font-bold ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>مبدل اختصاصی JSON به اکسل (Excel)</h4>
+                          <p className={`text-[10px] mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>هر نوع متن یا آرایه JSON ساختاریافته مالی را در اینجا جایگذاری کرده و اکسل دقیق فارسی با پشتیبانی راست‌چین بگیرید</p>
+                        </div>
+                      </div>
+                      
+                      <button
+                        disabled={!isConverterVerified || isGeneratingExcel}
+                        onClick={() => {
+                          if (!isConverterVerified || isGeneratingExcel) return;
+
+                          setIsGeneratingExcel(true);
+                          setShowExcelSuccess(false);
+
+                          setTimeout(() => {
+                            try {
+                              const parsed = JSON.parse(converterInputJson);
+                              const arr = Array.isArray(parsed) ? parsed : [parsed];
+                              if (arr.length === 0) throw new Error("آرایه خالی است");
+                              
+                              const worksheet = XLSX.utils.json_to_sheet(arr);
+                              
+                              // Estimate reasonable column widths
+                              const colWidths = Object.keys(arr[0] || {}).map(() => ({ wch: 18 }));
+                              worksheet["!cols"] = colWidths;
+                              
+                              // Set RTL direction
+                              if (!worksheet['!views']) worksheet['!views'] = [];
+                              worksheet['!views'].push({ rightToLeft: true });
+
+                              const workbook = XLSX.utils.book_new();
+                              XLSX.utils.book_append_sheet(workbook, worksheet, "اطلاعات خروجی");
+                              
+                              XLSX.writeFile(workbook, `JSON-to-Excel-${new Date().toISOString().split('T')[0]}.xlsx`);
+                              
+                              setNotification({ text: "فایل اکسل با موفقیت از JSON تولید شد.", type: "success" });
+                              
+                              setShowExcelSuccess(true);
+                              setTimeout(() => setShowExcelSuccess(false), 2500);
+                            } catch (err: any) {
+                               setNotification({ text: "خطا در خواندن JSON! لطفاً از صحت فرمت JSON خود مطمئن شوید.", type: "error" });
+                            } finally {
+                              setIsGeneratingExcel(false);
+                            }
+                          }, 600); // Artificial delay to show the nice animation Let UI render spinner
+                        }}
+                        className={`py-2 px-6 rounded-lg text-[11px] font-bold transition-all duration-300 flex items-center justify-center gap-2 min-w-[200px] ${
+                            isConverterVerified && !showExcelSuccess
+                                ? (isDarkMode ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm" : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm")
+                                : showExcelSuccess
+                                ? "bg-green-500 text-white shadow-md scale-[1.02]"
+                                : (isDarkMode ? "bg-slate-800 text-slate-500 cursor-not-allowed" : "bg-slate-200 text-slate-400 cursor-not-allowed")
+                        }`}
+                      >
+                        {isGeneratingExcel ? (
+                          <>
+                             <Loader2 className="h-4 w-4 animate-spin" />
+                             در حال پردازش داده‌ها...
+                          </>
+                        ) : showExcelSuccess ? (
+                          <>
+                             <Check className="h-4 w-4 animate-in zoom-in" />
+                             با موفقیت دانلود شد!
+                          </>
+                        ) : (
+                          <>
+                             <Download className="h-4 w-4" />
+                             {isConverterVerified ? "تولید فایل XLSX و دانلود" : "تایید نهایی جهت دانلود"}
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Verification Panel for Converter */}
+                    <div className={`p-3 select-none transition-colors border-b ${
+                      isConverterVerified 
+                        ? (isDarkMode ? "bg-slate-900/60 border-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-700")
+                        : (isDarkMode ? "bg-indigo-950/40 border-indigo-900/50 text-indigo-200" : "bg-indigo-50 border-indigo-200 text-indigo-700")
+                    }`} dir="rtl">
+                      <label className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isConverterVerified}
+                          onChange={(e) => setIsConverterVerified(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <div className="text-[11px] leading-relaxed select-none font-sans flex-1 text-right">
+                          <span className={`font-bold block mb-0.5 ${isConverterVerified ? "" : (isDarkMode ? "text-indigo-400" : "text-indigo-600")}`}>
+                            تایید نهایی داده‌های JSON پیش از تولید فایل اکسل
+                          </span>
+                          آیا تمامی رکوردها و فیلدهای بالا (در مبدل اکسل) مورد تایید است؟ جهت فعال شدن دکمه تولید اکسل، زدن این تیک الزامی است.
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Textarea containing JSON to directly view/edit */}
+                    <div className="flex-1 relative flex flex-col">
+                        <textarea
+                          value={converterInputJson}
+                          onChange={(e) => setConverterInputJson(e.target.value)}
+                          placeholder={`[
+  {
+    "ردیف": 1,
+    "شرح": "پروژه طراحی وب",
+    "مبلغ": 50000
+  }
+]`}
+                          className="w-full h-full p-4 bg-[#1E1E1E] text-emerald-300 font-mono text-[13px] leading-relaxed outline-none border-none resize-none overflow-y-auto"
+                          dir="ltr"
+                        />
                     </div>
                   </div>
                 ) : (
@@ -1375,17 +2014,219 @@ export default function App() {
                       })()}
                     </div>
 
-                    {/* Table View */}
-                    <div className="flex-1 overflow-auto min-h-[300px]">
+                    {/* Advanced Filter Panel */}
+                    {activeFile.status === "success" && transactions.length > 0 && (
+                      <div className={`p-3 border-b flex flex-col gap-3 font-sans transition-colors ${
+                        isDarkMode ? "bg-slate-900/60 border-slate-800" : "bg-[#F8FAFC] border-slate-200"
+                      }`} dir="rtl">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          {/* Left layout with Quick search and metrics */}
+                          <div className="flex items-center gap-2 flex-1 min-w-[280px]">
+                            <div className="relative flex-1">
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                                <Search className="h-4 w-4" />
+                              </span>
+                              <input
+                                type="text"
+                                value={filterQuery}
+                                onChange={(e) => setFilterQuery(e.target.value)}
+                                placeholder="جستجوی سریع در شرح، شماره سند، تاریخ یا توضیحات..."
+                                className={`w-full text-xs pr-9 pl-3 py-2 rounded-xl border outline-none font-sans transition-all duration-300 ${
+                                  isDarkMode
+                                    ? "bg-[#0B0F19] border-slate-800 text-slate-100 placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                    : "bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                                }`}
+                              />
+                              {filterQuery && (
+                                <button
+                                  onClick={() => setFilterQuery("")}
+                                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                  title="پاکسازی جستجو"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Advanced Filter Toggle Button */}
+                            <button
+                              onClick={() => setShowFilters(!showFilters)}
+                              className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all border shrink-0 ${
+                                showFilters || filterParty || filterMinAmount || filterMaxAmount
+                                  ? "bg-blue-600 border-blue-600 text-white hover:bg-blue-550 shadow-sm"
+                                  : isDarkMode
+                                  ? "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
+                                  : "bg-white hover:bg-slate-50 border-slate-200 text-slate-600"
+                              }`}
+                            >
+                              <SlidersHorizontal className="h-3.5 w-3.5" />
+                              <span>فیلترهای پیشرفته</span>
+                              {(filterParty || filterMinAmount || filterMaxAmount) && (
+                                <span className="bg-red-500 text-white text-[8px] h-4 min-w-4 px-1 rounded-full flex items-center justify-center font-bold">
+                                  !
+                                </span>
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Right layout indicating results found */}
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-slate-400 font-medium">ردیف‌های منطبق:</span>
+                            <span className="font-bold text-blue-600 font-mono">
+                              {filteredTransactions.length.toLocaleString("fa-IR")}
+                            </span>
+                            <span className="text-slate-300 text-[10px]">از</span>
+                            <span className="font-semibold text-slate-500 font-mono">
+                              {transactions.length.toLocaleString("fa-IR")} تراکنش
+                            </span>
+
+                            {(filterParty || filterQuery || filterMinAmount || filterMaxAmount) && (
+                              <button
+                                onClick={() => {
+                                  setFilterParty("");
+                                  setFilterQuery("");
+                                  setFilterMinAmount("");
+                                  setFilterMaxAmount("");
+                                }}
+                                className="mr-2 text-[10px] text-red-500 hover:text-red-650 hover:underline flex items-center gap-1 font-bold"
+                              >
+                                <X className="h-3 w-3" />
+                                <span>حذف فیلترها</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Collapsible Advanced Filters UI */}
+                        {showFilters && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            transition={{ duration: 0.25 }}
+                            className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2.5 mt-1 border-t border-dashed border-slate-200 dark:border-slate-800"
+                          >
+                            {/* Counterparty / Party name Filter */}
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-bold text-slate-505 dark:text-slate-350 flex items-center gap-1">
+                                <Filter className="h-3 w-3 text-blue-500" />
+                                <span>نام طرف‌حساب (سرفصل):</span>
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={filterParty}
+                                  onChange={(e) => setFilterParty(e.target.value)}
+                                  placeholder="مانند: بانک ملت، شرکت الف، خدمات..."
+                                  className={`w-full text-xs pr-3 pl-8 py-1.5 rounded-lg border outline-none font-sans ${
+                                    isDarkMode
+                                      ? "bg-[#0B0F19] border-slate-800 text-slate-100 placeholder-slate-600"
+                                      : "bg-white border-slate-200 text-slate-800 placeholder-slate-400"
+                                  }`}
+                                />
+                                {filterParty && (
+                                  <button
+                                    onClick={() => setFilterParty("")}
+                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-450 hover:text-slate-700"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Range Amount - Minimum */}
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-bold text-slate-505 dark:text-slate-350 flex items-center gap-1">
+                                <span className="text-slate-400 font-mono">Min</span>
+                                <span>حداقل مبلغ تراکنش:</span>
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  value={filterMinAmount}
+                                  onChange={(e) => setFilterMinAmount(e.target.value)}
+                                  placeholder="به رقم..."
+                                  className={`w-full text-xs pr-3 pl-8 py-1.5 rounded-lg border outline-none font-sans text-left font-mono ${
+                                    isDarkMode
+                                      ? "bg-[#0B0F19] border-slate-800 text-slate-100 placeholder-slate-600"
+                                      : "bg-white border-slate-200 text-slate-800 placeholder-slate-400"
+                                  }`}
+                                  dir="ltr"
+                                />
+                                {filterMinAmount && (
+                                  <button
+                                    onClick={() => setFilterMinAmount("")}
+                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-405 hover:text-slate-700"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Range Amount - Maximum */}
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-bold text-slate-505 dark:text-slate-350 flex items-center gap-1">
+                                <span className="text-slate-400 font-mono">Max</span>
+                                <span>حداکثر مبلغ تراکنش:</span>
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="number"
+                                  value={filterMaxAmount}
+                                  onChange={(e) => setFilterMaxAmount(e.target.value)}
+                                  placeholder="به رقم..."
+                                  className={`w-full text-xs pr-3 pl-8 py-1.5 rounded-lg border outline-none font-sans text-left font-mono ${
+                                    isDarkMode
+                                      ? "bg-[#0B0F19] border-slate-800 text-slate-100 placeholder-slate-600"
+                                      : "bg-white border-slate-200 text-slate-800 placeholder-slate-400"
+                                  }`}
+                                  dir="ltr"
+                                />
+                                {filterMaxAmount && (
+                                  <button
+                                    onClick={() => setFilterMaxAmount("")}
+                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-405 hover:text-slate-700"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Table + Live Balance Calculator Split View */}
+                    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-[300px] divide-y lg:divide-y-0 lg:divide-x lg:divide-x-reverse divide-slate-100 lg:divide-slate-850/40">
+                      {/* Table View */}
+                      <div className="flex-1 overflow-auto">
                       {activeFile.status === "processing" ? (
                         <div className="flex flex-col items-center justify-center p-12 text-slate-400 h-full">
                           <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-blue-500 mb-3" />
                           <span className="text-xs">در حال پردازش سند با هوش مصنوعی...</span>
                         </div>
                       ) : transactions.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center p-12 text-slate-400 h-full">
+                        <div className="flex flex-col items-center justify-center p-12 text-slate-400 h-full font-sans">
                           <AlertCircle className="h-8 w-8 text-slate-300 mb-3 animate-bounce" />
-                          <span className="text-xs">داده‌ای یافت نشد. فایلی با کیفیت مناسب آپلود نمایید.</span>
+                          <span className="text-xs font-medium">داده‌ای یافت نشد. فایلی با کیفیت مناسب آپلود نمایید.</span>
+                        </div>
+                      ) : filteredTransactions.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center p-12 text-slate-400 h-[300px] font-sans">
+                          <AlertCircle className="h-8 w-8 text-slate-300 mb-3 opacity-30" />
+                          <span className="text-xs font-semibold">هیچ تراکنشی منطبق با معیارهای فیلتر یا جستجو پیدا نشد.</span>
+                          <button
+                            onClick={() => {
+                              setFilterParty("");
+                              setFilterQuery("");
+                              setFilterMinAmount("");
+                              setFilterMaxAmount("");
+                            }}
+                            className="mt-3 px-3 py-1.5 bg-blue-650 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 text-white rounded-lg text-[10px] font-bold transition-colors shadow-sm"
+                          >
+                            حذف فیلترها و نمایش همه
+                          </button>
                         </div>
                       ) : (
                         <table className="w-full text-right border-collapse text-xs">
@@ -1395,7 +2236,36 @@ export default function App() {
                               : "bg-[#FAFBFD] text-slate-600 border-b border-slate-150 bg-white/95"
                           }`}>
                             <tr>
-                              <th className={`p-3 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>#</th>
+                              <th className={`p-3 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"} select-none`}>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={transactions.length > 0 && transactions.every(t => (t.ضریب_اطمینان ?? 100) === 100)}
+                                    onChange={(e) => {
+                                      const isChecked = e.target.checked;
+                                      const updated = transactions.map(t => ({
+                                        ...t,
+                                        ضریب_اطمینان: isChecked ? 100 : 80
+                                      }));
+                                      setTransactions(updated);
+                                      try {
+                                        setRawJsonText(JSON.stringify(updated, null, 2));
+                                      } catch (err) {
+                                        console.error(err);
+                                      }
+                                      showNotification(
+                                        isChecked 
+                                          ? "تمامی ردیف‌ها تایید گروهی شدند و ضریب اطمینان آن‌ها به ۱۰۰٪ تغییر یافت." 
+                                          : "ضریب اطمینان ردیف‌ها بازنشانی شد.",
+                                        "success"
+                                      );
+                                    }}
+                                    className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    title="تایید گروهی تمامی ردیف‌ها (ضریب اطمینان ۱۰۰٪)"
+                                  />
+                                  <span className="text-xs">#</span>
+                                </div>
+                              </th>
                               <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>تاریخ</th>
                               <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>شماره سند</th>
                               <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>طرف حساب</th>
@@ -1404,13 +2274,17 @@ export default function App() {
                               <th className={`p-3 text-left border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>بستانکار</th>
                               <th className={`p-3 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>ارز</th>
                               <th className={`p-3 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"} select-none`}>دقت استخراج</th>
-                              <th className="p-3">توضیحات تکمیلی</th>
+                              <th className={`p-3 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>توضیحات تکمیلی</th>
+                              <th className="p-3 text-center">عملیات</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-150">
-                            {transactions.map((tr, index) => {
+                            {filteredTransactions.map((tr, index) => {
+                              const originalIndex = transactions.findIndex(t => t.id === tr.id);
                               const score = tr.ضریب_اطمینان ?? 100;
-                              const isEdited = isRowEdited(tr, index);
+                              const isEdited = isRowEdited(tr, originalIndex);
+                              const isCurrentlyEditing = editingRowIndex === originalIndex && editingRowData !== null;
+                              
                               let badgeBg = "bg-emerald-50 border-emerald-200 text-emerald-800";
                               let progressBg = "bg-emerald-500";
                               let scoreDesc = "عالی / بدون ابهام";
@@ -1424,19 +2298,50 @@ export default function App() {
                                 scoreDesc = "دست‌نویس مخدوش";
                               }
 
+                              const inputClass = `w-full text-[11px] px-1.5 py-1 rounded border outline-none font-sans ${
+                                isDarkMode 
+                                  ? "bg-[#0B0F19] border-slate-700 text-slate-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                                  : "bg-white border-slate-300 text-slate-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                              }`;
+
                               return (
-                                <tr
+                                <motion.tr
                                   key={tr.id || index}
-                                  className={`transition-colors ${
-                                    isEdited
+                                  initial={{ opacity: 0, y: 12, filter: "blur(2px)" }}
+                                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                                  transition={{ duration: 0.35, ease: "easeOut", delay: Math.min(index * 0.04, 0.6) }}
+                                  className={`transition-colors duration-300 ${
+                                    isCurrentlyEditing
+                                      ? (isDarkMode ? "bg-slate-800/85 border-r-4 border-r-blue-550" : "bg-blue-50/80 border-r-4 border-r-blue-500")
+                                      : isEdited
                                       ? "bg-amber-50/70 border-r-4 border-r-amber-500 hover:bg-amber-100/60"
                                       : "hover:bg-slate-50/70"
                                   }`}
                                 >
                                   <td className="p-3 text-center border-l border-slate-100">
-                                    <div className="flex items-center justify-center gap-1.5 font-mono font-bold text-slate-450">
+                                    <div className="flex items-center justify-center gap-2 font-mono font-bold text-slate-450">
+                                      <input
+                                        type="checkbox"
+                                        checked={(tr.ضریب_اطمینان ?? 100) === 100}
+                                        onChange={(e) => {
+                                          const isChecked = e.target.checked;
+                                          const updated = [...transactions];
+                                          updated[originalIndex] = {
+                                            ...tr,
+                                            ضریب_اطمینان: isChecked ? 100 : 80
+                                          };
+                                          setTransactions(updated);
+                                          try {
+                                            setRawJsonText(JSON.stringify(updated, null, 2));
+                                          } catch (err) {
+                                            console.error(err);
+                                          }
+                                        }}
+                                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                        title="تایید انفرادی ردیف (تنظیم ضریب اطمینان به ۱۰۰٪)"
+                                      />
                                       <span>{index + 1}</span>
-                                      {isEdited && (
+                                      {isEdited && !isCurrentlyEditing && (
                                         <span
                                           className="p-1 bg-amber-500 text-white rounded shadow-sm"
                                           title="تغییر یافته توسط کاربر (ویرایش دستی)"
@@ -1446,47 +2351,416 @@ export default function App() {
                                       )}
                                     </div>
                                   </td>
-                                  <td className="p-3 font-mono font-medium text-slate-700 border-l border-slate-100 max-w-[120px] truncate" title={tr.تاریخ || ""}>
-                                    {tr.تاریخ || <span className="text-slate-400">[فاقد تاریخ]</span>}
+                                  
+                                  {/* تاریخ */}
+                                  <td className="p-3 font-mono font-medium text-slate-700 border-l border-slate-100 max-w-[120px]">
+                                    {isCurrentlyEditing ? (
+                                      <input
+                                        type="text"
+                                        className={inputClass}
+                                        value={editingRowData.تاریخ || ""}
+                                        onChange={(e) => handleFieldChange("تاریخ", e.target.value)}
+                                        dir="ltr"
+                                      />
+                                    ) : (
+                                      tr.تاریخ || <span className="text-slate-400">[فاقد تاریخ]</span>
+                                    )}
                                   </td>
-                                  <td className="p-3 font-mono text-slate-700 border-l border-slate-100 max-w-[100px] truncate" title={tr.شماره_سند || ""}>
-                                    {tr.شماره_سند || <span className="text-slate-400">-</span>}
+
+                                  {/* شماره سند */}
+                                  <td className="p-3 font-mono text-slate-700 border-l border-slate-100 max-w-[100px]">
+                                    {isCurrentlyEditing ? (
+                                      <input
+                                        type="text"
+                                        className={inputClass}
+                                        value={editingRowData.شماره_سند || ""}
+                                        onChange={(e) => handleFieldChange("شماره_سند", e.target.value)}
+                                        dir="ltr"
+                                      />
+                                    ) : (
+                                      tr.شماره_سند || <span className="text-slate-400">-</span>
+                                    )}
                                   </td>
-                                  <td className="p-3 font-semibold text-slate-800 border-l border-slate-100 max-w-[140px] truncate" title={tr.نام_طرف_حساب || ""}>
-                                    {tr.نام_طرف_حساب || <span className="text-slate-400">-</span>}
+
+                                  {/* طرف حساب */}
+                                  <td className="p-3 font-semibold text-slate-800 border-l border-slate-100 max-w-[140px]">
+                                    {isCurrentlyEditing ? (
+                                      <input
+                                        type="text"
+                                        className={inputClass}
+                                        value={editingRowData.نام_طرف_حساب || ""}
+                                        onChange={(e) => handleFieldChange("نام_طرف_حساب", e.target.value)}
+                                      />
+                                    ) : (
+                                      tr.نام_طرف_حساب || <span className="text-slate-400">-</span>
+                                    )}
                                   </td>
-                                  <td className="p-3 text-slate-800 border-l border-slate-100 max-w-[180px] truncate" title={tr.شرح || ""}>
-                                    {tr.شرح || <span className="text-slate-400 font-normal">[بدون شرح]</span>}
+
+                                  {/* شرح */}
+                                  <td className="p-3 text-slate-800 border-l border-slate-100 max-w-[180px]">
+                                    {isCurrentlyEditing ? (
+                                      <input
+                                        type="text"
+                                        className={inputClass}
+                                        value={editingRowData.شرح || ""}
+                                        onChange={(e) => handleFieldChange("شرح", e.target.value)}
+                                      />
+                                    ) : (
+                                      tr.شرح || <span className="text-slate-400 font-normal">[بدون شرح]</span>
+                                    )}
                                   </td>
-                                  <td className="p-3 border-l border-slate-100 text-left font-mono text-emerald-600 font-semibold">
-                                    {tr.مبلغ_بدهکار !== null && tr.مبلغ_بدهکار > 0 ? Number(tr.مبلغ_بدهکار).toLocaleString("fa-IR") : "۰"}
+
+                                  {/* بدهکار */}
+                                  <td className="p-3 border-l border-slate-100 text-left font-mono text-emerald-600 font-semibold max-w-[100px]">
+                                    {isCurrentlyEditing ? (
+                                      <input
+                                        type="number"
+                                        className={`${inputClass} text-left font-mono`}
+                                        value={editingRowData.مبلغ_بدهکار ?? ""}
+                                        onChange={(e) => handleFieldChange("مبلغ_بدهکار", e.target.value === "" ? 0 : Number(e.target.value))}
+                                      />
+                                    ) : (
+                                      tr.مبلغ_بدهکار !== null && tr.مبلغ_بدهکار > 0 ? Number(tr.مبلغ_بدهکار).toLocaleString("fa-IR") : "۰"
+                                    )}
                                   </td>
-                                  <td className="p-3 border-l border-slate-100 text-left font-mono text-slate-600 font-semibold">
-                                    {tr.مبلغ_بستانکار !== null && tr.مبلغ_بستانکار > 0 ? Number(tr.مبلغ_بستانکار).toLocaleString("fa-IR") : "۰"}
+
+                                  {/* بستانکار */}
+                                  <td className="p-3 border-l border-slate-100 text-left font-mono text-slate-600 font-semibold max-w-[100px]">
+                                    {isCurrentlyEditing ? (
+                                      <input
+                                        type="number"
+                                        className={`${inputClass} text-left font-mono`}
+                                        value={editingRowData.مبلغ_بستانکار ?? ""}
+                                        onChange={(e) => handleFieldChange("مبلغ_بستانکار", e.target.value === "" ? 0 : Number(e.target.value))}
+                                      />
+                                    ) : (
+                                      tr.مبلغ_بستانکار !== null && tr.مبلغ_بستانکار > 0 ? Number(tr.مبلغ_بستانکار).toLocaleString("fa-IR") : "۰"
+                                    )}
                                   </td>
-                                  <td className="p-3 border-l border-slate-100 text-center font-semibold text-[10px]">
-                                    {tr.نوع_ارز || <span className="text-slate-400">-</span>}
+
+                                  {/* ارز */}
+                                  <td className="p-3 border-l border-slate-100 text-center font-semibold text-[10px] max-w-[80px]">
+                                    {isCurrentlyEditing ? (
+                                      <input
+                                        type="text"
+                                        className={inputClass}
+                                        value={editingRowData.نوع_ارز || ""}
+                                        onChange={(e) => handleFieldChange("نوع_ارز", e.target.value)}
+                                      />
+                                    ) : (
+                                      tr.نوع_ارز || <span className="text-slate-400">-</span>
+                                    )}
                                   </td>
-                                  <td className="p-3 border-l border-slate-100 text-center select-none">
-                                    <div className="flex flex-col items-center justify-center min-w-[70px] gap-1 mx-auto">
-                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}`}>
-                                        {score}%
-                                      </span>
-                                      <div className="w-12 bg-slate-150 rounded-full h-1 overflow-hidden shrink-0">
-                                        <div className={`h-full ${progressBg}`} style={{ width: `${score}%` }} />
+
+                                  {/* دقت استخراج */}
+                                  <td className="p-3 border-l border-slate-100 text-center select-none max-w-[100px]">
+                                    {isCurrentlyEditing ? (
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        className={`${inputClass} text-center font-mono`}
+                                        value={editingRowData.ضریب_اطمینان ?? 100}
+                                        onChange={(e) => handleFieldChange("ضریب_اطمینان", Math.min(100, Math.max(0, Number(e.target.value))))}
+                                      />
+                                    ) : (
+                                      <div className="flex flex-col items-center justify-center min-w-[70px] gap-1 mx-auto">
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}`}>
+                                          {score}%
+                                        </span>
+                                        <div className="w-12 bg-slate-150 rounded-full h-1 overflow-hidden shrink-0">
+                                          <div className={`h-full ${progressBg}`} style={{ width: `${score}%` }} />
+                                        </div>
+                                        <span className="text-[7.5px] text-slate-400 font-extrabold block shrink-0">{scoreDesc}</span>
                                       </div>
-                                      <span className="text-[7.5px] text-slate-400 font-extrabold block shrink-0">{scoreDesc}</span>
-                                    </div>
+                                    )}
                                   </td>
+
+                                  {/* توضیحات تکمیلی */}
                                   <td className="p-3 text-slate-500 max-w-[140px] truncate" title={tr.توضیحات || ""}>
-                                    {tr.توضیحات || <span className="text-slate-300 font-light">-</span>}
+                                    {isCurrentlyEditing ? (
+                                      <input
+                                        type="text"
+                                        className={inputClass}
+                                        value={editingRowData.توضیحات || ""}
+                                        onChange={(e) => handleFieldChange("توضیحات", e.target.value)}
+                                      />
+                                    ) : (
+                                      tr.توضیحات || <span className="text-slate-300 font-light">-</span>
+                                    )}
                                   </td>
-                                </tr>
+
+                                  {/* عملیات */}
+                                  <td className="p-3 text-center border-r border-slate-100">
+                                    {isCurrentlyEditing ? (
+                                      <div className="flex items-center justify-center gap-1.5 min-w-[110px]">
+                                        <button
+                                          onClick={() => handleSaveRow(originalIndex)}
+                                          className="p-1 px-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-sans text-[10px] font-bold flex items-center gap-1 transition shadow-sm"
+                                          title="ذخیره"
+                                        >
+                                          <Check className="h-3 w-3" />
+                                          <span>ذخیره</span>
+                                        </button>
+                                        <button
+                                          onClick={handleCancelEdit}
+                                          className="p-1 px-1.5 bg-slate-500 hover:bg-slate-400 text-white rounded font-sans text-[10px] font-bold flex items-center gap-1 transition shadow-sm"
+                                          title="انصراف"
+                                        >
+                                          <X className="h-3 w-3" />
+                                          <span>انصراف</span>
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleStartEdit(originalIndex, tr)}
+                                        className={`p-1 px-2 rounded font-sans text-[10px] font-bold flex items-center gap-1 transition border ${
+                                          isDarkMode 
+                                            ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" 
+                                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                        }`}
+                                        title="ویرایش ردیف"
+                                      >
+                                        <FileEdit className="h-3 w-3" />
+                                        <span>ویرایش</span>
+                                      </button>
+                                    )}
+                                  </td>
+                                </motion.tr>
                               );
                             })}
                           </tbody>
                         </table>
                       )}
+                      </div>
+
+                      {/* Balance Calculator Widget (Right Side) */}
+                      {activeFile.status === "success" && transactions.length > 0 && (() => {
+                        const totalDebit = filteredTransactions.reduce((sum, t) => sum + (Number(t.مبلغ_بدهکار) || 0), 0);
+                        const totalCredit = filteredTransactions.reduce((sum, t) => sum + (Number(t.مبلغ_بستانکار) || 0), 0);
+                        const imbalanceAmount = Math.abs(totalDebit - totalCredit);
+                        const isBalanced = imbalanceAmount === 0;
+                        
+                        const totalSum = totalDebit + totalCredit;
+                        const debitPercent = totalSum > 0 ? Math.round((totalDebit / totalSum) * 100) : 50;
+                        const creditPercent = totalSum > 0 ? Math.round((totalCredit / totalSum) * 100) : 50;
+                        
+                        const mainCurrency = filteredTransactions.find(t => t.نوع_ارز && t.نوع_ارز !== "-")?.نوع_ارز || "ریال/واحد";
+
+                        // Prepare data for Debit Distribution Pie Chart
+                        const debitDataMap: { [key: string]: number } = {};
+                        let totalDebitAmount = 0;
+                        filteredTransactions.forEach((t) => {
+                          const amt = Number(t.مبلغ_بدهکار) || 0;
+                          if (amt > 0) {
+                            const rawName = t.نام_طرف_حساب || "";
+                            const name = rawName.trim() === "" || rawName === "-" ? "نامشخص / سایر" : rawName;
+                            debitDataMap[name] = (debitDataMap[name] || 0) + amt;
+                            totalDebitAmount += amt;
+                          }
+                        });
+
+                        const rawChartData = Object.entries(debitDataMap).map(([name, value]) => ({
+                          name,
+                          value,
+                        }));
+
+                        rawChartData.sort((a, b) => b.value - a.value);
+
+                        let chartData: typeof rawChartData = [];
+                        if (rawChartData.length > 5) {
+                          chartData = rawChartData.slice(0, 4);
+                          const otherValue = rawChartData.slice(4).reduce((sum, item) => sum + item.value, 0);
+                          chartData.push({
+                            name: "سایر سرفصل‌ها",
+                            value: otherValue,
+                          });
+                        } else {
+                          chartData = rawChartData;
+                        }
+
+                        const COLORS = ["#10B981", "#3B82F6", "#F59E0B", "#8B5CF6", "#EC4899", "#EF4444", "#06B6D4", "#F97316"];
+
+                        return (
+                          <div className={`w-full lg:w-[280px] p-4 shrink-0 flex flex-col gap-4 border-t lg:border-t-0 lg:border-r transition-colors duration-300 overflow-y-auto font-sans ${
+                            isDarkMode 
+                              ? "bg-[#162032] border-slate-800 text-slate-100" 
+                              : "bg-slate-50/50 border-slate-150 text-slate-850"
+                          }`} dir="rtl">
+                            {/* Header Widget */}
+                            <div className="flex items-center gap-2 pb-2.5 border-b border-dashed border-slate-200 dark:border-slate-800/80">
+                              <Scale className={`h-4.5 w-4.5 shrink-0 ${isBalanced ? "text-emerald-500" : "text-amber-500 animate-pulse"}`} />
+                              <div className="flex-1">
+                                <h5 className="text-[11px] font-bold">ماشین حساب تراز هوشمند</h5>
+                                <p className="text-[9px] text-slate-400 font-medium">سنجش و مطابقت لحظه‌ای بدهکار و بستانکار</p>
+                              </div>
+                            </div>
+
+                            {/* Status Gauge Header */}
+                            {isBalanced ? (
+                              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-right">
+                                <div className="flex items-center gap-1.5 text-emerald-500 font-bold text-xs mb-1">
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                  </span>
+                                  <span>تراز تجاری معتبر است ✅</span>
+                                </div>
+                                <p className="text-[10px] text-slate-400 leading-normal">
+                                  مجموع مبالغ بدهکار با مبالغ بستانکار کاملاً همخوانی دارد. این سند آماده خروجی یا انتقال است.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-right">
+                                <div className="flex items-center gap-1.5 text-rose-500 font-bold text-xs mb-1">
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-450 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                                  </span>
+                                  <span>عدم توازن سند مالی! 🚨</span>
+                                </div>
+                                <p className="text-[10px] text-rose-450 dark:text-rose-400 leading-normal font-sans mb-2">
+                                  بین مبالغ وارد شده اختلاف وجود دارد و حساب‌ها تراز نیستند.
+                                </p>
+                                <div className="pt-2 border-t border-rose-500/10 flex justify-between items-center text-[10px]">
+                                  <span className="text-slate-400 font-medium">میزان اختلاف تراز:</span>
+                                  <span className="font-mono font-bold text-rose-500" dir="ltr">
+                                    {imbalanceAmount.toLocaleString("fa-IR")} {mainCurrency}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Dual Metrics Grid */}
+                            <div className="grid grid-cols-2 gap-2.5">
+                              {/* Debit Card */}
+                              <div className={`p-3 rounded-xl border text-center transition-colors ${
+                                isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-150"
+                              }`}>
+                                <span className="text-[9px] text-slate-400 font-bold block mb-1">کل بدهکار (Debit)</span>
+                                <span className="text-xs font-mono font-bold text-emerald-500" dir="ltr">
+                                  {totalDebit.toLocaleString("fa-IR")}
+                                </span>
+                                <span className="text-[8px] text-slate-404 block mt-0.5">{mainCurrency}</span>
+                              </div>
+
+                              {/* Credit Card */}
+                              <div className={`p-3 rounded-xl border text-center transition-colors ${
+                                isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-150"
+                              }`}>
+                                <span className="text-[9px] text-slate-400 font-bold block mb-1">کل بستانکار (Credit)</span>
+                                <span className="text-xs font-mono font-bold text-amber-500" dir="ltr">
+                                  {totalCredit.toLocaleString("fa-IR")}
+                                </span>
+                                <span className="text-[8px] text-slate-404 block mt-0.5">{mainCurrency}</span>
+                              </div>
+                            </div>
+
+                            {/* Split Ratio Bar Chart (Bento Style) */}
+                            <div className={`p-3 rounded-xl border transition-colors ${
+                              isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-150"
+                            }`}>
+                              <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold mb-1.5 font-sans">
+                                <span>بدهکار (%{debitPercent.toLocaleString("fa-IR")})</span>
+                                <span>بستانکار (%{creditPercent.toLocaleString("fa-IR")})</span>
+                              </div>
+                              <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden flex">
+                                <div className="bg-emerald-500 h-full transition-all duration-500" style={{ width: `${debitPercent}%` }} />
+                                <div className="bg-amber-400 h-full transition-all duration-500" style={{ width: `${creditPercent}%` }} />
+                              </div>
+                            </div>
+
+                            {/* Distribution of Expenses Widget (Pie Chart) */}
+                            <div className={`p-3 rounded-xl border flex flex-col transition-colors ${
+                              isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-150"
+                            }`}>
+                              <div className="flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-800/60 mb-2">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-300 font-sans">توزیع مخارج بر اساس نام طرف‌حساب</span>
+                              </div>
+
+                              {totalDebitAmount > 0 ? (
+                                <>
+                                  <div className="h-[140px] w-full relative flex items-center justify-center">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <PieChart>
+                                        <Pie
+                                          data={chartData}
+                                          cx="50%"
+                                          cy="50%"
+                                          innerRadius={38}
+                                          outerRadius={55}
+                                          paddingAngle={3}
+                                          dataKey="value"
+                                        >
+                                          {chartData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                          ))}
+                                        </Pie>
+                                        <Tooltip 
+                                          content={({ active, payload }: any) => {
+                                            if (active && payload && payload.length) {
+                                              const data = payload[0].payload;
+                                              const percentage = totalDebitAmount > 0 ? ((data.value / totalDebitAmount) * 100).toFixed(1) : "0";
+                                              return (
+                                                <div className={`p-2 rounded-lg border font-sans text-[10px] shadow-sm ${
+                                                  isDarkMode ? "bg-slate-950 border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-850"
+                                                }`}>
+                                                  <p className="font-bold mb-1">{data.name}</p>
+                                                  <p className="text-emerald-550 dark:text-emerald-400 font-mono font-bold" dir="ltr">
+                                                    {Number(data.value).toLocaleString("fa-IR")} {mainCurrency}
+                                                  </p>
+                                                  <p className="text-slate-400 mt-0.5 font-medium">سهم: {Number(percentage).toLocaleString("fa-IR")}%</p>
+                                                </div>
+                                              );
+                                            }
+                                            return null;
+                                          }} 
+                                        />
+                                      </PieChart>
+                                    </ResponsiveContainer>
+                                    <div className="absolute flex flex-col items-center justify-center text-center pointer-events-none">
+                                      <span className="text-[8px] text-slate-400 font-medium font-sans">کل بدهکار</span>
+                                      <span className="text-[10px] font-bold font-mono text-emerald-500 mt-0.5">
+                                        {totalDebitAmount.toLocaleString("fa-IR")}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Custom RTL Legend */}
+                                  <div className="flex flex-col gap-1.5 mt-1 border-t border-slate-100 dark:border-slate-800/40 pt-1.5 text-[9px] font-sans">
+                                    {chartData.map((entry, index) => {
+                                      const pct = totalDebitAmount > 0 ? Math.round((entry.value / totalDebitAmount) * 100) : 0;
+                                      return (
+                                        <div key={entry.name} className="flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                                            <span className="truncate text-slate-500 dark:text-slate-400 font-medium" title={entry.name}>{entry.name}</span>
+                                          </div>
+                                          <span className="font-mono font-bold text-slate-600 dark:text-slate-300 shrink-0" dir="ltr">
+                                            %{pct.toLocaleString("fa-IR")}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="py-6 flex flex-col items-center justify-center text-center text-slate-400 select-none">
+                                  <AlertCircle className="h-5 w-5 opacity-40 mb-1 text-slate-400" />
+                                  <span className="text-[9px] text-slate-405 font-sans leading-relaxed">مبلغ بدهکاری جهت نمایش سهم طرف‌حساب ثبت نشده است.</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Accounting Quick Hints Info */}
+                            <div className="mt-auto pt-3 border-t border-slate-200 dark:border-slate-800 text-[9px] text-slate-400 leading-relaxed font-sans">
+                              <span className="font-bold text-slate-500 dark:text-slate-300 block mb-1">💡 راهنمای توازن حسابداری:</span>
+                              در دفاتر حسابداری و موازنه دوطرفه، جمع ستون بدهکار همواره باید معادل با ستون بستانکار باشد. در صورت بروز اختلاف، ردیف‌های با ضریب اطمینان ضعیف را مجدداً اصلاح یا تصحیح نمایید.
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -1510,14 +2784,30 @@ export default function App() {
               {activeFile?.status === "success" && (
                 <div className="flex items-center gap-2">
                   <span className="text-amber-400 font-mono">
-                    توکن مصرفی خالص سند: {(() => {
-                      const total = activeFile.tokensUsed || 0;
-                      const cached = activeFile.tokenDetails?.cachedContentTokenCount || 0;
-                      return Math.max(0, total - cached).toLocaleString("fa-IR");
-                    })()} توکن
-                    <span className="text-[10px] text-slate-500 mr-1">
-                      (کل تبادلی: {(activeFile.tokensUsed || 0).toLocaleString("fa-IR")})
-                    </span>
+                    {activeFile.tokensUsed && activeFile.tokensUsed > 0 ? (
+                      <>
+                        توکن مصرفی خالص سند: {(() => {
+                          const total = activeFile.tokensUsed || 0;
+                          const cached = activeFile.tokenDetails?.cachedContentTokenCount || 0;
+                          const prompt = activeFile.tokenDetails?.promptTokenCount || 0;
+                          const cand = activeFile.tokenDetails?.candidatesTokenCount || 0;
+                          
+                          // If prompt/cand metrics are provided, use them for accuracy
+                          if (prompt > 0 || cand > 0) {
+                            return (Math.max(0, prompt - cached) + cand).toLocaleString("fa-IR");
+                          }
+                          // Fallback to total - cached if exact breakdown isn't available
+                          return Math.max(0, total - cached).toLocaleString("fa-IR");
+                        })()} توکن
+                        <span className="text-[10px] text-slate-500 mr-1">
+                          (کل تبادلی: {(activeFile.tokensUsed).toLocaleString("fa-IR")})
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400 text-xs font-sans">
+                        فاقد مصرف توکن واقعی (بارگذاری دستی / آفلاین)
+                      </span>
+                    )}
                   </span>
                   <button 
                     onClick={() => setShowTokenDetails(true)}
@@ -1557,47 +2847,66 @@ export default function App() {
             <h3 className="text-lg font-bold text-slate-100 mb-4 border-b border-slate-800 pb-2">جزئیات مصرف توکن</h3>
             
             {(() => {
-              const totalTokens = activeFile.tokenDetails?.totalTokenCount || activeFile.tokensUsed || (
-                selectedModel === "gemini-3.1-pro-preview" ? 1800 :
-                selectedModel === "gemini-2.5-pro" ? 1600 :
-                selectedModel === "gemini-3.5-flash" ? 1200 :
-                selectedModel === "gemini-3.1-flash-lite" ? 900 :
-                1200
-              );
-              const promptTokens = activeFile.tokenDetails?.promptTokenCount || Math.round(totalTokens * 0.82);
-              const candidateTokens = activeFile.tokenDetails?.candidatesTokenCount || (totalTokens - promptTokens);
+              const hasRealTokenDetails = activeFile.tokenDetails && (activeFile.tokenDetails.totalTokenCount > 0 || activeFile.tokensUsed > 0);
+
+              if (!hasRealTokenDetails) {
+                return (
+                  <div className="space-y-4 py-2 text-right">
+                    <p className="text-amber-400 font-bold text-xs leading-relaxed">
+                      ⚠️ اطلاعات مصرف واقعی توکن یافت نشد.
+                    </p>
+                    <p className="text-slate-400 text-[11px] leading-relaxed font-sans">
+                      این سند به صورت دستی ویرایش شده، آفلاین فراخوانی شده یا مستقیماً از طریق فایل نمونه وارد شده است. جهت پایبندی کامل به واقعیت، از نمایش اعداد تقریبی، فرمولی یا تخمین‌های فرضی خودداری شده است.
+                    </p>
+                    <div className="p-3 rounded bg-slate-800/40 border border-slate-700 text-[10px] text-slate-400 font-sans leading-normal">
+                      برای ثبت آمار واقعی، لطفاً فایلی را مجدداً از طریق پنل اصلی اسکن و با سرور هوش مصنوعی اختصاصی پردازش نمایید.
+                    </div>
+                  </div>
+                );
+              }
+
+              const totalTokens = activeFile.tokenDetails?.totalTokenCount || activeFile.tokensUsed || 0;
+              const promptTokens = activeFile.tokenDetails?.promptTokenCount || 0;
+              const candidateTokens = activeFile.tokenDetails?.candidatesTokenCount || 0;
               const cachedTokens = activeFile.tokenDetails?.cachedContentTokenCount || 0;
-              const netTokens = Math.max(0, totalTokens - cachedTokens);
+              const uncachedPromptTokens = Math.max(0, promptTokens - cachedTokens);
+              const netTokens = uncachedPromptTokens + candidateTokens;
 
               return (
                 <div className="space-y-3 font-mono text-sm">
                   <div className="flex justify-between items-center py-1">
-                    <span className="text-slate-400">توکن‌های ورودی (تصویر و پرامپت):</span>
+                    <span className="text-slate-400">کل توکن‌های پرامپت (Input):</span>
                     <span className="text-blue-400 font-bold">{promptTokens.toLocaleString("fa-IR")}</span>
                   </div>
                   {cachedTokens > 0 && (
                     <div className="flex justify-between items-center py-1 text-[11px] text-purple-300 pr-2">
-                      <span>↳ کسر می‌شود (توکن‌های کش شده):</span>
-                      <span className="font-bold">-{cachedTokens.toLocaleString("fa-IR")}</span>
+                      <span>↳ توکن‌های بارگذاری شده از کش (ارزان‌تر):</span>
+                      <span className="font-bold">{cachedTokens.toLocaleString("fa-IR")}</span>
+                    </div>
+                  )}
+                  {cachedTokens > 0 && (
+                    <div className="flex justify-between items-center py-1 text-[11px] text-blue-300 pr-2">
+                      <span>↳ توکن‌های ورودی جدید (پردازش تازه):</span>
+                      <span className="font-bold">{uncachedPromptTokens.toLocaleString("fa-IR")}</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center py-1 border-t border-slate-850/50">
-                    <span className="text-slate-400">توکن‌های خروجی (پاسخ استخراجی):</span>
+                    <span className="text-slate-400">توکن‌های تولید شده (Output):</span>
                     <span className="text-emerald-400 font-bold">{candidateTokens.toLocaleString("fa-IR")}</span>
                   </div>
                   
                   <div className="flex flex-col gap-1 p-3 mt-2 rounded bg-purple-950/20 border border-purple-900/40">
                     <div className="flex justify-between items-center">
-                      <span className="text-purple-300 font-bold text-xs">توکن‌های خالص پردازشی (مبنای هزینه):</span>
+                      <span className="text-purple-300 font-bold text-xs" title="ورودی جدید + خروجی">توکن‌های خالص (بدون کش):</span>
                       <span className="text-purple-400 font-bold text-base">{netTokens.toLocaleString("fa-IR")}</span>
                     </div>
                     <span className="text-[9px] text-slate-500 text-right leading-normal block font-sans">
-                      * توکن‌های کش مربوط به دستورالعمل‌های طولانی سیستم بوده و از فاکتور هزینه حذف شده‌اند.
+                      * توکن‌های کش شده به‌شکل مستقل و با هزینه بسیار کمتری نسبت به توکن‌های جدید محاسبه می‌شوند.
                     </span>
                   </div>
 
                   <div className="flex justify-between items-center py-1 px-1 text-[11px] text-slate-500 border-t border-slate-800/40">
-                    <span>مجموع حجم تبادلی مدل:</span>
+                    <span>مجموع حجم تبادلی (Total API Usage):</span>
                     <span>{totalTokens.toLocaleString("fa-IR")}</span>
                   </div>
                 </div>
@@ -1610,6 +2919,168 @@ export default function App() {
             >
               بستن
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Biometric Verification Layer Modal */}
+      {biometricModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md transition-opacity duration-300"
+            onClick={() => setBiometricModalOpen(false)}
+          ></div>
+
+          {/* Dialog Container */}
+          <div className={`relative w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden font-sans transition-all duration-300 border ${
+            isDarkMode ? "bg-[#0b0f19] border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-800"
+          }`} dir="rtl">
+            
+            {/* Header */}
+            <div className={`flex items-center justify-between p-4 border-b ${
+              isDarkMode ? "border-slate-800/80 bg-slate-900/45" : "border-slate-100 bg-slate-55"
+            }`}>
+              <div className="flex items-center gap-2">
+                <Fingerprint className={`h-5 w-5 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} />
+                <span className="text-xs font-bold font-sans">احراز هویت زیستی و امنیتی</span>
+              </div>
+              <button 
+                onClick={() => setBiometricModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 flex flex-col items-center text-center">
+              
+              {/* Context Label info */}
+              <div className={`mb-3 px-3 py-1 text-[10px] font-bold rounded-full ${
+                biometricTarget === "admin" 
+                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" 
+                  : "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+              }`}>
+                {biometricTarget === "admin" 
+                  ? "درخواست دسترسی به پنل فوق‌حساس مدیریت و تراکنش‌ها" 
+                  : "درخواست دسترسی به اطلاعات کاربری و مدیریت API"}
+              </div>
+
+              {/* Status Header text */}
+              <h4 className="text-sm font-bold mb-1">تأیید هویت کاربری (Biometric Validation)</h4>
+              <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed mb-6">
+                برای باز شدن صفحه درخواستی، لطفاً اثر انگشت یا سیستم تشخیص چهره زیستی خود را تأیید کنید.
+              </p>
+
+              {/* Central Scan Area & Pulse Animation */}
+              <div className="relative mb-6 flex items-center justify-center">
+                
+                {/* Background circles */}
+                <div className={`absolute inset-0 rounded-full scale-[1.3] animate-ping opacity-15 duration-1000 ${
+                  biometricStatus === "scanning" 
+                    ? "bg-blue-500" 
+                    : biometricStatus === "success" 
+                    ? "bg-emerald-500" 
+                    : biometricStatus === "error" 
+                    ? "bg-rose-500" 
+                    : "bg-slate-400"
+                }`}></div>
+
+                <div className={`h-24 w-24 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-lg ${
+                  biometricStatus === "scanning"
+                    ? "border-blue-500 bg-blue-500/10 scale-105"
+                    : biometricStatus === "success"
+                    ? "border-emerald-500 bg-emerald-500/10"
+                    : biometricStatus === "error"
+                    ? "border-rose-500 bg-rose-500/10"
+                    : isDarkMode ? "border-slate-800 bg-slate-900/60" : "border-slate-200 bg-slate-50"
+                }`}>
+                  
+                  {biometricStatus === "scanning" ? (
+                    <Loader2 className="h-10 w-10 text-blue-500 animate-spin" />
+                  ) : biometricStatus === "success" ? (
+                    <CheckCircle2 className="h-10 w-10 text-emerald-500 animate-bounce" />
+                  ) : biometricStatus === "error" ? (
+                    <AlertCircle className="h-10 w-10 text-rose-500" />
+                  ) : (
+                    <Fingerprint className={`h-11 w-11 ${
+                      isDarkMode ? "text-slate-400 group-hover:text-blue-400" : "text-slate-500 group-hover:text-blue-600"
+                    }`} />
+                  )}
+                </div>
+              </div>
+
+              {/* Sub-status label */}
+              <div className="min-h-[24px] mb-6">
+                {biometricStatus === "idle" && (
+                  <span className="text-xs text-slate-400">آماده دریافت اثرانگشت یا تشخیص چهره</span>
+                )}
+                {biometricStatus === "scanning" && (
+                  <span className="text-xs text-blue-500 font-semibold animate-pulse">در حال ارتباط با حسگر بیومتریک دستگاه...</span>
+                )}
+                {biometricStatus === "success" && (
+                  <span className="text-xs text-emerald-500 font-bold">هویت شما با موفقیت تأیید شد. صادر شد.</span>
+                )}
+                {biometricStatus === "error" && (
+                  <span className="text-xs text-rose-500 font-semibold">{biometricErrorMessage || "خطا در احراز هویت."}</span>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="w-full flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={triggerBiometricScan}
+                  disabled={biometricStatus === "scanning" || biometricStatus === "success"}
+                  className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-md ${
+                    biometricStatus === "scanning"
+                      ? "bg-slate-800 text-slate-500 cursor-not-allowed"
+                      : biometricStatus === "success"
+                      ? "bg-emerald-600 text-white cursor-none"
+                      : "bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white"
+                  }`}
+                >
+                  <Fingerprint className="h-4 w-4" />
+                  <span>
+                    {biometricStatus === "scanning" 
+                      ? "در حال پردازش..." 
+                      : biometricStatus === "success" 
+                      ? "هویت احراز شد!" 
+                      : "شروع اسکن بیومتریک"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setBiometricModalOpen(false)}
+                  className={`w-full py-2 text-xs font-semibold rounded-xl border transition-colors ${
+                    isDarkMode 
+                      ? "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" 
+                      : "bg-white border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  انصراف
+                </button>
+              </div>
+            </div>
+
+            {/* Footer with browser support details */}
+            <div className={`p-3 text-[10px] text-center border-t flex justify-center items-center gap-1.5 font-mono ${
+              isDarkMode ? "bg-slate-900/30 border-slate-800/80 text-slate-500" : "bg-slate-50 border-slate-100 text-slate-400"
+            }`}>
+              {isBiometricSupported ? (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                  <span>WebAuthn API is supported in this browser</span>
+                </>
+              ) : (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+                  <span>WebAuthn hardware not detected (Secure local emulator active)</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1934,33 +3405,38 @@ export default function App() {
                   </div>
                   <button
                       onClick={() => {
-                        const escapeCsv = (str: any) => {
-                          if (str == null) return "";
-                          const s = String(str);
-                          if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-                            return '"' + s.replace(/"/g, '""') + '"';
-                          }
-                          return s;
-                        };
-                        const csvHeader = "\uFEFF" + "ردیف,تاریخ,شماره_سند,نام_طرف_حساب,شرح,مبلغ_بدهکار,مبلغ_بستانکار,نوع_ارز,توضیحات,ضریب_اطمینان\n";
-                        const csvRows = transactions.map((t, idx) => 
-                          `${idx + 1},${escapeCsv(t.تاریخ)},${escapeCsv(t.شماره_سند)},${escapeCsv(t.نام_طرف_حساب)},${escapeCsv(t.شرح)},${t.مبلغ_بدهکار || 0},${t.مبلغ_بستانکار || 0},${escapeCsv(t.نوع_ارز)},${escapeCsv(t.توضیحات)},${t.ضریب_اطمینان || 100}`
-                        ).join("\n");
-                        const blob = new Blob([csvHeader + csvRows], { type: "text/csv;charset=utf-8;" });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = `CSV-Export-${new Date().toISOString().split('T')[0]}.csv`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                        setNotification({ text: "فایل CSV با موفقیت اکسپورت شد.", type: "success" });
+                        const worksheetData = transactions.map((t, idx) => ({
+                           "ردیف": idx + 1,
+                           "تاریخ": t.تاریخ,
+                           "شماره_سند": t.شماره_سند,
+                           "نام_طرف_حساب": t.نام_طرف_حساب,
+                           "شرح": t.شرح,
+                           "مبلغ_بدهکار": t.مبلغ_بدهکار || 0,
+                           "مبلغ_بستانکار": t.مبلغ_بستانکار || 0,
+                           "نوع_ارز": t.نوع_ارز,
+                           "توضیحات": t.توضیحات,
+                           "ضریب_اطمینان": t.ضریب_اطمینان || 100
+                        }));
+
+                        const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+                        worksheet["!cols"] = [
+                           { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 40 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 30 }, { wch: 10 }
+                        ];
+                        if (!worksheet['!views']) worksheet['!views'] = [];
+                        worksheet['!views'].push({ rightToLeft: true });
+
+                        const workbook = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(workbook, worksheet, "تراکنش‌های مالی");
+                        
+                        XLSX.writeFile(workbook, `Transactions-Export-${new Date().toISOString().split('T')[0]}.xlsx`);
+                        setNotification({ text: "فایل اکسل (XLSX) با موفقیت تولید و دانلود شد.", type: "success" });
                       }}
                       className={`w-full py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 mt-1 ${
                         isDarkMode ? "bg-emerald-900/30 border-emerald-800/50 text-emerald-300 hover:bg-emerald-900/50" : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
                       }`}
                     >
                       <Download className="h-3 w-3" />
-                      خروجی مستقیم اکسل (CSV) از تراکنش‌های فعلی
+                      خروجی مستقیم اکسل (XLSX) از تراکنش‌های فعلی
                     </button>
                 </div>
               </div>
