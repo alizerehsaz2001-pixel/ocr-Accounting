@@ -14,6 +14,10 @@ export interface TransactionItem {
   نوع_ارز: string | null;
   توضیحات: string | null;
   ضریب_اطمینان: number | null;
+  شناسه_ملی?: string | null;
+  شماره_مالیاتی?: string | null;
+  مالیات_ارزش_افزوده?: number | null;
+  هزینه_غیرقابل_قبول?: boolean | null;
 }
 
 export interface AudioNote {
@@ -32,6 +36,8 @@ export interface UploadedFile {
   status: 'idle' | 'processing' | 'success' | 'error';
   error: string | null;
   results?: TransactionItem[];
+  documentType?: string;
+  documentAnalysis?: string;
   tokensUsed?: number;
   tokenDetails?: {
     promptTokenCount?: number;
