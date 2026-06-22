@@ -184,6 +184,7 @@ export default function App() {
   const [filterQuery, setFilterQuery] = useState<string>(""); // for general search
   const [filterMinAmount, setFilterMinAmount] = useState<string>("");
   const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
+  const [filterConfidence, setFilterConfidence] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [showFilters, setShowFilters] = useState<boolean>(false);
 
   // Document Rename States
@@ -369,6 +370,16 @@ export default function App() {
       if (!isNaN(maxVal) && maxAmountOfTr > maxVal) {
         return false;
       }
+    }
+
+    // 4. Confidence level filter
+    const score = tr.ضریب_اطمینان ?? 100;
+    if (filterConfidence === "high") {
+      if (score < 90) return false;
+    } else if (filterConfidence === "medium") {
+      if (score < 70 || score >= 90) return false;
+    } else if (filterConfidence === "low") {
+      if (score >= 70) return false;
     }
 
     return true;
@@ -1163,7 +1174,12 @@ export default function App() {
   const handleSaveRow = (index: number) => {
     if (!editingRowData) return;
     const updated = [...transactions];
-    updated[index] = editingRowData;
+    // Automatically promote confidence to 100 since user has manually reviewed and verified the row values
+    const verifiedData = {
+      ...editingRowData,
+      ضریب_اطمینان: 100
+    };
+    updated[index] = verifiedData;
     setTransactions(updated);
     try {
       setRawJsonText(JSON.stringify(updated, null, 2));
@@ -2313,13 +2329,24 @@ export default function App() {
                             )}
 
                             {lowConfidenceCount > 0 && (
-                              <div className={`border rounded-xl px-4 py-2 text-center flex items-center gap-2 shadow-sm ${isDarkMode ? "bg-rose-900/20 border-rose-800" : "bg-rose-50 border-rose-200"}`}>
-                                <AlertTriangle className={`h-4 w-4 animate-pulse ${isDarkMode ? "text-rose-400" : "text-rose-600"}`} />
+                              <button
+                                type="button"
+                                onClick={() => setFilterConfidence(filterConfidence === "low" ? "all" : "low")}
+                                className={`border rounded-xl px-4 py-2 text-center flex items-center gap-2 shadow-sm transition-all duration-300 hover:scale-[1.03] ${
+                                  filterConfidence === "low"
+                                    ? "bg-rose-500 border-rose-650 text-white shadow-md shadow-rose-200/50 dark:shadow-none"
+                                    : isDarkMode ? "bg-rose-950/20 border-rose-900/40 text-rose-450 hover:bg-rose-900/30" : "bg-rose-50 border-rose-100 text-rose-700 hover:bg-rose-100/70"
+                                }`}
+                                title="برای فیلتر کردن و اصلاح سریع ردیف‌های کم‌دقت (مشکوک) کلیک کنید"
+                              >
+                                <AlertTriangle className={`h-4 w-4 shrink-0 ${filterConfidence === "low" ? "animate-bounce text-white" : "animate-pulse"}`} />
                                 <div>
-                                  <span className="text-[9px] block text-rose-500 font-bold mb-0.5">نیاز به بازبینی</span>
-                                  <span className={`text-[11px] font-bold font-mono ${isDarkMode ? "text-rose-300" : "text-rose-700"}`} dir="ltr">{lowConfidenceCount.toLocaleString("fa-IR")} ردیف مشکوک</span>
+                                  <span className="text-[9px] block font-bold mb-0.5 text-right opacity-90">
+                                    {filterConfidence === "low" ? "🔍 فیلتر فعال (مشکوک)" : "نیاز به بازبینی"}
+                                  </span>
+                                  <span className="text-[11px] font-extrabold font-mono" dir="ltr">{lowConfidenceCount.toLocaleString("fa-IR")} ردیف مشکوک</span>
                                 </div>
-                              </div>
+                              </button>
                             )}
 
                             <div className={`border rounded-xl px-4 py-2 shadow-inner text-center flex flex-col justify-center transition-colors ${
@@ -2345,25 +2372,45 @@ export default function App() {
                               </span>
                             </div>
 
-                            <div className={`border rounded-xl px-4 py-2 shadow-inner text-center transition-colors ${isDarkMode ? "bg-[#0b0f19] border-slate-800" : "bg-white border-slate-200"}`}>
-                              <span className="text-[9px] block text-slate-400 font-bold mb-0.5">تعداد ردیف‌ها</span>
-                              <span className={`text-sm font-extrabold font-mono ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>{count} ردیف</span>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setFilterConfidence("all")}
+                              className={`border rounded-xl px-4 py-2 text-center shadow-lg transition-all duration-300 hover:scale-[1.03] ${
+                                filterConfidence === "all"
+                                  ? "bg-blue-600 border-blue-600 text-white"
+                                  : isDarkMode ? "bg-[#0b0f19] border-slate-800 text-slate-300 hover:bg-slate-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                              }`}
+                              title="کلیک کنید تا تمام تراکنش‌ها نمایش داده شوند"
+                            >
+                              <span className="text-[9px] block text-slate-400 font-bold mb-0.5 opacity-80">تعداد ردیف‌ها (کل)</span>
+                              <span className="text-sm font-extrabold font-mono">{count} ردیف</span>
+                            </button>
 
-                            <div className={`border rounded-xl px-4 py-2 shadow-inner min-w-[140px] flex flex-col justify-center transition-colors ${isDarkMode ? "bg-[#0b0f19] border-slate-800" : "bg-white border-slate-150"}`}>
+                            <button
+                              type="button"
+                              onClick={() => setFilterConfidence(filterConfidence === "high" ? "all" : "high")}
+                              className={`border rounded-xl px-4 py-2 shadow-lg min-w-[140px] flex flex-col justify-center text-right transition-all duration-300 hover:scale-[1.03] ${
+                                filterConfidence === "high"
+                                  ? "bg-emerald-600 border-emerald-500 text-white"
+                                  : isDarkMode ? "bg-[#0b0f19] border-slate-200/10 text-slate-200 hover:bg-slate-800" : "bg-white border-slate-150 text-slate-700 hover:bg-slate-50"
+                              }`}
+                              title="برای فیلتر کردن تراکنش‌های با دقت استخراج عالی کلیک کنید"
+                            >
                               <div className="flex justify-between items-center gap-2 mb-1">
-                                <span className="text-[9px] text-slate-400 font-bold">میانگین اطمینان</span>
-                                <span className={`text-[10px] font-bold ${textColor}`}>{avgScore}%</span>
+                                <span className="text-[9px] font-bold opacity-90">میانگین اطمینان</span>
+                                <span className="text-[10px] font-bold font-mono">{avgScore}%</span>
                               </div>
-                              <div className={`w-full rounded-full h-1.5 overflow-hidden ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
-                                <div className={`h-full ${progressColor}`} style={{ width: `${avgScore}%` }} />
+                              <div className={`w-full rounded-full h-1.5 overflow-hidden ${filterConfidence === "high" ? "bg-emerald-700" : isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+                                <div className={`h-full ${filterConfidence === "high" ? "bg-white" : progressColor}`} style={{ width: `${avgScore}%` }} />
                               </div>
-                              <span className="text-[8px] font-bold text-slate-500 block text-center mt-1">{ratingLabel}</span>
-                            </div>
+                              <span className="text-[8px] font-bold block text-center mt-1">
+                                {filterConfidence === "high" ? "✨ فیلتر فعال (دقت عالی)" : ratingLabel}
+                              </span>
+                            </button>
 
-                            <div className={`border rounded-xl p-2 w-[180px] shadow-inner transition-colors flex flex-col justify-center ${isDarkMode ? "bg-[#0b0f19] border-slate-800" : "bg-white border-slate-150"}`}>
+                            <div className={`border rounded-xl p-2 w-[220px] shadow-lg transition-colors flex flex-col justify-center ${isDarkMode ? "bg-[#0b0f19] border-slate-800" : "bg-white border-slate-150"}`}>
                               <div className="flex items-center justify-between gap-1 mb-1.5">
-                                <span className="text-[9px] text-slate-400 font-bold block text-center w-full">تفکیک ضرایب اطمینان ردیف‌ها</span>
+                                <span className="text-[9px] text-slate-400 font-bold block text-center w-full">تفکیک ضرایب (جهت فیلتر کلیک کنید):</span>
                               </div>
                               <div className={`flex h-1.5 w-full rounded-full overflow-hidden mb-1.5 ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
                                 <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${(excellentConfidenceCount / count) * 100}%` }} title="عالی"></div>
@@ -2371,9 +2418,39 @@ export default function App() {
                                 <div className="bg-rose-500 transition-all duration-500" style={{ width: `${(lowConfidenceCount / count) * 100}%` }} title="ضعیف"></div>
                               </div>
                               <div className="flex justify-between items-center text-[9px] font-bold font-mono px-1">
-                                <div className="flex items-center gap-1 text-emerald-500" title="عالی"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>{excellentConfidenceCount}</div>
-                                <div className="flex items-center gap-1 text-amber-500" title="متوسط"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>{mediumConfidenceCount}</div>
-                                <div className="flex items-center gap-1 text-rose-500" title="ضعیف"><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div>{lowConfidenceCount}</div>
+                                <button
+                                  type="button"
+                                  onClick={() => setFilterConfidence(filterConfidence === "high" ? "all" : "high")}
+                                  className={`flex items-center gap-1 px-1 py-0.5 rounded transition ${
+                                    filterConfidence === "high" ? "bg-emerald-600 text-white scale-105" : "text-emerald-500 hover:bg-emerald-500/10"
+                                  }`}
+                                  title="فیلتر تراکنش‌های عالی"
+                                >
+                                  <div className={`w-1 h-1 rounded-full ${filterConfidence === "high" ? "bg-white" : "bg-emerald-500"}`}></div>
+                                  <span>عالی:{excellentConfidenceCount}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setFilterConfidence(filterConfidence === "medium" ? "all" : "medium")}
+                                  className={`flex items-center gap-1 px-1 py-0.5 rounded transition ${
+                                    filterConfidence === "medium" ? "bg-amber-500 text-white scale-105" : "text-amber-500 hover:bg-amber-500/10"
+                                  }`}
+                                  title="فیلتر تراکنش‌های نیازمند بررسی"
+                                >
+                                  <div className={`w-1 h-1 rounded-full ${filterConfidence === "medium" ? "bg-white" : "bg-amber-500"}`}></div>
+                                  <span>متوسط:{mediumConfidenceCount}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setFilterConfidence(filterConfidence === "low" ? "all" : "low")}
+                                  className={`flex items-center gap-1 px-1 py-0.5 rounded transition ${
+                                    filterConfidence === "low" ? "bg-rose-600 text-white scale-105" : "text-rose-500 hover:bg-rose-500/10"
+                                  }`}
+                                  title="فیلتر تراکنش‌های مخدوش/نامفهوم"
+                                >
+                                  <div className={`w-1 h-1 rounded-full ${filterConfidence === "low" ? "bg-white" : "bg-rose-500"}`}></div>
+                                  <span>ضعیف:{lowConfidenceCount}</span>
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -2461,13 +2538,14 @@ export default function App() {
                               {transactions.length.toLocaleString("fa-IR")} تراکنش
                             </span>
 
-                            {(filterParty || filterQuery || filterMinAmount || filterMaxAmount) && (
+                            {(filterParty || filterQuery || filterMinAmount || filterMaxAmount || filterConfidence !== "all") && (
                               <button
                                 onClick={() => {
                                   setFilterParty("");
                                   setFilterQuery("");
                                   setFilterMinAmount("");
                                   setFilterMaxAmount("");
+                                  setFilterConfidence("all");
                                 }}
                                 className="mr-2 text-[10px] text-red-500 hover:text-red-650 hover:underline flex items-center gap-1 font-bold"
                               >
@@ -2886,7 +2964,20 @@ export default function App() {
                                         className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                         title="تایید انفرادی ردیف (تنظیم ضریب اطمینان به ۱۰۰٪)"
                                       />
-                                      <span>{index + 1}</span>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        {(tr.ضریب_اطمینان ?? 100) === 100 ? (
+                                          <ShieldCheck 
+                                            className="h-4.5 w-4.5 text-emerald-500 fill-emerald-500/10 cursor-help transition-all duration-300 hover:scale-120 shrink-0" 
+                                            title="سند تأیید نهایی شده توسط کاربر (صحت کامل)"
+                                          />
+                                        ) : (
+                                          <Shield 
+                                            className="h-4.5 w-4.5 text-amber-500 fill-amber-500/10 cursor-help transition-all duration-300 hover:scale-120 shrink-0" 
+                                            title="پیش‌نویس استخراج هوش مصنوعی (نیاز به بازبینی و تایید)"
+                                          />
+                                        )}
+                                        <span>{index + 1}</span>
+                                      </div>
                                       {isEdited && !isCurrentlyEditing && (
                                         <span
                                           className="p-1 bg-amber-500 text-white rounded shadow-sm"
