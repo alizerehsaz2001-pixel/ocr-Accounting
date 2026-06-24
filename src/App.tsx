@@ -60,7 +60,7 @@ import ThemeSwitcher from "./components/ThemeSwitcher";
 import OnboardingModal from "./components/OnboardingModal";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 
 export default function App() {
   // Main data states
@@ -3377,8 +3377,9 @@ export default function App() {
                               <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b ${isDarkMode ? "border-slate-800" : "border-slate-200"} font-bold`}>عملیات</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
-                            {sortedTransactions.map((tr, index) => {
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 relative">
+                            <AnimatePresence mode="popLayout">
+                              {sortedTransactions.map((tr, index) => {
                               const originalIndex = transactions.findIndex(t => t.id === tr.id);
                               const score = tr.ضریب_اطمینان ?? 100;
                               const isEdited = isRowEdited(tr, originalIndex);
@@ -3409,12 +3410,14 @@ export default function App() {
                                   : "bg-white border-slate-300 text-slate-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                               }`;
 
+                              const isManual = String(tr.id).startsWith("manual-");
                               return (
                                 <motion.tr
                                   key={tr.id || index}
-                                  initial={{ opacity: 0, y: 12, filter: "blur(2px)" }}
-                                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                                  transition={{ duration: 0.35, ease: "easeOut", delay: Math.min(index * 0.04, 0.6) }}
+                                  initial={isManual ? { opacity: 0, y: 24, filter: "blur(4px)", scale: 0.98 } : { opacity: 0, y: 12, filter: "blur(2px)" }}
+                                  animate={{ opacity: 1, y: 0, filter: "blur(0px)", scale: 1 }}
+                                  exit={{ opacity: 0, y: -20, filter: "blur(3px)", scale: 0.97 }}
+                                  transition={isManual ? { duration: 0.45, ease: [0.16, 1, 0.3, 1] } : { duration: 0.35, ease: "easeOut", delay: Math.min(index * 0.04, 0.6) }}
                                   className={`transition-all duration-300 ease-out group hover:relative hover:z-10 hover:-translate-y-0.5 hover:scale-[1.006] ${
                                     isCurrentlyEditing
                                       ? (isDarkMode ? "bg-slate-800 border-y-4 border-slate-700 shadow-xl" : "bg-slate-50 border-y-4 border-slate-200 shadow-xl")
@@ -3789,6 +3792,7 @@ export default function App() {
                                 </motion.tr>
                               );
                             })}
+                            </AnimatePresence>
                           </tbody>
                         </table>
                       </div>
