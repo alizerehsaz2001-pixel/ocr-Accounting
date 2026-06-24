@@ -36,7 +36,7 @@ function getGeminiClient(): GoogleGenAI {
 // Persian/Farsi financial documents extraction endpoint
 app.post("/api/extract", async (req, res) => {
   try {
-    const { image, mimeType, model, tokenSettings } = req.body;
+    const { image, mimeType, model, tokenSettings, userPrompt } = req.body;
 
     if (!image) {
        res.status(400).json({ error: "تصویر سند ارسال نشده است." });
@@ -138,6 +138,10 @@ app.post("/api/extract", async (req, res) => {
 ۵. تشخیص خودکار هزینه‌های غیرقابل قبول مالیاتی: چنانچه در فاکتور یا صورتحساب، ردیفی با عنوان «جریمه دیرکرد»، «خسارت تاخیر» یا موارد مشابه وجود داشت، این مبالغ را شناسایی کرده و فیلد "هزینه_غیرقابل_قبول" را برای آن سطر معادل true قرار دهید.`;
 
     let promptText = `لطفاً داده‌های موجود در تصویر یا سند پیوست شده را به دقت تحلیل کرده و نوع سند و محتوای آن‌را مطابق آن‌چه دقیقاً در تصویر می‌بینید در یک آبجکت JSON استخراج کنید و هیچ متنی خارج از JSON تولید نکنید.`;
+
+    if (userPrompt && typeof userPrompt === "string" && userPrompt.trim()) {
+      promptText += `\n\n[دستور اختصاصی حسابدار / کاربر برای استخراج]:\n${userPrompt}\nلطفا توجه ویژه‌ای به این دستور کاربر داشته باشید و ترجیحاً استخراج و تحلیل را بر مبنای این درخواست انجام دهید.`;
+    }
 
     if (tokenSettings) {
       if (tokenSettings.ecoPromptEnabled) {

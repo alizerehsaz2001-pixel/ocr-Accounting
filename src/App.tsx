@@ -49,6 +49,9 @@ import {
   Activity,
   HardDrive,
   Folder,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -110,6 +113,9 @@ export default function App() {
     const saved = localStorage.getItem("active_uploaded_file");
     return saved ? JSON.parse(saved) : null;
   });
+
+  const [pendingFile, setPendingFile] = useState<{ base64: string; name: string; mimeType: string; size: number } | null>(null);
+  const [customPrompt, setCustomPrompt] = useState<string>("");
 
   const [previousScans, setPreviousScans] = useState<PreviousScan[]>(() => {
     const saved = localStorage.getItem("previous_scans");
@@ -424,6 +430,62 @@ export default function App() {
   useEffect(() => {
     setIsJsonVerified(false);
   }, [activeFile?.id]);
+
+  const [sortColumn, setSortColumn] = useState<keyof TransactionItem | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (column: keyof TransactionItem) => {
+    if (sortColumn === column) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else {
+        setSortColumn(null);
+      }
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedTransactions = useMemo(() => {
+    if (!sortColumn) return filteredTransactions;
+    return [...filteredTransactions].sort((a, b) => {
+      let valA = a[sortColumn];
+      let valB = b[sortColumn];
+
+      if (valA === undefined || valA === null) valA = "";
+      if (valB === undefined || valB === null) valB = "";
+
+      // Numerical comparisons
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+
+      // Boolean comparison
+      if (typeof valA === "boolean" && typeof valB === "boolean") {
+        return sortDirection === "asc" 
+          ? (valA === valB ? 0 : valA ? 1 : -1)
+          : (valA === valB ? 0 : valA ? -1 : 1);
+      }
+
+      // Fallback to string comparison
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+      return sortDirection === "asc"
+        ? strA.localeCompare(strB, "fa")
+        : strB.localeCompare(strA, "fa");
+    });
+  }, [filteredTransactions, sortColumn, sortDirection]);
+
+  const renderSortIcon = (column: keyof TransactionItem) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="w-3 h-3 opacity-30 group-hover:opacity-70 transition-opacity" />;
+    }
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="w-3 h-3 text-blue-500 transition-all" />
+      : <ArrowDown className="w-3 h-3 text-blue-500 transition-all" />;
+  };
+
   const [dragActive, setDragActive] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
@@ -882,7 +944,7 @@ export default function App() {
   };
 
   // Main processing pipeline
-  const processImageForExtraction = async (base64Image: string, fileName: string, fileMimeType: string) => {
+  const processImageForExtraction = async (base64Image: string, fileName: string, fileMimeType: string, userPrompt: string = "") => {
     logEvent("آپلود و پردازش سند", `کاربر سند جدیدی با نام ${fileName} را آپلود و به هوش مصنوعی ارسال کرد.`);
     showNotification("در حال ارسال تصویر به هوش مصنوعی حسابدار و استخراج داده‌های مالی...", "info");
 
@@ -905,6 +967,7 @@ export default function App() {
           mimeType: fileMimeType,
           model: selectedModel,
           tokenSettings,
+          userPrompt,
         }),
       });
 
@@ -1038,7 +1101,13 @@ export default function App() {
         const base64 = await convertFileToBase64(file);
         // Map any image format to standard JPEG except for PDF
         const targetMime = file.type === "application/pdf" ? "application/pdf" : "image/jpeg";
-        await processImageForExtraction(base64, file.name, targetMime);
+        setPendingFile({
+          base64,
+          name: file.name,
+          mimeType: targetMime,
+          size: file.size
+        });
+        setCustomPrompt("");
       } catch (error) {
         console.error(error);
         showNotification("خطا در پیش‌پردازش فایل", "error");
@@ -1056,7 +1125,13 @@ export default function App() {
       try {
         const base64 = await convertFileToBase64(file);
         const targetMime = file.type === "application/pdf" ? "application/pdf" : "image/jpeg";
-        await processImageForExtraction(base64, file.name, targetMime);
+        setPendingFile({
+          base64,
+          name: file.name,
+          mimeType: targetMime,
+          size: file.size
+        });
+        setCustomPrompt("");
       } catch (error) {
         console.error(error);
         showNotification("خطا در پیش‌پردازش فایل", "error");
@@ -1070,7 +1145,13 @@ export default function App() {
       const parts = dataUrl.split(",");
       const mimeType = parts[0].split(":")[1].split(";")[0];
       const rawBase64 = parts[1];
-      processImageForExtraction(rawBase64, `اسکن_دوربین_${Date.now()}.jpg`, mimeType);
+      setPendingFile({
+        base64: rawBase64,
+        name: `اسکن_دوربین_${Date.now()}.jpg`,
+        mimeType: mimeType,
+        size: Math.round((rawBase64.length * 3) / 4)
+      });
+      setCustomPrompt("");
     } catch (err) {
       console.error("Camera data URL parsing error:", err);
       showNotification("خطا در خواندن تصویر خروجی دوربین", "error");
@@ -1351,46 +1432,50 @@ export default function App() {
       )}
 
       {/* Right Sidebar - ERP Style */}
-      <aside className="w-60 bg-[#1E293B] flex-shrink-0 flex flex-col select-none border-l border-slate-700 transition-all duration-300">
-        <header className="p-4 flex items-center justify-between border-b border-slate-700">
+      <aside className={`w-60 flex-shrink-0 flex flex-col select-none border-l transition-all duration-300 ${
+        isDarkMode 
+          ? "bg-[#090D16] border-slate-900" 
+          : "bg-slate-900 border-slate-950 text-slate-100"
+      }`}>
+        <header className="p-4 flex items-center justify-between border-b border-slate-800/80">
            <div className="flex items-center gap-3">
-             <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold shadow-sm">
+             <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-[0_2px_8px_rgba(59,130,246,0.25)]">
                AI
              </div>
-             <span className="text-white font-semibold text-base tracking-tight" dir="ltr">ocr Accounting</span>
+             <span className="text-white font-black text-sm tracking-tight" dir="ltr">ocr Accounting</span>
            </div>
            <ThemeSwitcher isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
         </header>
 
         <nav className="flex-1 py-4 space-y-1 overflow-y-auto">
-          <div className="px-4 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          <div className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
             دستورات و ابزارها
           </div>
           
           <button
             onClick={() => setGuideOpen(!guideOpen)}
-            className={`w-full flex items-center px-4 py-2.5 transition-colors text-right ${
+            className={`w-full flex items-center px-4 py-2.5 transition-all text-right ${
               guideOpen 
-                ? "bg-blue-600/20 text-blue-400 border-r-4 border-blue-500 font-medium" 
-                : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                ? "bg-blue-600/15 text-blue-400 border-r-4 border-blue-500 font-bold" 
+                : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
             }`}
           >
-            <HelpCircle className="h-4 w-4 ml-2.5 shrink-0" />
+            <HelpCircle className="h-4 w-4 ml-2.5 shrink-0 text-blue-450" />
             <span className="text-xs">راهنمای هوشمند</span>
           </button>
 
           {activeFile && (
             <button
               onClick={clearCurrentFile}
-              className="w-full flex items-center px-4 py-2.5 text-rose-400 hover:bg-slate-800 hover:text-rose-300 transition-colors text-right"
+              className="w-full flex items-center px-4 py-2.5 text-rose-400 hover:bg-rose-950/20 hover:text-rose-300 transition-all text-right"
             >
-              <Trash2 className="h-4 w-4 ml-2.5 shrink-0" />
+              <Trash2 className="h-4 w-4 ml-2.5 shrink-0 text-rose-400/80" />
               <span className="text-xs">حذف داده و پرونده فعلی</span>
             </button>
           )}
 
           {/* Recent successful extractions */}
-          <div className="px-4 pt-6 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-t border-slate-700/60 mt-4 flex items-center justify-between">
+          <div className="px-4 pt-6 pb-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-t border-slate-800/80 mt-4 flex items-center justify-between">
             <span>تاریخچه اسکن‌های اخیر</span>
             <History className="h-3.5 w-3.5 text-slate-500" />
           </div>
@@ -1404,19 +1489,21 @@ export default function App() {
                   minute: "2-digit",
                 });
                 return (
-                  <div
+                  <motion.div
                     key={scan.id}
+                    whileHover={{ x: -2 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={() => selectPreviousScan(scan)}
-                    className={`group relative flex items-center justify-between p-2 rounded-lg cursor-pointer transition select-none ${
+                    className={`group relative flex items-center justify-between p-2 rounded-xl cursor-pointer transition select-none ${
                       isActive
-                        ? "bg-blue-600/20 text-blue-300 border-r-4 border-blue-500 font-medium"
-                        : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                        ? "bg-gradient-to-l from-blue-600/10 to-indigo-600/10 text-blue-300 border-r-4 border-blue-500 font-bold"
+                        : "text-slate-400 hover:bg-slate-800/40 hover:text-white"
                     }`}
                   >
                     <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
                       <FileText className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-blue-400" : "text-slate-500"}`} />
                       <div className="flex flex-col text-right truncate min-w-0">
-                        <span className="text-[11px] font-semibold truncate leading-tight" title={scan.file.name}>
+                        <span className="text-[11px] font-bold truncate leading-tight" title={scan.file.name}>
                           {scan.file.name}
                         </span>
                         <div className="flex gap-1.5 items-center text-[8.5px] text-slate-500 mt-1 font-mono">
@@ -1432,22 +1519,22 @@ export default function App() {
                         e.stopPropagation();
                         deletePreviousScan(scan.id);
                       }}
-                      className="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-700 rounded transition opacity-0 group-hover:opacity-100 shrink-0 ml-1"
+                      className="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-700/60 rounded-lg transition opacity-0 group-hover:opacity-100 shrink-0 ml-1"
                       title="حذف از تاریخچه"
                     >
                       <X className="h-3 w-3" />
                     </button>
-                  </div>
+                  </motion.div>
                 );
               })
             ) : (
-              <div className="px-3 py-4 text-center rounded-lg border border-dashed border-slate-800/20 text-[10px] text-slate-500 italic">
+              <div className="px-3 py-4 text-center rounded-xl border border-dashed border-slate-800/40 text-[10px] text-slate-500 italic">
                 سندی اخیراً اسکن نشده است.
               </div>
             )}
           </div>
 
-          <div className="px-4 pt-6 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-t border-slate-700/60 mt-4">
+          <div className="px-4 pt-6 pb-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-t border-slate-800/80 mt-4">
             تنظیم موتور هوش مصنوعی (مدل)
           </div>
 
@@ -1483,14 +1570,16 @@ export default function App() {
               const minsRemaining = Math.floor((resetMsRemaining % (1000 * 60 * 60)) / (1000 * 60));
 
               return (
-                <div
+                <motion.div
                   key={m.id}
+                  whileHover={{ y: -2, scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
                   onClick={() => {
                     if (!isExhausted) setSelectedModel(m.id);
                   }}
                   className={`p-3 rounded-xl transition-all border text-right select-none ${
                     isExhausted
-                      ? "bg-rose-950/20 border-rose-900/50 cursor-not-allowed opacity-80"
+                      ? "bg-rose-950/20 border-rose-900/40 cursor-not-allowed opacity-80"
                       : isSelected
                       ? "bg-slate-800 border-blue-500 cursor-pointer text-white shadow-md shadow-blue-500/5"
                       : "bg-slate-900/30 border-slate-800 cursor-pointer hover:bg-slate-800/40 text-slate-300"
@@ -1545,7 +1634,7 @@ export default function App() {
                       style={{ width: `${100 - percentUsed}%` }}
                     />
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
@@ -1833,95 +1922,247 @@ export default function App() {
           {/* Conditional Layout: Hidden when no file is uploaded! */}
           {!activeFile ? (
             <div className="flex-1 flex items-center justify-center p-4">
-              <div className={`relative max-w-xl w-full text-center animate-fade-in`}>
-                <div className={`absolute -inset-1 blur-2xl opacity-10 rounded-full ${isDarkMode ? "bg-blue-500" : "bg-blue-400"}`}></div>
-                <div className={`relative rounded-2xl shadow-lg border p-6 md:p-8 w-full text-center transition-all duration-300 ${
-                  isDarkMode 
-                    ? "bg-slate-900/90 backdrop-blur-xl border-slate-800" 
-                    : "bg-white/90 backdrop-blur-xl border-slate-200"
-                }`}>
-                  <div className={`mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-inner ${
-                    isDarkMode ? "bg-gradient-to-br from-blue-500/20 to-indigo-500/20 text-blue-400 border border-blue-500/20" : "bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 border border-blue-100"
+              {pendingFile ? (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                  className="relative max-w-2xl w-full text-right"
+                  dir="rtl"
+                >
+                  <div className={`absolute -inset-1 blur-3xl opacity-15 rounded-full ${isDarkMode ? "bg-blue-500" : "bg-blue-400"}`}></div>
+                  <div className={`relative rounded-3xl shadow-2xl border p-6 md:p-8 w-full transition-all duration-300 ${
+                    isDarkMode 
+                      ? "bg-slate-900/90 backdrop-blur-xl border-slate-800" 
+                      : "bg-white/90 backdrop-blur-xl border-slate-200"
                   }`}>
-                    <UploadCloud className="h-8 w-8" />
-                  </div>
-                  
-                  <h2 className={`text-xl font-black mb-2 tracking-tight ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>
-                    پردازش هوشمند اسناد مالی
-                  </h2>
-                  <p className={`text-[11px] leading-relaxed mb-6 max-w-lg mx-auto ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    تصویر فاکتور، سند دست‌نویس، رسید پرداختی یا دفتر روزنامه خود را آپلود کنید تا هوش مصنوعی با دقت بالا آن را پردازش و تحلیل نماید.
-                  </p>
-
-                  {/* Main box drop zone integrated */}
-                  <div
-                    onDragOver={onDragOver}
-                    onDragLeave={onDragLeave}
-                    onDrop={onDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer overflow-hidden transition-all duration-300 group ${
-                      dragActive
-                        ? "border-blue-500 bg-blue-500/10 scale-[1.02]"
-                        : isDarkMode
-                        ? "border-slate-700 bg-slate-800/50 hover:bg-slate-800/80 hover:border-blue-500/50"
-                        : "border-slate-300 bg-slate-50 hover:bg-slate-100/80 hover:border-blue-500/40"
-                    }`}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={onFileChange}
-                      accept="image/*,application/pdf"
-                      className="hidden"
-                    />
-                    
-                    <div className={`p-3 rounded-full mb-3 transition-transform group-hover:-translate-y-1 ${isDarkMode ? "bg-slate-800 text-slate-300" : "bg-white shadow-sm text-slate-600"}`}>
-                       <FileJson className="w-6 h-6" />
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className={`p-2 rounded-xl ${isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
+                        <Sparkles className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div>
+                        <h2 className={`text-lg font-black tracking-tight ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>
+                          دستورالعمل و پرامپت استخراج سند
+                        </h2>
+                        <p className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                          قبل از ارسال سند به هوش مصنوعی جمنی، می‌توانید خواسته‌ها یا راهنماهای خاص خود را بنویسید یا بدون پرامپت شروع کنید.
+                        </p>
+                      </div>
                     </div>
-                    
-                    <p className={`text-xs font-bold mb-1 ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
-                      {dragActive ? "رها کنید تا آپلود شود..." : "سند، فاکتور یا فایل PDF را به اینجا بکشید"}
-                    </p>
-                    <p className={`text-[10px] mb-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                      یا برای انتخاب فایل کلیک کنید
-                    </p>
 
-                    <div className="flex flex-col sm:flex-row gap-2 w-full max-w-xs z-10" onClick={(e) => e.stopPropagation()}>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
+                      {/* Left: preview / info */}
+                      <div className="md:col-span-4 flex flex-col items-center justify-center gap-3">
+                        {pendingFile.mimeType === "application/pdf" ? (
+                          <div className={`w-full aspect-[3/4] max-h-[160px] rounded-2xl flex flex-col items-center justify-center border ${
+                            isDarkMode ? "bg-slate-800/60 border-slate-700/60 text-slate-400" : "bg-slate-50 border-slate-200 text-slate-500"
+                          }`}>
+                            <FileText className="w-12 h-12 mb-2 text-rose-500" />
+                            <span className="text-[10px] font-bold px-2 truncate max-w-full text-center">
+                              {pendingFile.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className={`relative w-full aspect-[3/4] max-h-[160px] rounded-2xl overflow-hidden border shadow-sm ${
+                            isDarkMode ? "border-slate-800" : "border-slate-200"
+                          }`}>
+                            <img 
+                              src={`data:${pendingFile.mimeType};base64,${pendingFile.base64}`} 
+                              alt="پیش‌نمایش سند" 
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-center p-2">
+                              <span className="text-[9px] text-white font-medium truncate max-w-full">
+                                {pendingFile.name}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        <div className="text-center">
+                          <p className={`text-[10px] font-mono ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                            اندازه: {Math.round(pendingFile.size / 1024)} کیلوبایت
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Right: prompt inputs */}
+                      <div className="md:col-span-8 flex flex-col gap-3 text-right" dir="rtl">
+                        <label className={`text-xs font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                          دستورالعمل یا فیلترهای مدنظر شما (اختیاری):
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={customPrompt}
+                          onChange={(e) => setCustomPrompt(e.target.value)}
+                          placeholder="مثال: 'این رسید مربوط به خرید قطعات کارگاه ۲ است، لطفاً فقط اقلامی که ارزش افزوده دارند را استخراج کن و شرح فارسی را بررسی کن.' یا خالی بگذارید..."
+                          className={`w-full text-xs font-sans p-3 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed text-right ${
+                            isDarkMode 
+                              ? "bg-slate-950/80 border-slate-850 text-slate-100 placeholder-slate-600 focus:border-blue-500" 
+                              : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:bg-white"
+                          }`}
+                        />
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          <button
+                            type="button"
+                            onClick={() => setCustomPrompt("فقط اقلام با مبلغ بدهکار بالای ۱ میلیون تومان را استخراج کن.")}
+                            className={`px-2.5 py-1 rounded-lg text-[9px] font-semibold border ${
+                              isDarkMode ? "bg-slate-800/40 border-slate-750 text-slate-400 hover:bg-slate-800" : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200/50"
+                            }`}
+                          >
+                            اقلام بالای ۱ میلیون تومان
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCustomPrompt("این فاکتور ارزی است، لطفا نوع ارز را دلار آمریکا بگذار و معادل ریالی آن را در توضیحات درج کن.")}
+                            className={`px-2.5 py-1 rounded-lg text-[9px] font-semibold border ${
+                              isDarkMode ? "bg-slate-800/40 border-slate-750 text-slate-400 hover:bg-slate-800" : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200/50"
+                            }`}
+                          >
+                            فاکتور ارزی دلار
+                          </button>
+                          {customPrompt && (
+                            <button
+                              type="button"
+                              onClick={() => setCustomPrompt("")}
+                              className={`px-2.5 py-1 rounded-lg text-[9px] font-semibold border text-rose-500 border-rose-500/10 hover:bg-rose-500/5`}
+                            >
+                              حذف پرامپت
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800/60">
                       <button
                         type="button"
                         onClick={() => {
-                          setQrScanStatus("idle");
-                          setQrErrorMessage("");
-                          setQrInputUrl("");
-                          setIsQrModalOpen(true);
+                          setPendingFile(null);
+                          setCustomPrompt("");
                         }}
-                        className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm border group-hover:shadow-md ${
-                          isDarkMode
-                            ? "bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
-                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                          isDarkMode 
+                            ? "bg-slate-800 hover:bg-slate-750 text-slate-300" 
+                            : "bg-slate-100 hover:bg-slate-200 text-slate-700"
                         }`}
                       >
-                        <QrCode className="h-3.5 w-3.5" />
-                        <span>بارکد / QR</span>
+                        انصراف و حذف فایل
                       </button>
                       
                       <button
                         type="button"
-                        onClick={() => setIsCameraOpen(true)}
-                        className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-lg ${
-                          isDarkMode
-                            ? "bg-blue-600 border-transparent text-white hover:bg-blue-500"
-                            : "bg-blue-600 border-transparent text-white hover:bg-blue-700"
-                        }`}
+                        onClick={async () => {
+                          const fileData = pendingFile;
+                          setPendingFile(null);
+                          await processImageForExtraction(fileData.base64, fileData.name, fileData.mimeType, customPrompt);
+                        }}
+                        className="px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5 shadow-lg shadow-blue-500/10 hover:shadow-blue-500/20 transition-all"
                       >
-                        <Camera className="h-3.5 w-3.5 text-blue-200" />
-                        <span>دوربین</span>
+                        <Sparkles className="w-4 h-4 text-blue-200" />
+                        <span>تحلیل و ارسال به جمنی</span>
                       </button>
                     </div>
                   </div>
-                </div>
-              </div>
+                </motion.div>
+              ) : (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                  className={`relative max-w-xl w-full text-center`}
+                >
+                  <div className={`absolute -inset-1 blur-3xl opacity-15 rounded-full ${isDarkMode ? "bg-blue-500" : "bg-blue-400"}`}></div>
+                  <div className={`relative rounded-3xl shadow-2xl border p-6 md:p-8 w-full text-center transition-all duration-300 ${
+                    isDarkMode 
+                      ? "bg-slate-900/90 backdrop-blur-xl border-slate-800" 
+                      : "bg-white/90 backdrop-blur-xl border-slate-200"
+                  }`}>
+                    <div className={`mx-auto w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-inner transition-transform duration-300 hover:rotate-6 ${
+                      isDarkMode ? "bg-gradient-to-br from-blue-500/20 to-indigo-500/20 text-blue-400 border border-blue-500/20" : "bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 border border-blue-100"
+                    }`}>
+                      <UploadCloud className="h-8 w-8" />
+                    </div>
+                    
+                    <h2 className={`text-xl font-black mb-2 tracking-tight ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>
+                      پردازش هوشمند اسناد مالی
+                    </h2>
+                    <p className={`text-[11px] leading-relaxed mb-6 max-w-lg mx-auto ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      تصویر فاکتور، سند دست‌نویس، رسید پرداختی یا دفتر روزنامه خود را آپلود کنید تا هوش مصنوعی با دقت بالا آن را پردازش و تحلیل نماید.
+                    </p>
+
+                    {/* Main box drop zone integrated */}
+                    <motion.div
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      onDragOver={onDragOver}
+                      onDragLeave={onDragLeave}
+                      onDrop={onDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer overflow-hidden transition-all duration-300 group ${
+                        dragActive
+                          ? "border-blue-500 bg-blue-500/10 scale-[1.02]"
+                          : isDarkMode
+                          ? "border-slate-700 bg-slate-800/50 hover:bg-slate-800/80 hover:border-blue-500/50"
+                          : "border-slate-300 bg-slate-50 hover:bg-slate-100/80 hover:border-blue-500/40"
+                      }`}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={onFileChange}
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                      />
+                      
+                      <div className={`p-3 rounded-full mb-3 transition-transform group-hover:-translate-y-1 ${isDarkMode ? "bg-slate-800 text-slate-300" : "bg-white shadow-sm text-slate-600"}`}>
+                         <FileJson className="w-6 h-6" />
+                      </div>
+                      
+                      <p className={`text-xs font-bold mb-1 ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
+                        {dragActive ? "رها کنید تا آپلود شود..." : "سند، فاکتور یا فایل PDF را به اینجا بکشید"}
+                      </p>
+                      <p className={`text-[10px] mb-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                        یا برای انتخاب فایل کلیک کنید
+                      </p>
+
+                      <div className="flex flex-col sm:flex-row gap-2 w-full max-w-xs z-10" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQrScanStatus("idle");
+                            setQrErrorMessage("");
+                            setQrInputUrl("");
+                            setIsQrModalOpen(true);
+                          }}
+                          className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm border group-hover:shadow-md ${
+                            isDarkMode
+                              ? "bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
+                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                          }`}
+                        >
+                          <QrCode className="h-3.5 w-3.5" />
+                          <span>بارکد / QR</span>
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={() => setIsCameraOpen(true)}
+                          className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1.5 shadow-lg ${
+                            isDarkMode
+                              ? "bg-blue-600 border-transparent text-white hover:bg-blue-500"
+                              : "bg-blue-600 border-transparent text-white hover:bg-blue-700"
+                          }`}
+                        >
+                          <Camera className="h-3.5 w-3.5 text-blue-200" />
+                          <span>دوربین</span>
+                        </button>
+                      </div>
+                    </motion.div>
+                  </div>
+                </motion.div>
+              )}
             </div>
           ) : (
             <div className="flex-1 flex flex-col lg:flex-row gap-6">
@@ -2354,16 +2595,36 @@ export default function App() {
                       : "bg-white border-slate-200 text-[#1A1A1B]"
                   }`}>
                     {/* Header Summary */}
-                    <div className={`p-4 border-b flex flex-wrap gap-4 items-center justify-between transition-colors duration-300 ${
-                      isDarkMode ? "bg-[#162032] border-slate-800" : "bg-slate-50 border-slate-200"
+                    <div className={`p-5 md:p-6 border-b flex flex-col gap-5 transition-colors duration-300 ${
+                      isDarkMode ? "bg-[#111827]/80 border-slate-800/80" : "bg-slate-50 border-slate-200"
                     }`}>
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg shrink-0 ${isDarkMode ? "bg-blue-950/40 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
-                          <Sparkles className="h-5 w-5" />
+                      {/* Top Row with Main Title and Information */}
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3.5">
+                          <div className={`p-2.5 rounded-2xl shrink-0 shadow-sm ${
+                            isDarkMode 
+                              ? "bg-blue-500/10 text-blue-400 border border-blue-500/15" 
+                              : "bg-blue-50 text-blue-600 border border-blue-100"
+                          }`}>
+                            <Sparkles className="h-6 w-6 animate-pulse" />
+                          </div>
+                          <div>
+                            <h4 className={`text-sm font-black tracking-tight ${isDarkMode ? "text-slate-100" : "text-slate-900"}`}>
+                              تحلیل صحت‌سنجی و میزان اطمینان استخراج داده‌ها
+                            </h4>
+                            <p className={`text-[11px] mt-1 font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              کنترل خودکار همخوانی ارقام ریاضی، کیفیت قلم نوری هوش مصنوعی و تطابق تراز مالی اسناد
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className={`text-xs font-bold ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>تحلیل میزان اطمینان استخراج داده‌ها</h4>
-                          <p className={`text-[10px] mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تراکنش‌های فاکتور و فیلدهای تفکیک شده مالی همراه با تخمین میزان خوانایی</p>
+
+                        {/* Quick indicator badge */}
+                        <div className="flex items-center gap-2 self-start md:self-auto">
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                            isDarkMode ? "bg-[#0b0f19] text-slate-400 border border-slate-850" : "bg-white text-slate-500 border border-slate-200/80"
+                          }`}>
+                            سند جاری: <span className="font-mono text-blue-500 font-extrabold">{activeFile.name}</span>
+                          </span>
                         </div>
                       </div>
 
@@ -2375,15 +2636,18 @@ export default function App() {
                         
                         let ratingLabel = "بسیار بالا و معتبر";
                         let progressColor = "bg-emerald-500";
-                        let textColor = "text-emerald-600";
+                        let textColor = "text-emerald-500";
+                        let ratingBg = isDarkMode ? "bg-emerald-950/20 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-700";
                         if (avgScore < 60) {
                           ratingLabel = "کیفیت ضعیف و مشکوک";
                           progressColor = "bg-rose-500";
-                          textColor = "text-rose-600";
+                          textColor = "text-rose-500";
+                          ratingBg = isDarkMode ? "bg-rose-950/20 border-rose-900/30 text-rose-450" : "bg-rose-50 border-rose-100 text-rose-700";
                         } else if (avgScore < 85) {
                           ratingLabel = "متوسط و نیازمند بازبینی";
                           progressColor = "bg-amber-500";
-                          textColor = "text-amber-600";
+                          textColor = "text-amber-500";
+                          ratingBg = isDarkMode ? "bg-amber-950/20 border-amber-900/30 text-amber-400" : "bg-amber-50 border-amber-100 text-amber-700";
                         }
 
                         const lowConfidenceCount = transactions.filter(tr => (tr.ضریب_اطمینان ?? 100) < 70).length;
@@ -2394,142 +2658,278 @@ export default function App() {
                         const isBalanced = count > 0 && sumDebit === sumCredit;
 
                         return (
-                          <div className="flex gap-4 items-center flex-wrap">
-                            {countEdited > 0 && (
-                              <div className={`border rounded-xl px-4 py-2 text-center animate-pulse flex items-center gap-2 shadow-sm ${isDarkMode ? "bg-amber-900/20 border-amber-800" : "bg-amber-50 border-amber-200"}`}>
-                                <FileEdit className={`h-4 w-4 ${isDarkMode ? "text-amber-400" : "text-amber-600"}`} />
-                                <div>
-                                  <span className="text-[9px] block text-amber-500 font-bold mb-0.5">اصلاح دستی شده</span>
-                                  <span className={`text-[11px] font-bold font-mono ${isDarkMode ? "text-amber-300" : "text-amber-700"}`} dir="ltr">{countEdited.toLocaleString("fa-IR")} ردیف تغییر یافته</span>
+                          /* Bento Grid of analysis metrics */
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+                            
+                            {/* Card 1: Average confidence */}
+                            <motion.div
+                              whileHover={{ y: -3, scale: 1.01 }}
+                              onClick={() => setFilterConfidence(filterConfidence === "high" ? "all" : "high")}
+                              className={`border p-4 rounded-2xl shadow-sm flex flex-col justify-between cursor-pointer transition-all duration-300 ${
+                                filterConfidence === "high"
+                                  ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-500/10"
+                                  : isDarkMode 
+                                    ? "bg-[#0b0f19] border-slate-850 hover:border-slate-750" 
+                                    : "bg-white border-slate-200/90 hover:border-slate-300"
+                              }`}
+                              title="کلیک جهت فیلتر ردیف‌های با دقت بالا"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className={`text-[10px] font-black tracking-wide ${filterConfidence === "high" ? "text-emerald-100" : "text-slate-400"}`}>
+                                  میانگین صحت استخراج (OCR)
+                                </span>
+                                <div className={`p-1.5 rounded-lg ${filterConfidence === "high" ? "bg-emerald-500" : isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+                                  <TrendingUp className={`h-4 w-4 ${filterConfidence === "high" ? "text-white" : "text-blue-500"}`} />
                                 </div>
                               </div>
-                            )}
+                              
+                              <div className="flex items-baseline gap-1 my-2">
+                                <span className="text-3xl font-black font-mono tracking-tight">
+                                  {avgScore.toLocaleString("fa-IR")}
+                                </span>
+                                <span className="text-sm font-bold">%</span>
+                              </div>
 
-                            {lowConfidenceCount > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => setFilterConfidence(filterConfidence === "low" ? "all" : "low")}
-                                className={`border rounded-xl px-4 py-2 text-center flex items-center gap-2 shadow-sm transition-all duration-300 hover:scale-[1.03] ${
-                                  filterConfidence === "low"
-                                    ? "bg-rose-500 border-rose-650 text-white shadow-md shadow-rose-200/50 dark:shadow-none"
-                                    : isDarkMode ? "bg-rose-950/20 border-rose-900/40 text-rose-450 hover:bg-rose-900/30" : "bg-rose-50 border-rose-100 text-rose-700 hover:bg-rose-100/70"
-                                }`}
-                                title="برای فیلتر کردن و اصلاح سریع ردیف‌های کم‌دقت (مشکوک) کلیک کنید"
-                              >
-                                <AlertTriangle className={`h-4 w-4 shrink-0 ${filterConfidence === "low" ? "animate-bounce text-white" : "animate-pulse"}`} />
-                                <div>
-                                  <span className="text-[9px] block font-bold mb-0.5 text-right opacity-90">
-                                    {filterConfidence === "low" ? "🔍 فیلتر فعال (مشکوک)" : "نیاز به بازبینی"}
-                                  </span>
-                                  <span className="text-[11px] font-extrabold font-mono" dir="ltr">{lowConfidenceCount.toLocaleString("fa-IR")} ردیف مشکوک</span>
+                              <div className="mt-2 w-full">
+                                <div className={`w-full rounded-full h-2 overflow-hidden ${
+                                  filterConfidence === "high" ? "bg-emerald-700" : isDarkMode ? "bg-slate-800" : "bg-slate-100"
+                                }`}>
+                                  <div 
+                                    className={`h-full transition-all duration-500 ${
+                                      filterConfidence === "high" ? "bg-white" : progressColor
+                                    }`} 
+                                    style={{ width: `${avgScore}%` }} 
+                                  />
                                 </div>
-                              </button>
-                            )}
+                                <div className="flex justify-between items-center mt-2.5">
+                                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
+                                    filterConfidence === "high" ? "bg-emerald-500 text-white" : ratingBg
+                                  }`}>
+                                    {ratingLabel}
+                                  </span>
+                                  {filterConfidence === "high" && (
+                                    <span className="text-[8px] bg-white text-emerald-700 font-extrabold px-1.5 py-0.5 rounded-md">فیلتر فعال</span>
+                                  )}
+                                </div>
+                              </div>
+                            </motion.div>
 
-                            <div className={`border rounded-xl px-4 py-2 shadow-inner text-center flex flex-col justify-center transition-colors ${
-                              isBalanced 
-                                ? isDarkMode ? "bg-emerald-900/20 border-emerald-800" : "bg-emerald-50 border-emerald-200" 
-                                : isDarkMode ? "bg-rose-900/20 border-rose-800" : "bg-rose-50 border-rose-200"
-                            }`}>
-                              <span className={`text-[9px] block font-bold mb-0.5 ${
+                            {/* Card 2: Accounting balance status */}
+                            <motion.div
+                              whileHover={{ y: -3, scale: 1.01 }}
+                              className={`border p-4 rounded-2xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
                                 isBalanced 
-                                  ? isDarkMode ? "text-emerald-400" : "text-emerald-600"
-                                  : isDarkMode ? "text-rose-400" : "text-rose-600"
-                              }`}>وضعیت تراز حسابداری</span>
-                              <span className={`text-[11px] font-extrabold font-mono flex items-center justify-center gap-1.5 ${
+                                  ? isDarkMode 
+                                    ? "bg-[#0b0f19] border-emerald-950/80 hover:border-emerald-900" 
+                                    : "bg-emerald-50/20 border-emerald-200/70" 
+                                  : isDarkMode 
+                                    ? "bg-[#0b0f19] border-rose-950/80 hover:border-rose-900" 
+                                    : "bg-rose-50/20 border-rose-200/70"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-black tracking-wide text-slate-400">
+                                  تراز حسابداری (دو طرفه)
+                                </span>
+                                <div className="relative flex items-center justify-center">
+                                  <div className={`absolute h-3 w-3 rounded-full opacity-40 animate-ping ${
+                                    isBalanced ? "bg-emerald-500" : "bg-rose-500"
+                                  }`} />
+                                  <div className={`h-2.5 w-2.5 rounded-full relative ${
+                                    isBalanced ? "bg-emerald-500" : "bg-rose-500"
+                                  }`} />
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col gap-1.5 my-2">
+                                <div className="flex items-center justify-between text-[11px] font-medium text-slate-500">
+                                  <span>جمع بدهکار:</span>
+                                  <span className="font-extrabold font-mono text-slate-600 dark:text-slate-300" dir="ltr">
+                                    {sumDebit.toLocaleString("fa-IR")} <span className="text-[9px] font-normal">ریال</span>
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-[11px] font-medium text-slate-500">
+                                  <span>جمع بستانکار:</span>
+                                  <span className="font-extrabold font-mono text-slate-600 dark:text-slate-300" dir="ltr">
+                                    {sumCredit.toLocaleString("fa-IR")} <span className="text-[9px] font-normal">ریال</span>
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className={`mt-2 p-2 rounded-xl border flex items-center gap-2 ${
                                 isBalanced 
-                                  ? isDarkMode ? "text-emerald-300" : "text-emerald-700" 
-                                  : isDarkMode ? "text-rose-300" : "text-rose-700"
+                                  ? isDarkMode ? "bg-emerald-950/15 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-800" 
+                                  : isDarkMode ? "bg-rose-950/15 border-rose-900/30 text-rose-400" : "bg-rose-50 border-rose-100 text-rose-800"
                               }`}>
                                 {isBalanced ? (
-                                  <><CheckCircle2 className="h-3.5 w-3.5" /> <span>تراز است</span></>
+                                  <>
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                                    <div className="text-[9px] leading-relaxed">
+                                      <span className="font-black block">موازنه تراز است</span>
+                                      <span className="opacity-80">هیچ مغایرتی در ارقام دیده نشد</span>
+                                    </div>
+                                  </>
                                 ) : (
-                                  <><AlertTriangle className="h-3.5 w-3.5" /> <span>مغایرت تراز</span></>
+                                  <>
+                                    <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 animate-pulse" />
+                                    <div className="text-[9px] leading-relaxed">
+                                      <span className="font-black block text-rose-600 dark:text-rose-400">اختلاف در تراز مالی</span>
+                                      <span className="font-bold font-mono block mt-0.5 text-right text-[10px]" dir="ltr">
+                                        {(Math.abs(sumDebit - sumCredit)).toLocaleString("fa-IR")} ریال
+                                      </span>
+                                    </div>
+                                  </>
                                 )}
-                              </span>
-                            </div>
+                              </div>
+                            </motion.div>
 
-                            <button
-                              type="button"
-                              onClick={() => setFilterConfidence("all")}
-                              className={`border rounded-xl px-4 py-2 text-center shadow-lg transition-all duration-300 hover:scale-[1.03] ${
-                                filterConfidence === "all"
-                                  ? "bg-blue-600 border-blue-600 text-white"
-                                  : isDarkMode ? "bg-[#0b0f19] border-slate-800 text-slate-300 hover:bg-slate-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                            {/* Card 3: Quality Breakdown / distribution */}
+                            <motion.div
+                              whileHover={{ y: -3, scale: 1.01 }}
+                              className={`border p-4 rounded-2xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
+                                isDarkMode ? "bg-[#0b0f19] border-slate-850" : "bg-white border-slate-200/90"
                               }`}
-                              title="کلیک کنید تا تمام تراکنش‌ها نمایش داده شوند"
                             >
-                              <span className="text-[9px] block text-slate-400 font-bold mb-0.5 opacity-80">تعداد ردیف‌ها (کل)</span>
-                              <span className="text-sm font-extrabold font-mono">{count} ردیف</span>
-                            </button>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-black tracking-wide text-slate-400">
+                                  توزیع کیفیت استخراج داده‌ها
+                                </span>
+                                <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+                                  <Coins className="h-4 w-4 text-amber-500" />
+                                </div>
+                              </div>
 
-                            <button
-                              type="button"
-                              onClick={() => setFilterConfidence(filterConfidence === "high" ? "all" : "high")}
-                              className={`border rounded-xl px-4 py-2 shadow-lg min-w-[140px] flex flex-col justify-center text-right transition-all duration-300 hover:scale-[1.03] ${
-                                filterConfidence === "high"
-                                  ? "bg-emerald-600 border-emerald-500 text-white"
-                                  : isDarkMode ? "bg-[#0b0f19] border-slate-200/10 text-slate-200 hover:bg-slate-800" : "bg-white border-slate-150 text-slate-700 hover:bg-slate-50"
-                              }`}
-                              title="برای فیلتر کردن تراکنش‌های با دقت استخراج عالی کلیک کنید"
-                            >
-                              <div className="flex justify-between items-center gap-2 mb-1">
-                                <span className="text-[9px] font-bold opacity-90">میانگین اطمینان</span>
-                                <span className="text-[10px] font-bold font-mono">{avgScore}%</span>
+                              <div className="my-2">
+                                <div className={`flex h-2.5 w-full rounded-full overflow-hidden ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+                                  <div 
+                                    className="bg-emerald-500 transition-all duration-500 hover:opacity-90" 
+                                    style={{ width: `${count > 0 ? (excellentConfidenceCount / count) * 100 : 0}%` }} 
+                                    title={`عالی: ${excellentConfidenceCount} ردیف`}
+                                  />
+                                  <div 
+                                    className="bg-amber-500 transition-all duration-500 hover:opacity-90" 
+                                    style={{ width: `${count > 0 ? (mediumConfidenceCount / count) * 100 : 0}%` }} 
+                                    title={`متوسط: ${mediumConfidenceCount} ردیف`}
+                                  />
+                                  <div 
+                                    className="bg-rose-500 transition-all duration-500 hover:opacity-90" 
+                                    style={{ width: `${count > 0 ? (lowConfidenceCount / count) * 100 : 0}%` }} 
+                                    title={`ضعیف: ${lowConfidenceCount} ردیف`}
+                                  />
+                                </div>
                               </div>
-                              <div className={`w-full rounded-full h-1.5 overflow-hidden ${filterConfidence === "high" ? "bg-emerald-700" : isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
-                                <div className={`h-full ${filterConfidence === "high" ? "bg-white" : progressColor}`} style={{ width: `${avgScore}%` }} />
-                              </div>
-                              <span className="text-[8px] font-bold block text-center mt-1">
-                                {filterConfidence === "high" ? "✨ فیلتر فعال (دقت عالی)" : ratingLabel}
-                              </span>
-                            </button>
 
-                            <div className={`border rounded-xl p-2 w-[220px] shadow-lg transition-colors flex flex-col justify-center ${isDarkMode ? "bg-[#0b0f19] border-slate-800" : "bg-white border-slate-150"}`}>
-                              <div className="flex items-center justify-between gap-1 mb-1.5">
-                                <span className="text-[9px] text-slate-400 font-bold block text-center w-full">تفکیک ضرایب (جهت فیلتر کلیک کنید):</span>
-                              </div>
-                              <div className={`flex h-1.5 w-full rounded-full overflow-hidden mb-1.5 ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
-                                <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${(excellentConfidenceCount / count) * 100}%` }} title="عالی"></div>
-                                <div className="bg-amber-500 transition-all duration-500" style={{ width: `${(mediumConfidenceCount / count) * 100}%` }} title="متوسط"></div>
-                                <div className="bg-rose-500 transition-all duration-500" style={{ width: `${(lowConfidenceCount / count) * 100}%` }} title="ضعیف"></div>
-                              </div>
-                              <div className="flex justify-between items-center text-[9px] font-bold font-mono px-1">
+                              <div className="grid grid-cols-3 gap-1 text-[9px] font-bold font-mono mt-1">
                                 <button
                                   type="button"
                                   onClick={() => setFilterConfidence(filterConfidence === "high" ? "all" : "high")}
-                                  className={`flex items-center gap-1 px-1 py-0.5 rounded transition ${
-                                    filterConfidence === "high" ? "bg-emerald-600 text-white scale-105" : "text-emerald-500 hover:bg-emerald-500/10"
+                                  className={`flex flex-col items-center p-1.5 rounded-xl transition-all duration-200 ${
+                                    filterConfidence === "high" 
+                                      ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 font-black scale-105" 
+                                      : "text-emerald-500 hover:bg-emerald-500/5 border border-transparent"
                                   }`}
-                                  title="فیلتر تراکنش‌های عالی"
+                                  title="فیلتر تراکنش‌های با کیفیت عالی"
                                 >
-                                  <div className={`w-1 h-1 rounded-full ${filterConfidence === "high" ? "bg-white" : "bg-emerald-500"}`}></div>
-                                  <span>عالی:{excellentConfidenceCount}</span>
+                                  <span className="opacity-70 text-[8px] font-sans">عالی</span>
+                                  <span className="text-sm font-extrabold mt-0.5">{excellentConfidenceCount.toLocaleString("fa-IR")}</span>
                                 </button>
+                                
                                 <button
                                   type="button"
                                   onClick={() => setFilterConfidence(filterConfidence === "medium" ? "all" : "medium")}
-                                  className={`flex items-center gap-1 px-1 py-0.5 rounded transition ${
-                                    filterConfidence === "medium" ? "bg-amber-500 text-white scale-105" : "text-amber-500 hover:bg-amber-500/10"
+                                  className={`flex flex-col items-center p-1.5 rounded-xl transition-all duration-200 ${
+                                    filterConfidence === "medium" 
+                                      ? "bg-amber-500/15 border border-amber-500/30 text-amber-500 font-black scale-105" 
+                                      : "text-amber-500 hover:bg-amber-500/5 border border-transparent"
                                   }`}
-                                  title="فیلتر تراکنش‌های نیازمند بررسی"
+                                  title="فیلتر تراکنش‌های متوسط"
                                 >
-                                  <div className={`w-1 h-1 rounded-full ${filterConfidence === "medium" ? "bg-white" : "bg-amber-500"}`}></div>
-                                  <span>متوسط:{mediumConfidenceCount}</span>
+                                  <span className="opacity-70 text-[8px] font-sans">متوسط</span>
+                                  <span className="text-sm font-extrabold mt-0.5">{mediumConfidenceCount.toLocaleString("fa-IR")}</span>
                                 </button>
+
                                 <button
                                   type="button"
                                   onClick={() => setFilterConfidence(filterConfidence === "low" ? "all" : "low")}
-                                  className={`flex items-center gap-1 px-1 py-0.5 rounded transition ${
-                                    filterConfidence === "low" ? "bg-rose-600 text-white scale-105" : "text-rose-500 hover:bg-rose-500/10"
+                                  className={`flex flex-col items-center p-1.5 rounded-xl transition-all duration-200 ${
+                                    filterConfidence === "low" 
+                                      ? "bg-rose-500/15 border border-rose-500/30 text-rose-500 font-black scale-105" 
+                                      : "text-rose-500 hover:bg-rose-500/5 border border-transparent"
                                   }`}
-                                  title="فیلتر تراکنش‌های مخدوش/نامفهوم"
+                                  title="فیلتر تراکنش‌های ضعیف"
                                 >
-                                  <div className={`w-1 h-1 rounded-full ${filterConfidence === "low" ? "bg-white" : "bg-rose-500"}`}></div>
-                                  <span>ضعیف:{lowConfidenceCount}</span>
+                                  <span className="opacity-70 text-[8px] font-sans font-medium">ضعیف</span>
+                                  <span className="text-sm font-extrabold mt-0.5">{lowConfidenceCount.toLocaleString("fa-IR")}</span>
                                 </button>
                               </div>
-                            </div>
+                            </motion.div>
+
+                            {/* Card 4: Quick Actions & Reset filters */}
+                            <motion.div
+                              whileHover={{ y: -3, scale: 1.01 }}
+                              className={`border p-4 rounded-2xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
+                                isDarkMode ? "bg-[#0b0f19] border-slate-850" : "bg-white border-slate-200/90"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-black tracking-wide text-slate-400">
+                                  ابزار بازبینی سریع فیلترها
+                                </span>
+                                <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+                                  <Scale className="h-4 w-4 text-purple-500" />
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col gap-1.5 my-1.5">
+                                {lowConfidenceCount > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setFilterConfidence(filterConfidence === "low" ? "all" : "low")}
+                                    className={`w-full text-right p-1.5 px-2.5 rounded-xl border flex items-center justify-between text-[10px] font-bold transition-all ${
+                                      filterConfidence === "low"
+                                        ? "bg-rose-500 border-rose-650 text-white shadow-md shadow-rose-500/10"
+                                        : "bg-rose-500/10 border-rose-500/20 text-rose-500 hover:bg-rose-500/25"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <AlertTriangle className="h-3.5 w-3.5 animate-pulse" />
+                                      <span>نمایش {lowConfidenceCount.toLocaleString("fa-IR")} ردیف مشکوک</span>
+                                    </div>
+                                    <span className="bg-rose-500 text-white text-[9px] font-mono px-1.5 py-0.5 rounded-md">بررسی</span>
+                                  </button>
+                                ) : (
+                                  <div className="w-full text-right p-1.5 px-2.5 rounded-xl border border-emerald-500/15 bg-emerald-500/5 text-emerald-500 text-[10px] font-bold flex items-center gap-1.5 select-none">
+                                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
+                                    <span>هیچ ردیف مشکوکی یافت نشد</span>
+                                  </div>
+                                )}
+
+                                {countEdited > 0 && (
+                                  <div className="p-1.5 px-2.5 rounded-xl border border-amber-500/15 bg-amber-500/5 text-amber-500 text-[10px] font-bold flex items-center gap-1.5">
+                                    <FileEdit className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+                                    <span>{countEdited.toLocaleString("fa-IR")} ردیف اصلاح شده دستی</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setFilterConfidence("all")}
+                                className={`w-full py-2 text-center text-xs font-black rounded-xl transition-all duration-200 border flex items-center justify-center gap-1.5 ${
+                                  filterConfidence === "all"
+                                    ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/10"
+                                    : isDarkMode 
+                                      ? "bg-slate-800 hover:bg-slate-750 border-slate-700 text-slate-300" 
+                                      : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+                                }`}
+                              >
+                                <span>کل تراکنش‌ها ({count.toLocaleString("fa-IR")} ردیف)</span>
+                                {filterConfidence !== "all" && (
+                                  <span className="text-[8px] bg-blue-500/10 text-blue-500 dark:bg-white/10 dark:text-blue-300 px-1 py-0.5 rounded-md">لغو فیلتر</span>
+                                )}
+                              </button>
+                            </motion.div>
+
                           </div>
                         );
                       })()}
@@ -2662,7 +3062,8 @@ export default function App() {
                                 {filterParty && (
                                   <button
                                     onClick={() => setFilterParty("")}
-                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-450 hover:text-slate-700"
+                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                    title="پاکسازی"
                                   >
                                     <X className="h-3 w-3" />
                                   </button>
@@ -2670,29 +3071,29 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* Range Amount - Minimum */}
+                            {/* Minimum Amount Filter */}
                             <div className="flex flex-col gap-1">
-                              <label className="text-[10px] font-bold text-slate-505 dark:text-slate-350 flex items-center gap-1">
-                                <span className="text-slate-400 font-mono">Min</span>
-                                <span>حداقل مبلغ تراکنش:</span>
+                              <label className="text-[10px] font-bold text-slate-500 dark:text-slate-350 flex items-center gap-1">
+                                <Coins className="h-3 w-3 text-emerald-500" />
+                                <span>حداقل مبلغ (ریال):</span>
                               </label>
                               <div className="relative">
                                 <input
                                   type="number"
                                   value={filterMinAmount}
                                   onChange={(e) => setFilterMinAmount(e.target.value)}
-                                  placeholder="به رقم..."
-                                  className={`w-full text-xs pr-3 pl-8 py-1.5 rounded-lg border outline-none font-sans text-left font-mono ${
+                                  placeholder="حداقل مبلغ..."
+                                  className={`w-full text-xs pr-3 pl-8 py-1.5 rounded-lg border outline-none font-sans ${
                                     isDarkMode
                                       ? "bg-[#0B0F19] border-slate-800 text-slate-100 placeholder-slate-600"
                                       : "bg-white border-slate-200 text-slate-800 placeholder-slate-400"
                                   }`}
-                                  dir="ltr"
                                 />
                                 {filterMinAmount && (
                                   <button
                                     onClick={() => setFilterMinAmount("")}
-                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-405 hover:text-slate-700"
+                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                    title="پاکسازی"
                                   >
                                     <X className="h-3 w-3" />
                                   </button>
@@ -2700,115 +3101,52 @@ export default function App() {
                               </div>
                             </div>
 
-                            {/* Range Amount - Maximum */}
+                            {/* Maximum Amount Filter */}
                             <div className="flex flex-col gap-1">
-                              <label className="text-[10px] font-bold text-slate-505 dark:text-slate-350 flex items-center gap-1">
-                                <span className="text-slate-400 font-mono">Max</span>
-                                <span>حداکثر مبلغ تراکنش:</span>
+                              <label className="text-[10px] font-bold text-slate-500 dark:text-slate-350 flex items-center gap-1">
+                                <Coins className="h-3 w-3 text-amber-500" />
+                                <span>حداکثر مبلغ (ریال):</span>
                               </label>
                               <div className="relative">
                                 <input
                                   type="number"
                                   value={filterMaxAmount}
                                   onChange={(e) => setFilterMaxAmount(e.target.value)}
-                                  placeholder="به رقم..."
-                                  className={`w-full text-xs pr-3 pl-8 py-1.5 rounded-lg border outline-none font-sans text-left font-mono ${
+                                  placeholder="حداکثر مبلغ..."
+                                  className={`w-full text-xs pr-3 pl-8 py-1.5 rounded-lg border outline-none font-sans ${
                                     isDarkMode
                                       ? "bg-[#0B0F19] border-slate-800 text-slate-100 placeholder-slate-600"
                                       : "bg-white border-slate-200 text-slate-800 placeholder-slate-400"
                                   }`}
-                                  dir="ltr"
                                 />
                                 {filterMaxAmount && (
                                   <button
                                     onClick={() => setFilterMaxAmount("")}
-                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-405 hover:text-slate-700"
+                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                    title="پاکسازی"
                                   >
                                     <X className="h-3 w-3" />
                                   </button>
                                 )}
                               </div>
                             </div>
+
                           </motion.div>
                         )}
                       </div>
                     )}
 
-                    {/* Document Context Information */}
-                    {activeFile.status === "success" && activeFile.documentType && (
-                      <div className={`p-4 border-b ${isDarkMode ? "bg-[#1E293B] border-slate-700" : "bg-slate-50 border-slate-200"}`}>
-                        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-2">
-                           <div className="flex items-center gap-3">
-                             <div className={`flex items-center justify-center w-10 h-10 rounded-xl ${isDarkMode ? "bg-indigo-500/20 text-indigo-400" : "bg-indigo-100 text-indigo-600"}`}>
-                               <FileJson className="w-5 h-5" />
-                             </div>
-                             <div>
-                               <h3 className={`font-bold text-sm ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>نوع سند: {activeFile.documentType}</h3>
-                               <p className={`text-xs mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تشخیص هوشمند توسط موتور AI</p>
-                             </div>
-                           </div>
-                        </div>
-                        {activeFile.documentAnalysis && (
-                          <div className={`mt-3 p-3 rounded-xl text-sm leading-relaxed border ${isDarkMode ? "bg-slate-900 border-slate-800 text-slate-300" : "bg-white border-slate-200 text-slate-600"}`}>
-                            <span className="font-semibold text-xs ml-1 flex items-center gap-1.5 mb-1.5 opacity-80">
-                               <Cpu className="w-4 h-4" />
-                               تحلیل وضعیت و جزئیات سند:
-                            </span>
-                            {activeFile.documentAnalysis}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Table + Live Balance Calculator Split View */}
-                    <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-[300px] divide-y lg:divide-y-0 lg:divide-x lg:divide-x-reverse divide-slate-100 lg:divide-slate-850/40">
-                      {/* Table View */}
-                      <div className="flex-1 overflow-auto">
-                      {activeFile.status === "processing" ? (
-                        <div className="flex flex-col items-center justify-center p-16 text-slate-400 h-full animate-fade-in">
-                          <div className="relative">
-                            <div className="h-10 w-10 animate-spin rounded-[10px] border-[3px] border-transparent border-t-blue-500 border-r-indigo-500" />
-                            <div className="h-10 w-10 absolute inset-0 blur-sm animate-spin rounded-[10px] border-[3px] border-transparent border-t-blue-500/50 border-r-indigo-500/50" />
-                          </div>
-                          <span className={`text-sm font-bold mt-5 animate-pulse ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>در حال استخراج و تحلیل داده‌ها...</span>
-                          <span className={`text-xs mt-1.5 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>لطفاً منتظر بمانید</span>
-                        </div>
-                      ) : transactions.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center p-16 h-full font-sans animate-fade-in">
-                          <div className={`w-16 h-16 flex items-center justify-center rounded-2xl mb-4 ${isDarkMode ? "bg-slate-800/50 text-slate-500" : "bg-slate-100 text-slate-400"}`}>
-                            <AlertCircle className="h-8 w-8" />
-                          </div>
-                          <span className={`text-sm font-bold mb-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>داده‌ای استخراج نشد</span>
-                          <span className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>احتمالاً کیفیت تصویر پایین است یا فاکتوری یافت نشد.</span>
-                        </div>
-                      ) : filteredTransactions.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center p-16 h-[300px] font-sans animate-fade-in">
-                          <div className={`w-16 h-16 flex items-center justify-center rounded-2xl mb-4 ${isDarkMode ? "bg-slate-800/50 text-slate-500" : "bg-slate-100 text-slate-400"}`}>
-                            <AlertCircle className="h-8 w-8" />
-                          </div>
-                          <span className={`text-sm font-bold mb-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>نتیجه‌ای یافت نشد</span>
-                          <span className={`text-xs mb-4 ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>هیچ تراکنشی منطبق با معیارهای جستجو و فیلتر پیدا نشد.</span>
-                          <button
-                            onClick={() => {
-                              setFilterParty("");
-                              setFilterQuery("");
-                              setFilterMinAmount("");
-                              setFilterMaxAmount("");
-                            }}
-                            className="mt-3 px-3 py-1.5 bg-blue-650 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-500 text-white rounded-lg text-[10px] font-bold transition-colors shadow-sm"
-                          >
-                            حذف فیلترها و نمایش همه
-                          </button>
-                        </div>
-                      ) : (
-                        <table className="w-full text-right border-collapse text-xs">
-                          <thead className={`text-[10px] uppercase font-bold sticky top-0 shadow-sm transition-colors duration-300 ${
+                    {activeFile.status === "success" && transactions.length > 0 && (
+                      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden h-full">
+                        <div className="flex-1 overflow-auto">
+                          <table className="w-full text-right border-collapse text-xs">
+                            <thead className={`text-[10px] uppercase font-black sticky top-0 z-30 transition-colors duration-300 ${
                             isDarkMode 
-                              ? "bg-[#1E293B] border-b border-slate-800 text-slate-200 bg-opacity-95" 
-                              : "bg-[#FAFBFD] text-slate-600 border-b border-slate-150 bg-white/95"
+                              ? "text-slate-350" 
+                              : "text-slate-500"
                           }`}>
                             <tr>
-                              <th className={`px-2 py-2 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"} select-none`}>
+                              <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none`}>
                                 <div className="flex items-center justify-center gap-1.5">
                                   <input
                                     type="checkbox"
@@ -2833,45 +3171,150 @@ export default function App() {
                                         "success"
                                       );
                                     }}
-                                    className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                    className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500/30 cursor-pointer bg-white dark:bg-slate-900 transition-all"
                                     title="تایید گروهی تمامی ردیف‌ها (ضریب اطمینان ۱۰۰٪)"
                                   />
-                                  <span className="text-xs">#</span>
+                                  <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500">#</span>
                                 </div>
                               </th>
-                              <th className={`px-2 py-2 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>تاریخ</th>
-                              <th className={`px-2 py-2 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>شماره سند</th>
-                              <th className={`px-2 py-2 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>طرف حساب</th>
-                              <th className={`px-2 py-2 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>شناسه/کد ملی</th>
-                              <th className={`px-2 py-2 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>شرح / بابت</th>
-                              <th className={`px-2 py-2 text-left border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>ارزش افزوده</th>
-                              <th className={`px-2 py-2 text-left border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>بدهکار</th>
-                              <th className={`px-2 py-2 text-left border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>بستانکار</th>
-                              <th className={`px-2 py-2 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>ارز</th>
-                              <th className={`px-2 py-2 text-center border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"} select-none`}>دقت استخراج</th>
-                              <th className={`px-2 py-2 border-l ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>توضیحات تکمیلی</th>
-                              <th className="px-2 py-2 text-center">عملیات</th>
+                              <th 
+                                onClick={() => handleSort("تاریخ")}
+                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس تاریخ"
+                              >
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <span>تاریخ</span>
+                                  {renderSortIcon("تاریخ")}
+                                </div>
+                              </th>
+                              <th 
+                                onClick={() => handleSort("شماره_سند")}
+                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس شماره سند"
+                              >
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <span>شماره سند</span>
+                                  {renderSortIcon("شماره_سند")}
+                                </div>
+                              </th>
+                              <th 
+                                onClick={() => handleSort("نام_طرف_حساب")}
+                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس طرف حساب"
+                              >
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <span>طرف حساب</span>
+                                  {renderSortIcon("نام_طرف_حساب")}
+                                </div>
+                              </th>
+                              <th 
+                                onClick={() => handleSort("شناسه_ملی")}
+                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس شناسه/کد ملی"
+                              >
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <span>شناسه/کد ملی</span>
+                                  {renderSortIcon("شناسه_ملی")}
+                                </div>
+                              </th>
+                              <th 
+                                onClick={() => handleSort("شرح")}
+                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس شرح"
+                              >
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <span>شرح / بابت</span>
+                                  {renderSortIcon("شرح")}
+                                </div>
+                              </th>
+                              <th 
+                                onClick={() => handleSort("مالیات_ارزش_افزوده")}
+                                className={`px-3 py-3 text-left sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس ارزش افزوده"
+                              >
+                                <div className="flex items-center gap-1.5 justify-end font-bold">
+                                  {renderSortIcon("مالیات_ارزش_افزوده")}
+                                  <span>ارزش افزوده</span>
+                                </div>
+                              </th>
+                              <th 
+                                onClick={() => handleSort("مبلغ_بدهکار")}
+                                className={`px-3 py-3 text-left sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس بدهکار"
+                              >
+                                <div className="flex items-center gap-1.5 justify-end font-bold">
+                                  {renderSortIcon("مبلغ_بدهکار")}
+                                  <span>بدهکار</span>
+                                </div>
+                              </th>
+                              <th 
+                                onClick={() => handleSort("مبلغ_بستانکار")}
+                                className={`px-3 py-3 text-left sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس بستانکار"
+                              >
+                                <div className="flex items-center gap-1.5 justify-end font-bold">
+                                  {renderSortIcon("مبلغ_بستانکار")}
+                                  <span>بستانکار</span>
+                                </div>
+                              </th>
+                              <th 
+                                onClick={() => handleSort("نوع_ارز")}
+                                className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس ارز"
+                              >
+                                <div className="flex items-center gap-1.5 justify-center font-bold">
+                                  <span>ارز</span>
+                                  {renderSortIcon("نوع_ارز")}
+                                </div>
+                              </th>
+                              <th 
+                                onClick={() => handleSort("ضریب_اطمینان")}
+                                className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس دقت استخراج"
+                              >
+                                <div className="flex items-center gap-1.5 justify-center font-bold">
+                                  <span>دقت استخراج</span>
+                                  {renderSortIcon("ضریب_اطمینان")}
+                                </div>
+                              </th>
+                              <th 
+                                onClick={() => handleSort("توضیحات")}
+                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+                                title="مرتب‌سازی بر اساس توضیحات تکمیلی"
+                              >
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <span>توضیحات تکمیلی</span>
+                                  {renderSortIcon("توضیحات")}
+                                </div>
+                              </th>
+                              <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b ${isDarkMode ? "border-slate-800" : "border-slate-200"} font-bold`}>عملیات</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-150">
-                            {filteredTransactions.map((tr, index) => {
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40">
+                            {sortedTransactions.map((tr, index) => {
                               const originalIndex = transactions.findIndex(t => t.id === tr.id);
                               const score = tr.ضریب_اطمینان ?? 100;
                               const isEdited = isRowEdited(tr, originalIndex);
                               const isCurrentlyEditing = editingRowIndex === originalIndex && editingRowData !== null;
                               
-                              let badgeBg = "bg-emerald-50 border-emerald-200 text-emerald-800";
+                              let badgeBg = "bg-emerald-500/10 border-emerald-500/15 text-emerald-600 dark:text-emerald-400";
                               let progressBg = "bg-emerald-500";
                               let scoreDesc = "عالی / بدون ابهام";
                               if (score < 60) {
-                                badgeBg = "bg-rose-50 border-rose-200 text-rose-800";
+                                badgeBg = "bg-rose-500/10 border-rose-500/15 text-rose-600 dark:text-rose-400";
                                 progressBg = "bg-rose-500";
                                 scoreDesc = "ناخوانا / نامعتبر";
                               } else if (score < 85) {
-                                badgeBg = "bg-amber-50 border-amber-200 text-amber-800";
-                                progressBg = "bg-amber-550";
+                                badgeBg = "bg-amber-500/10 border-amber-500/15 text-amber-600 dark:text-amber-400";
+                                progressBg = "bg-amber-500";
                                 scoreDesc = "دست‌نویس مخدوش";
                               }
+
+                              const getAvatarChar = (name: string) => {
+                                if (!name || name === "-") return "👤";
+                                const trimmed = name.trim();
+                                return trimmed.charAt(0);
+                              };
 
                               const inputClass = `w-full text-[11px] px-1.5 py-1 rounded border outline-none font-sans ${
                                 isDarkMode 
@@ -2885,12 +3328,14 @@ export default function App() {
                                   initial={{ opacity: 0, y: 12, filter: "blur(2px)" }}
                                   animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
                                   transition={{ duration: 0.35, ease: "easeOut", delay: Math.min(index * 0.04, 0.6) }}
-                                  className={`transition-colors duration-300 ${
+                                  className={`transition-all duration-300 ease-out group hover:relative hover:z-10 hover:-translate-y-0.5 hover:scale-[1.006] ${
                                     isCurrentlyEditing
                                       ? (isDarkMode ? "bg-slate-800 border-y-4 border-slate-700 shadow-xl" : "bg-slate-50 border-y-4 border-slate-200 shadow-xl")
                                       : isEdited
-                                      ? "bg-amber-50/70 border-r-4 border-r-amber-500 hover:bg-amber-100/60"
-                                      : "hover:bg-slate-50/70"
+                                      ? "bg-amber-50/30 border-r-4 border-r-amber-500 hover:bg-amber-100/40 dark:bg-amber-500/5 dark:border-r-amber-500/80 hover:shadow-lg dark:hover:shadow-black/30"
+                                      : isDarkMode
+                                        ? "bg-transparent hover:bg-slate-800/90 hover:shadow-xl hover:shadow-black/35"
+                                        : "bg-transparent hover:bg-white hover:shadow-xl hover:shadow-slate-200/50"
                                   }`}
                                 >
                                   {isCurrentlyEditing ? (
@@ -3020,8 +3465,8 @@ export default function App() {
                                     </td>
                                   ) : (
                                     <>
-                                  <td className="px-2 py-1.5 text-center border-l border-slate-100">
-                                    <div className="flex items-center justify-center gap-2 font-mono font-bold text-slate-450">
+                                  <td className="px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75 first:rounded-r-xl transition-all duration-300 group-hover:border-b-transparent">
+                                    <div className="flex items-center justify-center gap-2 font-mono font-bold text-slate-400">
                                       <input
                                         type="checkbox"
                                         checked={(tr.ضریب_اطمینان ?? 100) === 100}
@@ -3040,26 +3485,26 @@ export default function App() {
                                           }
                                           logEvent("تایید انفرادی ردیف", isChecked ? `کاربر ردیف شماره ${originalIndex + 1} را تایید کرد.` : `کاربر تایید ردیف شماره ${originalIndex + 1} را لغو کرد.`);
                                         }}
-                                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                        className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500/30 cursor-pointer bg-white dark:bg-slate-900 transition-all"
                                         title="تایید انفرادی ردیف (تنظیم ضریب اطمینان به ۱۰۰٪)"
                                       />
                                       <div className="flex items-center gap-1.5 shrink-0">
                                         {(tr.ضریب_اطمینان ?? 100) === 100 ? (
                                           <ShieldCheck 
-                                            className="h-4.5 w-4.5 text-emerald-500 fill-emerald-500/10 cursor-help transition-all duration-300 hover:scale-120 shrink-0" 
+                                            className="h-5 w-5 text-emerald-500 fill-emerald-500/5 cursor-help transition-all duration-300 hover:scale-110 shrink-0" 
                                             title="سند تأیید نهایی شده توسط کاربر (صحت کامل)"
                                           />
                                         ) : (
                                           <Shield 
-                                            className="h-4.5 w-4.5 text-amber-500 fill-amber-500/10 cursor-help transition-all duration-300 hover:scale-120 shrink-0" 
+                                            className="h-5 w-5 text-amber-500 fill-amber-500/5 cursor-help transition-all duration-300 hover:scale-110 shrink-0" 
                                             title="پیش‌نویس استخراج هوش مصنوعی (نیاز به بازبینی و تایید)"
                                           />
                                         )}
-                                        <span>{index + 1}</span>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">{index + 1}</span>
                                       </div>
                                       {isEdited && !isCurrentlyEditing && (
                                         <span
-                                          className="p-1 bg-amber-500 text-white rounded shadow-sm"
+                                          className="p-1 bg-amber-500 text-white rounded-lg shadow-sm"
                                           title="تغییر یافته توسط کاربر (ویرایش دستی)"
                                         >
                                           <FileEdit className="h-3 w-3" />
@@ -3069,255 +3514,188 @@ export default function App() {
                                   </td>
                                   
                                   {/* تاریخ */}
-                                  <td className="px-2 py-1.5 font-mono font-medium text-slate-700 border-l border-slate-100 max-w-[120px]">
-                                    {isCurrentlyEditing ? (
-                                      <input
-                                        type="text"
-                                        className={inputClass}
-                                        value={editingRowData.تاریخ || ""}
-                                        onChange={(e) => handleFieldChange("تاریخ", e.target.value)}
-                                        dir="ltr"
-                                      />
-                                    ) : (
-                                      tr.تاریخ || <span className="text-slate-400">[فاقد تاریخ]</span>
-                                    )}
+                                  <td className="px-3 py-3.5 font-mono text-slate-700 dark:text-slate-300 border-b border-l border-slate-200/60 dark:border-slate-800/75 transition-all duration-300 group-hover:border-b-transparent">
+                                    <div className="flex items-center gap-1.5">
+                                      <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                                      <span className="font-bold text-[11px] tracking-tight">
+                                        {tr.تاریخ || <span className="text-slate-300 dark:text-slate-700 font-normal">[بدون تاریخ]</span>}
+                                      </span>
+                                    </div>
                                   </td>
 
                                   {/* شماره سند */}
-                                  <td className="px-2 py-1.5 font-mono text-slate-700 border-l border-slate-100 max-w-[100px]">
-                                    {isCurrentlyEditing ? (
-                                      <input
-                                        type="text"
-                                        className={inputClass}
-                                        value={editingRowData.شماره_سند || ""}
-                                        onChange={(e) => handleFieldChange("شماره_سند", e.target.value)}
-                                        dir="ltr"
-                                      />
+                                  <td className="px-3 py-3.5 font-mono text-slate-700 dark:text-slate-300 border-b border-l border-slate-200/60 dark:border-slate-800/75 transition-all duration-300 group-hover:border-b-transparent">
+                                    {tr.شماره_سند ? (
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold ${isDarkMode ? "bg-slate-800 text-slate-350 border border-slate-700" : "bg-slate-100 text-slate-700 border border-slate-200"}`}>
+                                        <span className="text-[10px] opacity-50">#</span>
+                                        <span>{tr.شماره_سند}</span>
+                                      </span>
                                     ) : (
-                                      tr.شماره_سند || <span className="text-slate-400">-</span>
+                                      <span className="text-slate-300 dark:text-slate-700 font-light">-</span>
                                     )}
                                   </td>
 
                                   {/* طرف حساب */}
-                                  <td className="px-2 py-1.5 font-semibold text-slate-800 border-l border-slate-100 max-w-[140px]">
-                                    {isCurrentlyEditing ? (
-                                      <input
-                                        type="text"
-                                        className={inputClass}
-                                        value={editingRowData.نام_طرف_حساب || ""}
-                                        onChange={(e) => handleFieldChange("نام_طرف_حساب", e.target.value)}
-                                      />
-                                    ) : (
-                                      tr.نام_طرف_حساب || <span className="text-slate-400">-</span>
-                                    )}
+                                  <td className="px-3 py-3.5 border-b border-l border-slate-200/60 dark:border-slate-800/75 max-w-[160px] transition-all duration-300 group-hover:border-b-transparent">
+                                    <div className="flex items-center gap-2">
+                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 shadow-inner ${
+                                        isDarkMode 
+                                          ? "bg-gradient-to-br from-indigo-500/10 to-blue-500/10 text-blue-400 border border-blue-500/15" 
+                                          : "bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 border border-blue-100/80"
+                                      }`}>
+                                        {getAvatarChar(tr.نام_طرف_حساب || "")}
+                                      </div>
+                                      <span className={`font-extrabold text-[12px] truncate max-w-[130px] tracking-tight ${
+                                        isDarkMode ? "text-slate-200" : "text-slate-850"
+                                      }`} title={tr.نام_طرف_حساب || ""}>
+                                        {tr.نام_طرف_حساب || <span className="text-slate-300 dark:text-slate-700 font-normal">-</span>}
+                                      </span>
+                                    </div>
                                   </td>
 
                                   {/* شناسه/کد ملی/مالیاتی */}
-                                  <td className="px-2 py-1.5 font-mono text-slate-600 border-l border-slate-100 max-w-[120px]">
-                                    {isCurrentlyEditing ? (
-                                      <div className="space-y-1">
-                                        <input
-                                          type="text"
-                                          className={inputClass}
-                                          placeholder="شناسه ملی"
-                                          value={editingRowData.شناسه_ملی || ""}
-                                          onChange={(e) => handleFieldChange("شناسه_ملی", e.target.value)}
-                                          dir="ltr"
-                                        />
-                                        <input
-                                          type="text"
-                                          className={inputClass}
-                                          placeholder="کد سامانه مودیان"
-                                          value={editingRowData.شماره_مالیاتی || ""}
-                                          onChange={(e) => handleFieldChange("شماره_مالیاتی", e.target.value)}
-                                          dir="ltr"
-                                        />
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-col gap-1 text-[10px]">
-                                        {tr.شناسه_ملی && <div className="text-blue-600">👤 {tr.شناسه_ملی}</div>}
-                                        {tr.شماره_مالیاتی && <div className="text-emerald-600 truncate" title={tr.شماره_مالیاتی}>🧾 {tr.شماره_مالیاتی.substring(0, 8)}...</div>}
-                                        {(!tr.شناسه_ملی && !tr.شماره_مالیاتی) && <span className="text-slate-400">-</span>}
-                                      </div>
-                                    )}
+                                  <td className="px-3 py-3.5 border-b border-l border-slate-200/60 dark:border-slate-800/75 transition-all duration-300 group-hover:border-b-transparent">
+                                    <div className="flex flex-col gap-1 text-[10px]">
+                                      {tr.شناسه_ملی && (
+                                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono self-start ${
+                                          isDarkMode ? "bg-[#0b0f19] text-blue-400 border border-slate-850" : "bg-slate-50 text-blue-700 border border-slate-200/60"
+                                        }`}>
+                                          <span className="opacity-70">👤</span>
+                                          <span>{tr.شناسه_ملی}</span>
+                                        </div>
+                                      )}
+                                      {tr.شماره_مالیاتی && (
+                                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono self-start truncate max-w-[120px] ${
+                                          isDarkMode ? "bg-[#0b0f19] text-emerald-400 border border-slate-850" : "bg-slate-50 text-emerald-700 border border-slate-200/60"
+                                        }`} title={tr.شماره_مالیاتی}>
+                                          <span className="opacity-70">🧾</span>
+                                          <span>{tr.شماره_مالیاتی.substring(0, 8)}...</span>
+                                        </div>
+                                      )}
+                                      {(!tr.شناسه_ملی && !tr.شماره_مالیاتی) && <span className="text-slate-300 dark:text-slate-700 font-light">-</span>}
+                                    </div>
                                   </td>
 
                                   {/* شرح */}
-                                  <td className="px-2 py-1.5 text-slate-800 border-l border-slate-100 max-w-[180px]">
-                                    {isCurrentlyEditing ? (
-                                      <div className="space-y-1">
-                                        <input
-                                          type="text"
-                                          className={inputClass}
-                                          value={editingRowData.شرح || ""}
-                                          onChange={(e) => handleFieldChange("شرح", e.target.value)}
-                                        />
-                                        <label className="flex items-center gap-1.5 mt-1 cursor-pointer">
-                                          <input 
-                                            type="checkbox" 
-                                            checked={editingRowData.هزینه_غیرقابل_قبول || false}
-                                            onChange={(e) => handleFieldChange("هزینه_غیرقابل_قبول", e.target.checked)}
-                                            className="w-3 h-3 text-rose-600 rounded border-slate-300"
-                                          />
-                                          <span className="text-[10px] text-slate-600 font-medium">هزینه غیرقابل قبول (جریمه دیرکرد)</span>
-                                        </label>
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-col gap-1">
-                                        <span>{tr.شرح || <span className="text-slate-400 font-normal">[بدون شرح]</span>}</span>
-                                        {tr.هزینه_غیرقابل_قبول && (
-                                          <div className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md self-start ${isDarkMode ? "bg-rose-500/20 text-rose-400" : "bg-rose-100 text-rose-700"}`}>
-                                            <AlertTriangle className="w-3 h-3" />
-                                            <span>هزینه غیرقابل قبول مالیاتی</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
+                                  <td className="px-3 py-3.5 border-b border-l border-slate-200/60 dark:border-slate-800/75 max-w-[200px] transition-all duration-300 group-hover:border-b-transparent">
+                                    <div className="flex flex-col gap-1.5">
+                                      <span className={`font-semibold text-[11.5px] leading-relaxed break-words ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                                        {tr.شرح || <span className="text-slate-400 dark:text-slate-600 font-normal">[بدون شرح]</span>}
+                                      </span>
+                                      {tr.هزینه_غیرقابل_قبول && (
+                                        <div className={`inline-flex items-center gap-1.5 text-[9px] font-extrabold px-2 py-0.5 rounded-lg self-start border ${
+                                          isDarkMode ? "bg-rose-500/10 border-rose-550/20 text-rose-400 animate-pulse" : "bg-rose-50 border-rose-200 text-rose-700"
+                                        }`}>
+                                          <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+                                          <span>هزینه غیرقابل قبول مالیاتی</span>
+                                        </div>
+                                      )}
+                                    </div>
                                   </td>
 
                                   {/* ارزش افزوده */}
-                                  <td className="px-2 py-1.5 border-l border-slate-100 text-left font-mono text-rose-600 max-w-[100px]">
-                                    {isCurrentlyEditing ? (
-                                      <input
-                                        type="number"
-                                        className={`${inputClass} text-left font-mono`}
-                                        value={editingRowData.مالیات_ارزش_افزوده ?? ""}
-                                        onChange={(e) => handleFieldChange("مالیات_ارزش_افزوده", e.target.value === "" ? null : Number(e.target.value))}
-                                      />
+                                  <td className="px-3 py-3.5 text-left border-b border-l border-slate-200/60 dark:border-slate-800/75 bg-rose-500/[0.015] dark:bg-rose-500/[0.02] max-w-[100px] transition-all duration-300 group-hover:border-b-transparent">
+                                    {tr.مالیات_ارزش_افزوده !== null && tr.مالیات_ارزش_افزوده > 0 ? (
+                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-mono font-bold text-xs ${
+                                        isDarkMode ? "bg-rose-500/5 border border-rose-500/15 text-rose-450" : "bg-rose-50 border border-rose-100 text-rose-700"
+                                      }`}>
+                                        {Number(tr.مالیات_ارزش_افزوده).toLocaleString("fa-IR")}
+                                      </span>
                                     ) : (
-                                      tr.مالیات_ارزش_افزوده !== null && tr.مالیات_ارزش_افزوده > 0 ? Number(tr.مالیات_ارزش_افزوده).toLocaleString("fa-IR") : <span className="text-slate-300">۰</span>
+                                      <span className="text-slate-350 dark:text-slate-700 font-mono">۰</span>
                                     )}
                                   </td>
 
                                   {/* بدهکار */}
-                                  <td className="px-2 py-1.5 border-l border-slate-100 text-left font-mono text-emerald-600 font-semibold max-w-[100px]">
-                                    {isCurrentlyEditing ? (
-                                      <input
-                                        type="number"
-                                        className={`${inputClass} text-left font-mono`}
-                                        value={editingRowData.مبلغ_بدهکار ?? ""}
-                                        onChange={(e) => handleFieldChange("مبلغ_بدهکار", e.target.value === "" ? 0 : Number(e.target.value))}
-                                      />
+                                  <td className="px-3 py-3.5 text-left border-b border-l border-slate-200/60 dark:border-slate-800/75 bg-emerald-500/[0.015] dark:bg-emerald-500/[0.02] max-w-[110px] transition-all duration-300 group-hover:border-b-transparent">
+                                    {tr.مبلغ_بدهکار !== null && tr.مبلغ_بدهکار > 0 ? (
+                                      <span className={`inline-flex items-center px-2.5 py-1 rounded-xl font-mono font-extrabold text-xs md:text-[13px] shadow-sm ${
+                                        isDarkMode ? "bg-emerald-500/10 border border-emerald-500/15 text-emerald-400" : "bg-emerald-50 border border-emerald-100 text-emerald-750"
+                                      }`}>
+                                        {Number(tr.مبلغ_بدهکار).toLocaleString("fa-IR")}
+                                      </span>
                                     ) : (
-                                      tr.مبلغ_بدهکار !== null && tr.مبلغ_بدهکار > 0 ? Number(tr.مبلغ_بدهکار).toLocaleString("fa-IR") : "۰"
+                                      <span className="text-slate-350 dark:text-slate-700 font-mono">۰</span>
                                     )}
                                   </td>
 
                                   {/* بستانکار */}
-                                  <td className="px-2 py-1.5 border-l border-slate-100 text-left font-mono text-slate-600 font-semibold max-w-[100px]">
-                                    {isCurrentlyEditing ? (
-                                      <input
-                                        type="number"
-                                        className={`${inputClass} text-left font-mono`}
-                                        value={editingRowData.مبلغ_بستانکار ?? ""}
-                                        onChange={(e) => handleFieldChange("مبلغ_بستانکار", e.target.value === "" ? 0 : Number(e.target.value))}
-                                      />
+                                  <td className="px-3 py-3.5 text-left border-b border-l border-slate-200/60 dark:border-slate-800/75 bg-blue-500/[0.015] dark:bg-blue-500/[0.02] max-w-[110px] transition-all duration-300 group-hover:border-b-transparent">
+                                    {tr.مبلغ_بستانکار !== null && tr.مبلغ_بستانکار > 0 ? (
+                                      <span className={`inline-flex items-center px-2.5 py-1 rounded-xl font-mono font-extrabold text-xs md:text-[13px] shadow-sm ${
+                                        isDarkMode ? "bg-slate-500/10 border border-slate-500/15 text-slate-300" : "bg-slate-100 border border-slate-200 text-slate-750"
+                                      }`}>
+                                        {Number(tr.مبلغ_بستانکار).toLocaleString("fa-IR")}
+                                      </span>
                                     ) : (
-                                      tr.مبلغ_بستانکار !== null && tr.مبلغ_بستانکار > 0 ? Number(tr.مبلغ_بستانکار).toLocaleString("fa-IR") : "۰"
+                                      <span className="text-slate-350 dark:text-slate-700 font-mono">۰</span>
                                     )}
                                   </td>
 
                                   {/* ارز */}
-                                  <td className="px-2 py-1.5 border-l border-slate-100 text-center font-semibold text-[10px] max-w-[80px]">
-                                    {isCurrentlyEditing ? (
-                                      <input
-                                        type="text"
-                                        className={inputClass}
-                                        value={editingRowData.نوع_ارز || ""}
-                                        onChange={(e) => handleFieldChange("نوع_ارز", e.target.value)}
-                                      />
+                                  <td className="px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75 bg-indigo-500/[0.01] dark:bg-indigo-500/[0.015] transition-all duration-300 group-hover:border-b-transparent">
+                                    {tr.نوع_ارز && tr.نوع_ارز !== "-" ? (
+                                      <span className={`px-2 py-0.5 rounded-lg text-[9.5px] font-extrabold border ${
+                                        isDarkMode ? "bg-slate-800 border-slate-700 text-slate-400" : "bg-slate-100 border-slate-200/80 text-slate-600"
+                                      }`}>
+                                        {tr.نوع_ارز}
+                                      </span>
                                     ) : (
-                                      tr.نوع_ارز || <span className="text-slate-400">-</span>
+                                      <span className="text-slate-350 dark:text-slate-700 font-light">-</span>
                                     )}
                                   </td>
 
                                   {/* دقت استخراج */}
-                                  <td className="px-2 py-1.5 border-l border-slate-100 text-center select-none max-w-[100px]">
-                                    {isCurrentlyEditing ? (
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        className={`${inputClass} text-center font-mono`}
-                                        value={editingRowData.ضریب_اطمینان ?? 100}
-                                        onChange={(e) => handleFieldChange("ضریب_اطمینان", Math.min(100, Math.max(0, Number(e.target.value))))}
-                                      />
-                                    ) : (
-                                      <div className="flex flex-col items-center justify-center min-w-[70px] gap-1 mx-auto">
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}`}>
-                                          {score}%
-                                        </span>
-                                        <div className="w-12 bg-slate-150 rounded-full h-1 overflow-hidden shrink-0">
-                                          <div className={`h-full ${progressBg}`} style={{ width: `${score}%` }} />
-                                        </div>
-                                        <span className="text-[7.5px] text-slate-400 font-extrabold block shrink-0">{scoreDesc}</span>
+                                  <td className="px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75 transition-all duration-300 group-hover:border-b-transparent">
+                                    <div className="flex flex-col items-center justify-center min-w-[85px] gap-1 mx-auto">
+                                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${badgeBg}`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${progressBg} animate-pulse`} />
+                                        <span>{score}%</span>
+                                      </span>
+                                      <div className={`w-14 rounded-full h-1 overflow-hidden shrink-0 ${isDarkMode ? "bg-slate-800" : "bg-slate-150"}`}>
+                                        <div className={`h-full ${progressBg}`} style={{ width: `${score}%` }} />
                                       </div>
-                                    )}
+                                      <span className="text-[8px] text-slate-400 font-extrabold tracking-tight block shrink-0">{scoreDesc}</span>
+                                    </div>
                                   </td>
 
                                   {/* توضیحات تکمیلی */}
-                                  <td className="px-2 py-1.5 text-slate-500 max-w-[140px] truncate" title={tr.توضیحات || ""}>
-                                    {isCurrentlyEditing ? (
-                                      <input
-                                        type="text"
-                                        className={inputClass}
-                                        value={editingRowData.توضیحات || ""}
-                                        onChange={(e) => handleFieldChange("توضیحات", e.target.value)}
-                                      />
-                                    ) : (
-                                      tr.توضیحات || <span className="text-slate-300 font-light">-</span>
-                                    )}
+                                  <td className="px-3 py-3.5 text-slate-500 dark:text-slate-400 border-b border-l border-slate-200/60 dark:border-slate-800/75 max-w-[140px] truncate transition-all duration-300 group-hover:border-b-transparent" title={tr.توضیحات || ""}>
+                                    {tr.توضیحات || <span className="text-slate-300 dark:text-slate-700 font-light">-</span>}
                                   </td>
 
                                   {/* عملیات */}
-                                  <td className="px-2 py-1.5 text-center border-r border-slate-100">
-                                    {isCurrentlyEditing ? (
-                                      <div className="flex items-center justify-center gap-1.5 min-w-[110px]">
-                                        <button
-                                          onClick={() => handleSaveRow(originalIndex)}
-                                          className="p-1 px-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-sans text-[10px] font-bold flex items-center gap-1 transition shadow-sm"
-                                          title="ذخیره"
-                                        >
-                                          <Check className="h-3 w-3" />
-                                          <span>ذخیره</span>
-                                        </button>
-                                        <button
-                                          onClick={handleCancelEdit}
-                                          className="p-1 px-1.5 bg-slate-500 hover:bg-slate-400 text-white rounded font-sans text-[10px] font-bold flex items-center gap-1 transition shadow-sm"
-                                          title="انصراف"
-                                        >
-                                          <X className="h-3 w-3" />
-                                          <span>انصراف</span>
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center justify-center gap-1.5">
-                                        <button
-                                          onClick={() => handleStartEdit(originalIndex, tr)}
-                                          className={`p-1 px-2 rounded font-sans text-[10px] font-bold flex items-center gap-1 transition border ${
-                                            isDarkMode 
-                                              ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white" 
-                                              : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                                          }`}
-                                          title="ویرایش ردیف"
-                                        >
-                                          <FileEdit className="h-3 w-3" />
-                                          <span>ویرایش</span>
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteRow(originalIndex)}
-                                          className={`p-1 px-[7px] rounded font-sans text-[10px] font-bold flex items-center gap-1 transition border ${
-                                            isDarkMode 
-                                              ? "bg-red-950/20 border-rose-900/40 text-rose-400 hover:bg-rose-900/30 hover:text-rose-300" 
-                                              : "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100/70"
-                                          }`}
-                                          title="حذف این ردیف"
-                                        >
-                                          <Trash2 className="h-3 w-3" />
-                                          <span>حذف</span>
-                                        </button>
-                                      </div>
-                                    )}
+                                  <td className="px-3 py-3.5 text-center border-b border-slate-100 dark:border-slate-800/40 last:rounded-l-xl transition-all duration-300 group-hover:border-b-transparent">
+                                    <div className="flex items-center justify-center gap-2">
+                                      <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => handleStartEdit(originalIndex, tr)}
+                                        className={`p-1.5 rounded-xl font-sans text-[10.5px] font-bold flex items-center gap-1.5 transition-all border ${
+                                          isDarkMode 
+                                            ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750 hover:text-white hover:border-slate-600" 
+                                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300 shadow-sm"
+                                        }`}
+                                        title="ویرایش ردیف"
+                                      >
+                                        <FileEdit className="h-3.5 w-3.5 text-blue-500" />
+                                        <span>ویرایش</span>
+                                      </motion.button>
+                                      <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => handleDeleteRow(originalIndex)}
+                                        className={`p-1.5 rounded-xl font-sans text-[10.5px] font-bold flex items-center gap-1.5 transition-all border ${
+                                          isDarkMode 
+                                            ? "bg-rose-500/5 border-rose-500/10 text-rose-400 hover:bg-rose-500/15" 
+                                            : "bg-rose-50 border-rose-150 text-rose-600 hover:bg-rose-100/60"
+                                        }`}
+                                        title="حذف این ردیف"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                                        <span>حذف</span>
+                                      </motion.button>
+                                    </div>
                                   </td>
                                   </>
                                   )}
@@ -3326,7 +3704,6 @@ export default function App() {
                             })}
                           </tbody>
                         </table>
-                      )}
                       </div>
 
                       {/* Balance Calculator Widget (Right Side) */}
@@ -3772,6 +4149,7 @@ export default function App() {
                         );
                       })()}
                     </div>
+                  )}
                   </div>
                 )}
               </section>
