@@ -48,9 +48,17 @@ export interface UploadedFile {
   audioNotes?: AudioNote[];
 }
 
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  action: string;
+  details: string;
+}
+
 export interface PreviousScan {
   id: string;
   file: UploadedFile;
   transactions: TransactionItem[];
   timestamp: number;
+  auditLogs?: AuditLogEntry[];
 }
