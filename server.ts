@@ -52,15 +52,6 @@ app.post("/api/extract", async (req, res) => {
     ];
     let selectedModel = allowedModels.includes(model) ? model : "gemini-3.5-flash";
 
-    // Fallback mapping for unsupported or quota-exhausted preview models
-    const fallbackMap: Record<string, string> = {
-      "gemini-3.1-pro-preview": "gemini-1.5-pro"
-    };
-
-    if (fallbackMap[selectedModel]) {
-      selectedModel = fallbackMap[selectedModel];
-    }
-
     // Specific strict instructions tailored to Persian accounting standards and system instructions
     const systemInstruction = `شما یک حسابدار رسمی (CPA)، ممیز مالیاتی خبره، حسابرس ارشد و موتور هوش مصنوعی OCR هستید که با تمام اصول حسابداری عمومی پذیرفته شده (GAAP)، استانداردهای حسابداری ایران (مصوب سازمان حسابرسی)، ماهیت حساب‌ها (بدهکار/بستانکار) و فرآیندهای مالیاتی کشور آشنایی و تسلط کامل دارید.
 
@@ -272,7 +263,7 @@ app.post("/api/extract", async (req, res) => {
         errorMessage.includes("unavailable")
       ) {
          console.log("Retrying with fallback models...");
-         const fallbackModels = ["gemini-1.5-flash", "gemini-1.5-pro"];
+         const fallbackModels = ["gemini-3.5-flash", "gemini-3.1-pro-preview"];
          let fallbackSuccess = false;
          let lastError = apiError;
          

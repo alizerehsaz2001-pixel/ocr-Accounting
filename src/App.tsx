@@ -1924,130 +1924,210 @@ export default function App() {
             <div className="flex-1 flex items-center justify-center p-4">
               {pendingFile ? (
                 <motion.div 
-                  initial={{ opacity: 0, scale: 0.98, y: 10 }}
+                  initial={{ opacity: 0, scale: 0.99, y: 8 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  transition={{ duration: 0.4, ease: "easeOut" }}
-                  className="relative max-w-2xl w-full text-right"
+                  transition={{ duration: 0.35, ease: "easeOut" }}
+                  className="relative max-w-xl w-full text-right"
                   dir="rtl"
                 >
-                  <div className={`absolute -inset-1 blur-3xl opacity-15 rounded-full ${isDarkMode ? "bg-blue-500" : "bg-blue-400"}`}></div>
-                  <div className={`relative rounded-3xl shadow-2xl border p-6 md:p-8 w-full transition-all duration-300 ${
+                  <div className={`absolute -inset-1.5 blur-2xl opacity-10 rounded-3xl ${isDarkMode ? "bg-blue-500" : "bg-blue-400"}`}></div>
+                  <div className={`relative rounded-3xl border p-6 w-full transition-all duration-300 ${
                     isDarkMode 
-                      ? "bg-slate-900/90 backdrop-blur-xl border-slate-800" 
-                      : "bg-white/90 backdrop-blur-xl border-slate-200"
+                      ? "bg-slate-900/95 backdrop-blur-2xl border-slate-800/80 shadow-[0_20px_50px_rgba(0,0,0,0.3)]" 
+                      : "bg-white/95 backdrop-blur-2xl border-slate-200/80 shadow-[0_20px_50px_rgba(15,23,42,0.06)]"
                   }`}>
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className={`p-2 rounded-xl ${isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
-                        <Sparkles className="w-5 h-5 animate-pulse" />
-                      </div>
-                      <div>
-                        <h2 className={`text-lg font-black tracking-tight ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>
-                          دستورالعمل و پرامپت استخراج سند
-                        </h2>
-                        <p className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                          قبل از ارسال سند به هوش مصنوعی جمنی، می‌توانید خواسته‌ها یا راهنماهای خاص خود را بنویسید یا بدون پرامپت شروع کنید.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
-                      {/* Left: preview / info */}
-                      <div className="md:col-span-4 flex flex-col items-center justify-center gap-3">
-                        {pendingFile.mimeType === "application/pdf" ? (
-                          <div className={`w-full aspect-[3/4] max-h-[160px] rounded-2xl flex flex-col items-center justify-center border ${
-                            isDarkMode ? "bg-slate-800/60 border-slate-700/60 text-slate-400" : "bg-slate-50 border-slate-200 text-slate-500"
-                          }`}>
-                            <FileText className="w-12 h-12 mb-2 text-rose-500" />
-                            <span className="text-[10px] font-bold px-2 truncate max-w-full text-center">
-                              {pendingFile.name}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className={`relative w-full aspect-[3/4] max-h-[160px] rounded-2xl overflow-hidden border shadow-sm ${
-                            isDarkMode ? "border-slate-800" : "border-slate-200"
-                          }`}>
-                            <img 
-                              src={`data:${pendingFile.mimeType};base64,${pendingFile.base64}`} 
-                              alt="پیش‌نمایش سند" 
-                              className="w-full h-full object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-center p-2">
-                              <span className="text-[9px] text-white font-medium truncate max-w-full">
-                                {pendingFile.name}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                        <div className="text-center">
-                          <p className={`text-[10px] font-mono ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                            اندازه: {Math.round(pendingFile.size / 1024)} کیلوبایت
+                    
+                    {/* Header: Clean, Compact */}
+                    <div className="flex items-start justify-between gap-4 mb-5 pb-4 border-b border-slate-100 dark:border-slate-800/60">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          isDarkMode ? "bg-blue-500/10 text-blue-400 border border-blue-500/15" : "bg-blue-50 text-blue-600 border border-blue-100"
+                        }`}>
+                          <Sparkles className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h2 className={`text-[15px] font-black tracking-tight ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>
+                            تنظیمات هوش مصنوعی و راهنمای استخراج
+                          </h2>
+                          <p className={`text-[10.5px] mt-0.5 leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            می‌توانید دستورالعمل خاصی را به دستیار بگویید یا بدون پرامپت شروع کنید.
                           </p>
                         </div>
                       </div>
 
-                      {/* Right: prompt inputs */}
-                      <div className="md:col-span-8 flex flex-col gap-3 text-right" dir="rtl">
-                        <label className={`text-xs font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                          دستورالعمل یا فیلترهای مدنظر شما (اختیاری):
-                        </label>
-                        <textarea
-                          rows={4}
-                          value={customPrompt}
-                          onChange={(e) => setCustomPrompt(e.target.value)}
-                          placeholder="مثال: 'این رسید مربوط به خرید قطعات کارگاه ۲ است، لطفاً فقط اقلامی که ارزش افزوده دارند را استخراج کن و شرح فارسی را بررسی کن.' یا خالی بگذارید..."
-                          className={`w-full text-xs font-sans p-3 rounded-xl border outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed text-right ${
-                            isDarkMode 
-                              ? "bg-slate-950/80 border-slate-850 text-slate-100 placeholder-slate-600 focus:border-blue-500" 
-                              : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:bg-white"
-                          }`}
-                        />
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          <button
-                            type="button"
-                            onClick={() => setCustomPrompt("فقط اقلام با مبلغ بدهکار بالای ۱ میلیون تومان را استخراج کن.")}
-                            className={`px-2.5 py-1 rounded-lg text-[9px] font-semibold border ${
-                              isDarkMode ? "bg-slate-800/40 border-slate-750 text-slate-400 hover:bg-slate-800" : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200/50"
-                            }`}
-                          >
-                            اقلام بالای ۱ میلیون تومان
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCustomPrompt("این فاکتور ارزی است، لطفا نوع ارز را دلار آمریکا بگذار و معادل ریالی آن را در توضیحات درج کن.")}
-                            className={`px-2.5 py-1 rounded-lg text-[9px] font-semibold border ${
-                              isDarkMode ? "bg-slate-800/40 border-slate-750 text-slate-400 hover:bg-slate-800" : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200/50"
-                            }`}
-                          >
-                            فاکتور ارزی دلار
-                          </button>
-                          {customPrompt && (
-                            <button
-                              type="button"
-                              onClick={() => setCustomPrompt("")}
-                              className={`px-2.5 py-1 rounded-lg text-[9px] font-semibold border text-rose-500 border-rose-500/10 hover:bg-rose-500/5`}
-                            >
-                              حذف پرامپت
-                            </button>
-                          )}
+                      {/* File Mini-Card (Extremely Minimalist) */}
+                      <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border max-w-[180px] shrink-0 ${
+                        isDarkMode ? "bg-slate-950/60 border-slate-800" : "bg-slate-50 border-slate-250/50"
+                      }`}>
+                        {pendingFile.mimeType === "application/pdf" ? (
+                          <FileText className="w-4 h-4 text-rose-500 shrink-0" />
+                        ) : (
+                          <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 border border-slate-300/30">
+                            <img 
+                              src={`data:${pendingFile.mimeType};base64,${pendingFile.base64}`} 
+                              alt="" 
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                        )}
+                        <div className="min-w-0 text-right">
+                          <p className={`text-[9.5px] font-bold truncate ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                            {pendingFile.name}
+                          </p>
+                          <p className={`text-[8.5px] font-mono leading-none ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                            {Math.round(pendingFile.size / 1024)} KB
+                          </p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800/60">
+                    {/* Main Area */}
+                    <div className="flex flex-col gap-4">
+                      {/* Selection of AI Model */}
+                      <div className="flex flex-col gap-2">
+                        <label className={`text-[11px] font-black ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                          لطفاً مدل هوش مصنوعی خود را از بین مدل‌های برنامه انتخاب کنید:
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            {
+                              id: "gemini-3.5-flash",
+                              name: "Gemini 3.5 Flash",
+                              badge: "سرعت آنی و بهینه",
+                              desc: "پیشنهادی برای اسناد خوانا",
+                              icon: Sparkles,
+                              iconColor: "text-blue-500"
+                            },
+                            {
+                              id: "gemini-3.1-pro-preview",
+                              name: "Gemini 3.1 Pro",
+                              badge: "ممیز مالی ارشد",
+                              desc: "دقت عالی دست‌نویس",
+                              icon: Cpu,
+                              iconColor: "text-purple-500"
+                            }
+                          ].map((modelOpt) => {
+                            const isSelected = selectedModel === modelOpt.id;
+                            const Icon = modelOpt.icon;
+                            return (
+                              <button
+                                key={modelOpt.id}
+                                type="button"
+                                onClick={() => setSelectedModel(modelOpt.id)}
+                                className={`flex items-center justify-between p-2.5 rounded-xl border text-right transition-all duration-200 hover:-translate-y-0.5 ${
+                                  isSelected
+                                    ? isDarkMode
+                                      ? "bg-blue-500/10 border-blue-500/80 text-blue-400 shadow-[0_4px_12px_rgba(59,130,246,0.08)]"
+                                      : "bg-blue-50/70 border-blue-500 text-blue-600 shadow-[0_4px_12px_rgba(59,130,246,0.06)]"
+                                    : isDarkMode
+                                      ? "bg-slate-950/40 border-slate-800 text-slate-400 hover:bg-slate-800/50 hover:text-slate-300"
+                                      : "bg-slate-50 border-slate-200/60 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className={`p-1.5 rounded-lg ${
+                                    isSelected 
+                                      ? isDarkMode ? "bg-blue-500/10" : "bg-blue-50"
+                                      : isDarkMode ? "bg-slate-800/50" : "bg-slate-200/40"
+                                  }`}>
+                                    <Icon className={`w-3.5 h-3.5 ${isSelected ? modelOpt.iconColor : "text-slate-400"}`} />
+                                  </div>
+                                  <div className="text-right">
+                                    <p className={`text-[10.5px] font-bold ${isSelected ? (isDarkMode ? "text-slate-100" : "text-slate-900") : ""}`}>
+                                      {modelOpt.name}
+                                    </p>
+                                    <p className="text-[8.5px] opacity-75 leading-none mt-0.5">{modelOpt.badge}</p>
+                                  </div>
+                                </div>
+                                <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
+                                  isSelected 
+                                    ? "border-blue-500 bg-blue-500 text-white" 
+                                    : isDarkMode ? "border-slate-800" : "border-slate-300"
+                                }`}>
+                                  {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 text-right">
+                        <textarea
+                          rows={3}
+                          value={customPrompt}
+                          onChange={(e) => setCustomPrompt(e.target.value)}
+                          placeholder="مثلاً: 'تفکیک دقیق ردیف‌های با ارزش افزوده بالا' یا 'فقط اقلام مربوط به بستانکار...' یا بگذارید خالی بماند"
+                          className={`w-full text-[11.5px] font-sans p-3 rounded-2xl border outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed text-right transition-all resize-none ${
+                            isDarkMode 
+                              ? "bg-slate-950/40 border-slate-800 text-slate-100 placeholder-slate-600 focus:border-blue-500 focus:bg-slate-950/80" 
+                              : "bg-slate-50/50 border-slate-200/80 text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:bg-white"
+                          }`}
+                        />
+                      </div>
+
+                      {/* Intelligent Suggestion Chips */}
+                      <div>
+                        <span className={`text-[10px] font-bold block mb-2 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                          پیشنهادها و فیلترهای هوشمند:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { 
+                              label: "تفکیک ارزش افزوده", 
+                              text: "مبلغ مالیات ارزش افزوده و عوارض را به طور دقیق در ستون ارزش افزوده تفکیک کن." 
+                            },
+                            { 
+                              label: "تحلیل فاکتور ارزی", 
+                              text: "این فاکتور ارزی است؛ نوع ارز را به درستی استخراج کن و معادل ریالی را در توضیحات تکمیلی بنویس." 
+                            },
+                            { 
+                              label: "مبالغ بالای ۱ میلیون", 
+                              text: "فقط اقلام و ردیف‌های مالی با مبلغ بالای ۱ میلیون تومان را استخراج کن." 
+                            },
+                            { 
+                              label: "دقت دست‌نویس مخدوش", 
+                              text: "سند دارای اقلام دست‌نویس است؛ روی خوانش ارقام مخدوش و بررسی جمع کل تمرکز کن." 
+                            }
+                          ].map((chip, idx) => {
+                            const isSelected = customPrompt === chip.text;
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setCustomPrompt(isSelected ? "" : chip.text)}
+                                className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                                  isSelected 
+                                    ? "bg-blue-500/10 border-blue-500/40 text-blue-400 shadow-sm"
+                                    : isDarkMode 
+                                      ? "bg-slate-800/40 border-slate-800 text-slate-400 hover:bg-slate-800/80 hover:text-slate-300" 
+                                      : "bg-slate-50 border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-850"
+                                }`}
+                              >
+                                {chip.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-end gap-2.5 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60">
                       <button
                         type="button"
                         onClick={() => {
                           setPendingFile(null);
                           setCustomPrompt("");
                         }}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                        className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all ${
                           isDarkMode 
-                            ? "bg-slate-800 hover:bg-slate-750 text-slate-300" 
-                            : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                            ? "bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200" 
+                            : "bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-slate-800"
                         }`}
                       >
-                        انصراف و حذف فایل
+                        حذف و انصراف
                       </button>
                       
                       <button
@@ -2057,10 +2137,10 @@ export default function App() {
                           setPendingFile(null);
                           await processImageForExtraction(fileData.base64, fileData.name, fileData.mimeType, customPrompt);
                         }}
-                        className="px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5 shadow-lg shadow-blue-500/10 hover:shadow-blue-500/20 transition-all"
+                        className="px-4.5 py-2 rounded-xl text-[11px] font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5 shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 hover:-translate-y-0.5 transition-all"
                       >
-                        <Sparkles className="w-4 h-4 text-blue-200" />
-                        <span>تحلیل و ارسال به جمنی</span>
+                        <Sparkles className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                        <span>شروع تحلیل و استخراج</span>
                       </button>
                     </div>
                   </div>
@@ -2240,7 +2320,13 @@ export default function App() {
                     <div className={`relative w-full max-h-[300px] overflow-hidden rounded-lg border flex items-center justify-center shadow-sm transition-colors ${
                       isDarkMode ? "bg-[#1E293B] border-slate-800" : "bg-white border-slate-200"
                     }`}>
-                      {activeFile.preview.startsWith("data:application/pdf") ? (
+                      {!activeFile.preview ? (
+                        <div className="flex flex-col items-center justify-center p-8 text-center text-slate-500">
+                           <FileJson className="h-16 w-16 mb-3 opacity-60 text-blue-400" />
+                           <span className="text-sm font-semibold mb-1 truncate max-w-[200px]">{activeFile.name}</span>
+                           <span className="text-[11px] opacity-70">سند دیجیتال (بدون تصویر فیزیکی)</span>
+                        </div>
+                      ) : activeFile.preview.startsWith("data:application/pdf") ? (
                         <div className="flex flex-col items-center justify-center p-8 text-center text-slate-500">
                            <FileText className="h-16 w-16 mb-3 opacity-60 text-blue-400" />
                            <span className="text-sm font-semibold mb-1 truncate max-w-[200px]">{activeFile.name}</span>
@@ -2248,9 +2334,10 @@ export default function App() {
                         </div>
                       ) : (
                         <img
-                          src={activeFile.preview}
+                          src={activeFile.preview || undefined}
                           alt={activeFile.name}
                           className="max-h-[290px] object-contain"
+                          referrerPolicy="no-referrer"
                         />
                       )}
                       {activeFile.status === "processing" && (
@@ -4163,11 +4250,7 @@ export default function App() {
             <div className="flex gap-4">
               <span>سیستم: آنلاین و امن</span>
               <span>هسته مفسر: {
-                selectedModel === "gemini-3.5-flash" ? "Gemini 3.5 Flash" :
-                selectedModel === "gemini-3.1-pro-preview" ? "Gemini 3.1 Pro" :
-                selectedModel === "gemini-3.1-flash-lite" ? "Gemini 3.1 Flash Lite" :
-                selectedModel === "gemini-2.5-pro" ? "Gemini 2.5 Pro" :
-                "Gemini 2.5 Flash"
+                selectedModel === "gemini-3.1-pro-preview" ? "Gemini 3.1 Pro" : "Gemini 3.5 Flash"
               }</span>
               {activeFile?.status === "success" && (
                 <div className="flex items-center gap-2">
