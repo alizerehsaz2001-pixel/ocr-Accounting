@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Upload, Cpu, Edit3, Settings, ShieldCheck, Check, MousePointerClick, FileJson, FileSpreadsheet, Mic } from "lucide-react";
+import { Upload, Cpu, Edit3, Settings, ShieldCheck, Check, MousePointerClick, FileJson, FileSpreadsheet, Mic, Database } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface OnboardingModalProps {
@@ -22,6 +22,16 @@ export default function OnboardingModal({ isOpen, onClose, isDarkMode }: Onboard
         "استخراج دقیق مبالغ، تاریخ و شرح تراکنش",
         "تشخیص فایل‌های چندصفحه‌ای مالی",
         "تطبیق و موازنه هوشمند (محاسبه بدهکار/بستانکار)"
+      ]
+    },
+    {
+      title: "حسابداری مالی و دفتر کل (هسته مرکزی)",
+      description: "این بخش پایه و اساس نرم‌افزار است و تمامی اسناد در نهایت به اینجا ختم می‌شوند.",
+      icon: <Database className="h-10 w-10 text-indigo-500" />,
+      features: [
+        "کدینگ حساب‌ها: امکان تعریف حساب‌ها در سطوح مختلف (گروه، کل، معین و تفصیلی‌های چند سطحی).",
+        "صدور سند حسابداری: ثبت اسناد به صورت دستی و اتوماتیک، تایید و قطعی کردن آنها.",
+        "ترازنامه‌ها و دفاتر: تهیه تراز آزمایشی (دو، چهار، شش و هشت ستونی) و چاپ دفاتر قانونی (روزنامه و کل)."
       ]
     },
     {

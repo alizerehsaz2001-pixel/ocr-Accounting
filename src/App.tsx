@@ -52,6 +52,16 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  BookOpen,
+  Receipt,
+  ShoppingBag,
+  Boxes,
+  Users,
+  Building2,
+  Percent,
+  BarChart3,
+  Lock,
+  Construction,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -61,6 +71,18 @@ import OnboardingModal from "./components/OnboardingModal";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
+
+const ERP_MODULES = [
+  { id: 1, name: "حسابداری مالی و دفتر کل (هسته مرکزی)", icon: BookOpen },
+  { id: 2, name: "خزانه‌داری (دریافت و پرداخت)", icon: Receipt },
+  { id: 3, name: "خرید و فروش (بازرگانی)", icon: ShoppingBag },
+  { id: 4, name: "انبارداری و کنترل موجودی", icon: Boxes },
+  { id: 5, name: "حقوق و دستمزد", icon: Users },
+  { id: 6, name: "دارایی‌های ثابت (اموال)", icon: Building2 },
+  { id: 7, name: "مالیات و تکالیف قانونی", icon: Percent },
+  { id: 8, name: "گزارش‌گیری پیشرفته و داشبورد مدیریتی", icon: BarChart3 },
+  { id: 9, name: "امنیت و کنترل دسترسی کاربران", icon: Lock },
+];
 
 export default function App() {
   // Main data states
@@ -116,6 +138,7 @@ export default function App() {
 
   const [pendingFile, setPendingFile] = useState<{ base64: string; name: string; mimeType: string; size: number } | null>(null);
   const [customPrompt, setCustomPrompt] = useState<string>("");
+  const [activeErpModuleId, setActiveErpModuleId] = useState<number | null>(null);
 
   const [previousScans, setPreviousScans] = useState<PreviousScan[]>(() => {
     const saved = localStorage.getItem("previous_scans");
@@ -1473,6 +1496,58 @@ export default function App() {
               <span className="text-xs">حذف داده و پرونده فعلی</span>
             </button>
           )}
+
+          {/* ERP Modules */}
+          <div className="px-4 pt-4 pb-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-t border-slate-800/80 mt-4">
+            ماژول‌های هوشمند ERP
+          </div>
+          <div className="space-y-1 px-2 max-h-[280px] overflow-y-auto">
+            {ERP_MODULES.map((module) => {
+              const IconComponent = module.icon;
+              const isActive = activeErpModuleId === module.id;
+              return (
+                <motion.button
+                  key={module.id}
+                  onClick={() => {
+                    setActiveErpModuleId(module.id);
+                    showNotification(`ماژول «${module.name}» در حال ساخت و ساز است.`, "info");
+                  }}
+                  whileHover={{ scale: 1.015 }}
+                  whileTap={{ scale: 0.985 }}
+                  animate={isActive ? {
+                    backgroundColor: "rgba(99, 102, 241, 0.12)",
+                    borderColor: "rgba(99, 102, 241, 0.35)",
+                  } : {
+                    backgroundColor: "rgba(99, 102, 241, 0)",
+                    borderColor: "rgba(0,0,0,0)",
+                  }}
+                  transition={{ duration: 0.25, ease: "easeInOut" }}
+                  className={`w-full flex items-center justify-between px-2.5 py-2.5 rounded-lg border text-right group transition-all duration-300 ${
+                    isActive
+                      ? "text-indigo-300 ring-1 ring-indigo-500/10 shadow-[0_0_12px_rgba(99,102,241,0.12)] font-semibold"
+                      : "border-transparent text-slate-400 hover:bg-slate-800/40 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <IconComponent className={`h-3.5 w-3.5 shrink-0 transition-colors ${isActive ? "text-indigo-450" : "text-slate-500 group-hover:text-indigo-400"}`} />
+                    <span className={`text-[11px] truncate leading-normal transition-colors ${isActive ? "text-slate-100 font-bold" : "group-hover:text-white"}`} title={module.name}>
+                      {module.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-1">
+                    <Construction className={`h-3.5 w-3.5 text-amber-500 transition-all duration-300 ${isActive ? "opacity-100 animate-bounce" : "opacity-0 group-hover:opacity-100"}`} />
+                    <span className={`text-[8px] border px-1 py-0.5 rounded transition-all font-bold ${
+                      isActive 
+                        ? "bg-amber-500/20 text-amber-400 border-amber-500/45 shadow-[0_0_8px_rgba(245,158,11,0.25)] animate-pulse" 
+                        : "bg-slate-800/80 text-amber-500/90 border-amber-500/20 scale-90 group-hover:scale-100"
+                    }`}>
+                      بزودی
+                    </span>
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
 
           {/* Recent successful extractions */}
           <div className="px-4 pt-6 pb-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-t border-slate-800/80 mt-4 flex items-center justify-between">
