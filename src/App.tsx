@@ -62,6 +62,11 @@ import {
   BarChart3,
   Lock,
   Construction,
+  MessageSquare,
+  Send,
+  MessageCircle,
+  Bot,
+  Headphones,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -73,6 +78,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recha
 import { motion, AnimatePresence } from "motion/react";
 
 const ERP_MODULES = [
+  { id: 0, name: "آنالیز تصویر پیشرفته", icon: Sparkles, isLive: true },
   { id: 1, name: "حسابداری مالی و دفتر کل (هسته مرکزی)", icon: BookOpen },
   { id: 2, name: "خزانه‌داری (دریافت و پرداخت)", icon: Receipt },
   { id: 3, name: "خرید و فروش (بازرگانی)", icon: ShoppingBag },
@@ -138,7 +144,27 @@ export default function App() {
 
   const [pendingFile, setPendingFile] = useState<{ base64: string; name: string; mimeType: string; size: number } | null>(null);
   const [customPrompt, setCustomPrompt] = useState<string>("");
-  const [activeErpModuleId, setActiveErpModuleId] = useState<number | null>(null);
+  const [activeErpModuleId, setActiveErpModuleId] = useState<number | null>(0);
+
+  // Support chatbot state variables
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; role: "user" | "assistant"; text: string; timestamp: Date }>>([
+    {
+      id: "welcome",
+      role: "assistant",
+      text: "سلام! من مهرآیین، پشتیبان هوشمند شما هستم. چطور می‌توانم در کار با نرم‌افزار، استخراج اسناد فاکتور یا ماژول‌های حسابداری و مالی به شما کمک کنم؟",
+      timestamp: new Date(),
+    }
+  ]);
+  const [chatInput, setChatInput] = useState<string>("");
+  const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, isChatOpen]);
 
   const [previousScans, setPreviousScans] = useState<PreviousScan[]>(() => {
     const saved = localStorage.getItem("previous_scans");
@@ -276,10 +302,65 @@ export default function App() {
   const handleTabChange = (tab: "analysis" | "json" | "converter") => {
     setActiveTab(tab);
     let tabName = "";
-    if (tab === "analysis") tabName = "بررسی صحت و ضریب اطمینان";
+    if (tab === "analysis") tabName = "آنالیز تصویر پیشرفته";
     if (tab === "json") tabName = "آرایه خام JSON";
     if (tab === "converter") tabName = "خروجی اکسل پیشرفته";
     logEvent("تغییر تب", `کاربر وارد تب «${tabName}» شد.`);
+  };
+
+  const handleSendChatMessage = async (textToSend?: string) => {
+    const messageText = textToSend || chatInput;
+    if (!messageText.trim() || isChatLoading) return;
+
+    if (!textToSend) {
+      setChatInput("");
+    }
+
+    const userMsg = {
+      id: Math.random().toString(36).substring(7),
+      role: "user" as const,
+      text: messageText,
+      timestamp: new Date(),
+    };
+
+    setChatMessages(prev => [...prev, userMsg]);
+    setIsChatLoading(true);
+
+    try {
+      const chatHistoryForApi = [...chatMessages, userMsg].map(m => ({
+        role: m.role,
+        text: m.text,
+      }));
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ messages: chatHistoryForApi }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setChatMessages(prev => [...prev, {
+          id: Math.random().toString(36).substring(7),
+          role: "assistant" as const,
+          text: data.text,
+          timestamp: new Date(),
+        }]);
+      } else {
+        throw new Error(data.error || "خطایی رخ داد.");
+      }
+    } catch (err: any) {
+      setChatMessages(prev => [...prev, {
+        id: Math.random().toString(36).substring(7),
+        role: "assistant" as const,
+        text: `متاسفانه مشکلی در برقراری ارتباط با سرور رخ داد: ${err.message || "خطای ناشناخته"}. لطفا دوباره تلاش کنید.`,
+        timestamp: new Date(),
+      }]);
+    } finally {
+      setIsChatLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -1487,6 +1568,19 @@ export default function App() {
             <span className="text-xs">راهنمای هوشمند</span>
           </button>
 
+          <button
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            className={`w-full flex items-center px-4 py-2.5 transition-all text-right ${
+              isChatOpen 
+                ? "bg-indigo-600/15 text-indigo-400 border-r-4 border-indigo-500 font-bold" 
+                : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
+            }`}
+          >
+            <Headphones className="h-4 w-4 ml-2.5 shrink-0 text-indigo-400" />
+            <span className="text-xs">پشتیبان آنلاین مهرآیین</span>
+            <span className="mr-auto w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          </button>
+
           {activeFile && (
             <button
               onClick={clearCurrentFile}
@@ -1510,7 +1604,11 @@ export default function App() {
                   key={module.id}
                   onClick={() => {
                     setActiveErpModuleId(module.id);
-                    showNotification(`ماژول «${module.name}» در حال ساخت و ساز است.`, "info");
+                    if (module.isLive) {
+                      showNotification(`ماژول «${module.name}» فعال و آماده استفاده است.`, "success");
+                    } else {
+                      showNotification(`ماژول «${module.name}» در حال ساخت و ساز است.`, "info");
+                    }
                   }}
                   whileHover={{ scale: 1.015 }}
                   whileTap={{ scale: 0.985 }}
@@ -1522,12 +1620,20 @@ export default function App() {
                     borderColor: "rgba(0,0,0,0)",
                   }}
                   transition={{ duration: 0.25, ease: "easeInOut" }}
-                  className={`w-full flex items-center justify-between px-2.5 py-2.5 rounded-lg border text-right group transition-all duration-300 ${
+                  className={`relative w-full flex items-center justify-between px-2.5 py-2.5 rounded-lg border text-right group transition-all duration-300 ${
                     isActive
                       ? "text-indigo-300 ring-1 ring-indigo-500/10 shadow-[0_0_12px_rgba(99,102,241,0.12)] font-semibold"
                       : "border-transparent text-slate-400 hover:bg-slate-800/40 hover:text-white"
                   }`}
                 >
+                  {/* Subtle Tooltip */}
+                  <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2.5 hidden group-hover:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-950/95 border border-indigo-500/30 text-indigo-300 text-[10px] font-medium rounded-md shadow-xl pointer-events-none whitespace-nowrap z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200" dir="ltr">
+                    <span className={`w-1.5 h-1.5 rounded-full ${module.isLive ? "bg-emerald-450 animate-pulse" : "bg-indigo-400 animate-ping"}`}></span>
+                    <span>{module.isLive ? "Active and fully functional module" : "Click to initialize module setup"}</span>
+                    {/* Small Arrow */}
+                    <div className="absolute top-1/2 -translate-y-1/2 left-full border-4 border-transparent border-l-slate-950/95"></div>
+                  </div>
+
                   <div className="flex items-center gap-2 min-w-0 flex-1">
                     <IconComponent className={`h-3.5 w-3.5 shrink-0 transition-colors ${isActive ? "text-indigo-450" : "text-slate-500 group-hover:text-indigo-400"}`} />
                     <span className={`text-[11px] truncate leading-normal transition-colors ${isActive ? "text-slate-100 font-bold" : "group-hover:text-white"}`} title={module.name}>
@@ -1535,14 +1641,22 @@ export default function App() {
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 ml-1">
-                    <Construction className={`h-3.5 w-3.5 text-amber-500 transition-all duration-300 ${isActive ? "opacity-100 animate-bounce" : "opacity-0 group-hover:opacity-100"}`} />
-                    <span className={`text-[8px] border px-1 py-0.5 rounded transition-all font-bold ${
-                      isActive 
-                        ? "bg-amber-500/20 text-amber-400 border-amber-500/45 shadow-[0_0_8px_rgba(245,158,11,0.25)] animate-pulse" 
-                        : "bg-slate-800/80 text-amber-500/90 border-amber-500/20 scale-90 group-hover:scale-100"
-                    }`}>
-                      بزودی
-                    </span>
+                    {module.isLive ? (
+                      <span className={`text-[8px] border px-1.5 py-0.5 rounded transition-all font-bold bg-emerald-500/15 text-emerald-400 border-emerald-500/35 shadow-[0_0_8px_rgba(16,185,129,0.25)]`}>
+                        فعال
+                      </span>
+                    ) : (
+                      <>
+                        <Construction className={`h-3.5 w-3.5 text-amber-500 transition-all duration-300 ${isActive ? "opacity-100 animate-bounce" : "opacity-0 group-hover:opacity-100"}`} />
+                        <span className={`text-[8px] border px-1 py-0.5 rounded transition-all font-bold ${
+                          isActive 
+                            ? "bg-amber-500/20 text-amber-400 border-amber-500/45 shadow-[0_0_8px_rgba(245,158,11,0.25)] animate-pulse" 
+                            : "bg-slate-800/80 text-amber-500/90 border-amber-500/20 scale-90 group-hover:scale-100"
+                        }`}>
+                          بزودی
+                        </span>
+                      </>
+                    )}
                   </div>
                 </motion.button>
               );
@@ -2468,7 +2582,7 @@ export default function App() {
                       }`}
                     >
                       <Sparkles className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
-                      <span>بررسی صحت و ضریب اطمینان</span>
+                      <span>آنالیز تصویر پیشرفته</span>
                     </button>
                     <button
                       onClick={() => handleTabChange("json")}
@@ -5822,6 +5936,198 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Floating Chatbot Widget */}
+      <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-4" dir="rtl">
+        <AnimatePresence>
+          {isChatOpen && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.85, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.85, y: 30 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className={`w-[380px] h-[520px] max-w-[calc(100vw-3rem)] max-h-[calc(100vh-8rem)] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
+                isDarkMode ? "bg-slate-900/95 border-slate-800 text-slate-100" : "bg-white/95 border-slate-200 text-slate-800 shadow-slate-300/40"
+              } backdrop-blur-md`}
+            >
+              {/* Header */}
+              <div className={`p-4 border-b flex items-center justify-between shrink-0 ${
+                isDarkMode ? "bg-slate-800/90 border-slate-750" : "bg-slate-50/90 border-slate-100"
+              }`}>
+                <div className="flex items-center gap-3 text-right">
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-md">
+                      <Bot className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900"></span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-xs text-right">مهرآیین - پشتیبان هوشمند ERP</h4>
+                    <p className={`text-[10px] mt-0.5 text-right ${isDarkMode ? "text-emerald-400" : "text-emerald-600"} flex items-center gap-1`}>
+                      <span>•</span> پاسخگوی آنلاین فعال
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      if (window.confirm("آیا مایل به شروع مجدد گفتگو و پاکسازی تاریخچه پیام‌ها هستید؟")) {
+                        setChatMessages([
+                          {
+                            id: "welcome",
+                            role: "assistant",
+                            text: "سلام! من مهرآیین، پشتیبان هوشمند شما هستم. چطور می‌توانم در کار با نرم‌افزار، استخراج اسناد فاکتور یا ماژول‌های حسابداری و مالی به شما کمک کنم؟",
+                            timestamp: new Date(),
+                          }
+                        ]);
+                        showNotification("تاریخچه گفتگو بازنشانی شد.", "info");
+                      }
+                    }}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-200 text-slate-500 hover:text-slate-900"
+                    }`}
+                    title="شروع مجدد گفتگو"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setIsChatOpen(false)}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-200 text-slate-500 hover:text-slate-900"
+                    }`}
+                    title="بستن گفتگو"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Message Thread */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col custom-scrollbar">
+                {chatMessages.map((msg) => {
+                  const isUser = msg.role === "user";
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex ${isUser ? "justify-start" : "justify-end"} max-w-[85%] ${isUser ? "mr-auto" : "ml-auto"}`}
+                    >
+                      <div className={`p-3 rounded-2xl text-xs leading-relaxed ${
+                        isUser
+                          ? "bg-gradient-to-l from-indigo-600 to-blue-600 text-white rounded-tr-none shadow-sm text-right animate-fade-in"
+                          : isDarkMode
+                            ? "bg-slate-800/90 border border-slate-700/50 text-slate-100 rounded-tl-none text-right animate-fade-in"
+                            : "bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200/50 text-right animate-fade-in"
+                      }`}>
+                        <div className="whitespace-pre-wrap">{msg.text}</div>
+                        <div className={`text-[8px] text-left mt-1.5 opacity-50 font-mono`}>
+                          {msg.timestamp.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Loading indicator */}
+                {isChatLoading && (
+                  <div className="flex justify-end max-w-[85%] ml-auto">
+                    <div className={`p-3 rounded-2xl rounded-tl-none flex items-center gap-1.5 ${
+                      isDarkMode ? "bg-slate-800/90" : "bg-slate-100"
+                    }`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "0ms" }}></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "150ms" }}></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "300ms" }}></span>
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Suggestions Panel */}
+              {chatMessages.length <= 2 && (
+                <div className={`px-4 py-2 shrink-0 border-t flex flex-col gap-1.5 ${
+                  isDarkMode ? "bg-slate-800/50 border-slate-750" : "bg-slate-50 border-slate-100"
+                }`}>
+                  <span className={`text-[9px] font-bold text-right ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>سوالات پیشنهادی کاربر:</span>
+                  <div className="flex flex-wrap gap-1.5 justify-start">
+                    {[
+                      { t: "تبدیل فایل اکسل چطور کار می‌کند؟", q: "تبدیل فایل اکسل چطور کار می‌کند؟" },
+                      { t: "موازنه دوطرفه چیست؟", q: "موازنه دوطرفه چیست و چگونه به مغایرت‌گیری کمک می‌کند؟" },
+                      { t: "درباره سرفصل‌های ERP توضیح دهید", q: "درباره سرفصل‌های ماژول‌های ERP در حال ساخت توضیح دهید" },
+                    ].map((chip, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSendChatMessage(chip.q)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] text-right transition-all border ${
+                          isDarkMode 
+                            ? "bg-slate-800/70 border-slate-700/60 text-slate-300 hover:bg-slate-750 hover:border-indigo-500/40 hover:text-indigo-300" 
+                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-indigo-500/30 hover:text-indigo-600 shadow-xs cursor-pointer"
+                        }`}
+                      >
+                        {chip.t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Chat Input Footer */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendChatMessage();
+                }}
+                className={`p-3 border-t shrink-0 flex items-center gap-2 ${
+                  isDarkMode ? "bg-slate-800/90 border-slate-750" : "bg-slate-50/90 border-slate-100"
+                }`}
+              >
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="سوال خود را بپرسید..."
+                  className={`flex-1 px-3.5 py-2 rounded-xl text-xs outline-none transition-all border text-right ${
+                    isDarkMode 
+                      ? "bg-slate-900 border-slate-850 text-slate-100 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30" 
+                      : "bg-white border-slate-200 text-slate-800 focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/20"
+                  }`}
+                  disabled={isChatLoading}
+                />
+                <button
+                  type="submit"
+                  disabled={isChatLoading || !chatInput.trim()}
+                  className={`p-2 rounded-xl transition-all ${
+                    chatInput.trim() && !isChatLoading
+                      ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/10 active:scale-95 cursor-pointer"
+                      : isDarkMode 
+                        ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
+                        : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  }`}
+                >
+                  <Send className="w-3.5 h-3.5 rotate-180" />
+                </button>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Floating Bubble Button */}
+        <motion.button
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className={`relative w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 transition-all cursor-pointer border border-indigo-450/25`}
+        >
+          {isChatOpen ? (
+            <X className="w-6 h-6" />
+          ) : (
+            <>
+              <MessageSquare className="w-6 h-6 animate-pulse" />
+              {/* Pulsing notification dot */}
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900 animate-pulse"></span>
+            </>
+          )}
+        </motion.button>
+      </div>
     </div>
   );
 }
