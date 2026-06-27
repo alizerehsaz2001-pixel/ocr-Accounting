@@ -73,13 +73,14 @@ import CameraCapture from "./components/CameraCapture";
 import AudioNotesSection from "./components/AudioNotesSection";
 import ThemeSwitcher from "./components/ThemeSwitcher";
 import OnboardingModal from "./components/OnboardingModal";
+import FinancialAccountingModule from "./components/FinancialAccountingModule";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
 
 const ERP_MODULES = [
   { id: 0, name: "آنالیز تصویر پیشرفته", icon: Sparkles, isLive: true },
-  { id: 1, name: "حسابداری مالی و دفتر کل (هسته مرکزی)", icon: BookOpen },
+  { id: 1, name: "حسابداری مالی و دفتر کل (هسته مرکزی)", icon: BookOpen, isLive: true },
   { id: 2, name: "خزانه‌داری (دریافت و پرداخت)", icon: Receipt },
   { id: 3, name: "خرید و فروش (بازرگانی)", icon: ShoppingBag },
   { id: 4, name: "انبارداری و کنترل موجودی", icon: Boxes },
@@ -1924,7 +1925,10 @@ export default function App() {
         </header>
 
         {/* Workspace body */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+        {activeErpModuleId === 1 ? (
+          <FinancialAccountingModule isDarkMode={isDarkMode} showNotification={showNotification} />
+        ) : (
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col">
           {guideOpen && (
             <div className={`p-4 shadow-sm animate-fade-in flex flex-col items-start gap-3 mb-4 shrink-0 rounded-xl border transition-colors ${
               isDarkMode 
@@ -4436,6 +4440,7 @@ export default function App() {
             </div>
           )}
         </div>
+      )}
 
         {/* System safety warning & footer */}
         <footer className="h-auto min-h-[36px] py-2 bg-slate-800 text-slate-400 flex flex-col items-center justify-center px-6 text-[10px] select-none shrink-0">

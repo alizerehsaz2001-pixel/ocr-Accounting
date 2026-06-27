@@ -380,6 +380,93 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
+// Interface for validating voucher mapping
+interface VoucherLineInput {
+  account_id: string;
+  detailed_account_id?: string;
+  debit: number;
+  credit: number;
+  description: string;
+}
+
+interface AccountDetailedLinkInput {
+  account_id: string;
+  detailed_account_id: string;
+}
+
+/**
+ * تابعی در بکاند که صحت ارتباط حساب‌های تفصیلی و معین را در آرتیکل‌های سند حسابداری بررسی می‌کند
+ * این تابع از جدول واسط (links) برای تایید همخوانی تفصیلی شناور و معین استفاده می‌کند.
+ */
+export function validateVoucherMapping(
+  lines: VoucherLineInput[],
+  links: AccountDetailedLinkInput[]
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!lines || !Array.isArray(lines)) {
+    return { valid: false, errors: ["اقلام سند یافت نشد یا آرایه نامعتبر است."] };
+  }
+
+  // اگر پیوندها فرستاده نشده باشند، یک آرایه خالی فرض می‌کنیم
+  const safeLinks = Array.isArray(links) ? links : [];
+
+  lines.forEach((line, index) => {
+    const rowNum = index + 1;
+    const accountId = line.account_id;
+    const detailedId = line.detailed_account_id;
+
+    if (accountId) {
+      // آیا این حساب معین اصلاً هیچ تفصیلی شناور متصلی در جدول واسطه دارد؟
+      const hasAnyLinks = safeLinks.some(link => link.account_id === accountId);
+
+      if (detailedId) {
+        // تفصیلی شناور انتخاب شده است؛ پس باید حتما در جدول واسطه به این معین لینک شده باشد
+        const isAllowed = safeLinks.some(
+          link => link.account_id === accountId && link.detailed_account_id === detailedId
+        );
+
+        if (!isAllowed) {
+          errors.push(
+            `سطر ${rowNum}: حساب تفصیلی شناور انتخاب شده مجاز به تخصیص به این حساب معین نیست.`
+          );
+        }
+      } else if (hasAnyLinks) {
+        // تفصیلی انتخاب نشده ولی طبق جدول واسط برای این معین، انتخاب تفصیلی الزامی است
+        errors.push(
+          `سطر ${rowNum}: برای حساب معین انتخاب شده، انتخاب حساب تفصیلی شناور الزامی است.`
+        );
+      }
+    }
+  });
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+// API endpoint to validate voucher detailed accounts mapping
+app.post("/api/vouchers/validate", (req, res) => {
+  try {
+    const { lines, links } = req.body;
+    
+    const result = validateVoucherMapping(lines, links);
+    
+    res.json({
+      success: true,
+      valid: result.valid,
+      errors: result.errors
+    });
+  } catch (error: any) {
+    console.error("خطا در اجرای تابع اعتبارسنجی نگاشت تفصیلی بکاند:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "خطای ناشناخته در اجرای تابع اعتبارسنجی بکاند"
+    });
+  }
+});
+
 // Setup dev server with Vite, otherwise serve built outputs in production
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
