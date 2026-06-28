@@ -96,11 +96,38 @@ export class BankOperationsEngine {
   }
 
   private seedMockLedger() {
-    // Seed some mock ledger entries for the reconciliation engine to match against
-    this.ledgerLines = [
-      { id: "LL-100", bank_account_id: "Bank_Mellat", date: new Date().toISOString().split('T')[0], document_number: "REF-555", debit: 15000000, credit: 0, description: "واریز مشتری", is_reconciled: false },
-      { id: "LL-101", bank_account_id: "Bank_Saman", date: new Date().toISOString().split('T')[0], document_number: "TRX-777", debit: 0, credit: 5000000, description: "پرداخت قبض", is_reconciled: false }
+    // Seed some initial statements and ledger entries for Mellat and Saman
+    const today = new Date().toISOString().split('T')[0];
+    const yest = new Date(Date.now() - 24 * 3600 * 1000).toISOString().split('T')[0];
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString().split('T')[0];
+
+    // Bank Statement Lines (what actually happened at the bank)
+    this.statementLines = [
+      // Bank Mellat Statements
+      { id: "BSL-M-01", bank_account_id: "Bank_Mellat", transaction_date: twoDaysAgo, document_number: "PAY-1001", description: "واریز بابت فروش کالا", debit: 0, credit: 45000000, running_balance: 145000000, reconciliation_status: BankStatementStatus.UNMATCHED },
+      { id: "BSL-M-02", bank_account_id: "Bank_Mellat", transaction_date: yest, document_number: "CHQ-882", description: "وصول چک نقدی مشتری", debit: 0, credit: 15000000, running_balance: 160000000, reconciliation_status: BankStatementStatus.UNMATCHED },
+      { id: "BSL-M-03", bank_account_id: "Bank_Mellat", transaction_date: today, document_number: "TRX-4421", description: "خرید ملزومات اداری", debit: 3200000, credit: 0, running_balance: 156800000, reconciliation_status: BankStatementStatus.UNMATCHED },
+      { id: "BSL-M-04", bank_account_id: "Bank_Mellat", transaction_date: today, document_number: "FEE-M1", description: "کارمزد انتقال وجه پایا", debit: 120000, credit: 0, running_balance: 156680000, reconciliation_status: BankStatementStatus.UNMATCHED },
+      { id: "BSL-M-05", bank_account_id: "Bank_Mellat", transaction_date: today, document_number: "DEP-UNK", description: "واریز شناسه نامشخص پایا", debit: 0, credit: 8500000, running_balance: 165180000, reconciliation_status: BankStatementStatus.UNMATCHED },
+
+      // Bank Saman Statements
+      { id: "BSL-S-01", bank_account_id: "Bank_Saman", transaction_date: twoDaysAgo, document_number: "REF-772", description: "واریز سود سپرده ماهانه", debit: 0, credit: 12500000, running_balance: 62500000, reconciliation_status: BankStatementStatus.UNMATCHED },
+      { id: "BSL-S-02", bank_account_id: "Bank_Saman", transaction_date: yest, document_number: "TRX-777", description: "پرداخت قبض شرکت", debit: 5000000, credit: 0, running_balance: 57500000, reconciliation_status: BankStatementStatus.UNMATCHED }
     ];
+
+    // System Ledger Lines (what our books recorded)
+    this.ledgerLines = [
+      // Bank Mellat Ledger entries
+      { id: "LL-M-101", bank_account_id: "Bank_Mellat", date: twoDaysAgo, document_number: "PAY-1001", debit: 45000000, credit: 0, description: "ثبت فروش نقدی شرکت", is_reconciled: false },
+      { id: "LL-M-102", bank_account_id: "Bank_Mellat", date: yest, document_number: "CHQ-882", debit: 15000000, credit: 0, description: "وصول اسناد دریافتنی", is_reconciled: false },
+      { id: "LL-M-103", bank_account_id: "Bank_Mellat", date: today, document_number: "TRX-4421", debit: 0, credit: 3200000, description: "پرداخت تنخواه گردان ملزومات", is_reconciled: false },
+      { id: "LL-M-104", bank_account_id: "Bank_Mellat", date: today, document_number: "OUT-091", debit: 0, credit: 18000000, description: "چک صادره عهده شرکت (در راهی)", is_reconciled: false }, // Outstanding cheque
+
+      // Bank Saman Ledger entries
+      { id: "LL-S-101", bank_account_id: "Bank_Saman", date: yest, document_number: "TRX-777", debit: 0, credit: 5000000, description: "پرداخت قبوض خدماتی", is_reconciled: false },
+      { id: "LL-S-102", bank_account_id: "Bank_Saman", date: today, document_number: "IN-991", debit: 6000000, credit: 0, description: "حواله دریافتی بین راهی", is_reconciled: false } // Deposit in transit
+    ];
+
     this.saveToStorage();
   }
 
@@ -118,7 +145,6 @@ export class BankOperationsEngine {
 
     const jvId = "JV-TRF-" + Math.random().toString(36).substring(2, 8).toUpperCase();
     
-    // In a real system, we'd wrap this in a DB transaction
     const transfer: InterBankTransfer = {
       id: "TRF-" + Math.random().toString(36).substring(2, 9),
       transfer_number: Math.floor(Math.random() * 1000000).toString(),
@@ -139,7 +165,7 @@ export class BankOperationsEngine {
       document_number: trackingNum,
       debit: 0,
       credit: amount,
-      description: `حواله به ${destBankId} - ${description}`,
+      description: `حواله به ${this.getBankNamePersian(destBankId)} - ${description}`,
       is_reconciled: false
     });
 
@@ -150,7 +176,7 @@ export class BankOperationsEngine {
       document_number: trackingNum,
       debit: amount,
       credit: 0,
-      description: `حواله از ${sourceBankId} - ${description}`,
+      description: `حواله از ${this.getBankNamePersian(sourceBankId)} - ${description}`,
       is_reconciled: false
     });
 
@@ -256,7 +282,131 @@ export class BankOperationsEngine {
     }
   }
 
-  // 4. Book Bank Fees (Auto-Voucher)
+  // 4. Manual reconciliation
+  manualReconcile(
+    bankAccountId: string,
+    statementLineId: string,
+    ledgerLineId: string,
+    matchedBy: string = "USER"
+  ): { success: boolean; error?: string; reconciliation?: BankReconciliation } {
+    const backupStatements = JSON.parse(JSON.stringify(this.statementLines));
+    const backupLedger = JSON.parse(JSON.stringify(this.ledgerLines));
+    const backupRecons = JSON.parse(JSON.stringify(this.reconciliations));
+
+    try {
+      const stmt = this.statementLines.find(s => s.id === statementLineId);
+      const ledg = this.ledgerLines.find(l => l.id === ledgerLineId);
+
+      if (!stmt) throw new Error("تراکنش صورتحساب بانکی یافت نشد.");
+      if (!ledg) throw new Error("سند معین حسابداری یافت نشد.");
+
+      if (stmt.bank_account_id !== bankAccountId || ledg.bank_account_id !== bankAccountId) {
+        throw new Error("هر دو آرتیکل باید مربوط به یک بانک باشند.");
+      }
+
+      if (stmt.reconciliation_status !== BankStatementStatus.UNMATCHED) {
+        throw new Error("این تراکنش بانکی قبلاً تطبیق داده شده است.");
+      }
+
+      if (ledg.is_reconciled) {
+        throw new Error("این سند معین حسابداری قبلاً تطبیق داده شده است.");
+      }
+
+      const stmtAmount = stmt.credit > 0 ? stmt.credit : stmt.debit;
+      const ledgerAmount = stmt.credit > 0 ? ledg.debit : ledg.credit;
+
+      if (stmtAmount !== ledgerAmount) {
+        throw new Error(`مبالغ با هم مطابقت ندارند. مبلغ صورتحساب بانک: ${stmtAmount.toLocaleString()} ریال، مبلغ معین دفاتر: ${ledgerAmount.toLocaleString()} ریال`);
+      }
+
+      // Check transaction type direction
+      // Statement Credit = Bank received cash = Ledger Debit (bank balance increased)
+      // Statement Debit = Bank paid cash = Ledger Credit (bank balance decreased)
+      const isDepositMatch = stmt.credit > 0 && ledg.debit > 0;
+      const isWithdrawalMatch = stmt.debit > 0 && ledg.credit > 0;
+
+      if (!isDepositMatch && !isWithdrawalMatch) {
+        throw new Error("جهت تراکنش‌ها یکسان نیست! (واریز به حساب با بدهکار دفتر، برداشت با بستانکار دفتر تطبیق می‌گردد)");
+      }
+
+      stmt.reconciliation_status = BankStatementStatus.MANUALLY_MATCHED;
+      ledg.is_reconciled = true;
+
+      const recon: BankReconciliation = {
+        id: "REC-" + Math.random().toString(36).substring(2, 9),
+        bank_statement_line_id: stmt.id,
+        journal_voucher_line_id: ledg.id,
+        matched_by: matchedBy,
+        matched_at: new Date().toISOString(),
+        method: ReconciliationMethod.MANUAL
+      };
+
+      this.reconciliations.push(recon);
+      this.saveToStorage();
+
+      return { success: true, reconciliation: recon };
+    } catch (e: any) {
+      this.statementLines = backupStatements;
+      this.ledgerLines = backupLedger;
+      this.reconciliations = backupRecons;
+      return { success: false, error: e.message || "خطا در تطبیق دستی" };
+    }
+  }
+
+  // 5. Un-reconcile / Rollback matching
+  unreconcile(reconciliationId: string): { success: boolean; error?: string } {
+    const backupStatements = JSON.parse(JSON.stringify(this.statementLines));
+    const backupLedger = JSON.parse(JSON.stringify(this.ledgerLines));
+    const backupRecons = JSON.parse(JSON.stringify(this.reconciliations));
+
+    try {
+      const reconIndex = this.reconciliations.findIndex(r => r.id === reconciliationId);
+      if (reconIndex === -1) throw new Error("تطبیق مورد نظر یافت نشد.");
+
+      const recon = this.reconciliations[reconIndex];
+      const stmt = this.statementLines.find(s => s.id === recon.bank_statement_line_id);
+      const ledg = this.ledgerLines.find(l => l.id === recon.journal_voucher_line_id);
+
+      if (stmt) stmt.reconciliation_status = BankStatementStatus.UNMATCHED;
+      if (ledg) ledg.is_reconciled = false;
+
+      this.reconciliations.splice(reconIndex, 1);
+      this.saveToStorage();
+
+      return { success: true };
+    } catch (e: any) {
+      this.statementLines = backupStatements;
+      this.ledgerLines = backupLedger;
+      this.reconciliations = backupRecons;
+      return { success: false, error: e.message || "خطا در لغو تطبیق" };
+    }
+  }
+
+  // Add custom statement line
+  addStatementLine(line: Omit<BankStatementLine, "id" | "reconciliation_status">): BankStatementLine {
+    const newLine: BankStatementLine = {
+      ...line,
+      id: "BSL-" + Math.random().toString(36).substring(2, 9),
+      reconciliation_status: BankStatementStatus.UNMATCHED
+    };
+    this.statementLines.push(newLine);
+    this.saveToStorage();
+    return newLine;
+  }
+
+  // Add custom system ledger line
+  addLedgerLine(line: Omit<SystemLedgerLine, "id" | "is_reconciled">): SystemLedgerLine {
+    const newLine: SystemLedgerLine = {
+      ...line,
+      id: "LL-" + Math.random().toString(36).substring(2, 9),
+      is_reconciled: false
+    };
+    this.ledgerLines.push(newLine);
+    this.saveToStorage();
+    return newLine;
+  }
+
+  // 6. Book Bank Fees (Auto-Voucher)
   bookBankFee(statementLineId: string): { success: boolean; voucherId?: string; error?: string } {
     const stmt = this.statementLines.find(s => s.id === statementLineId);
     if (!stmt) return { success: false, error: "تراکنش صورتحساب یافت نشد" };
@@ -271,7 +421,7 @@ export class BankOperationsEngine {
       id: ledgerLineId,
       bank_account_id: stmt.bank_account_id,
       date: stmt.transaction_date,
-      document_number: stmt.document_number,
+      document_number: stmt.document_number || "FEE-" + Math.floor(100 + Math.random() * 900),
       debit: 0,
       credit: stmt.debit,
       description: `ثبت اتوماتیک کارمزد بانکی - ${stmt.description}`,
@@ -293,7 +443,7 @@ export class BankOperationsEngine {
     return { success: true, voucherId: jvId };
   }
 
-  // 5. Book Unknown Deposit (Auto-Voucher for Open Items)
+  // 7. Book Unknown Deposit (Auto-Voucher for Open Items)
   bookUnknownDeposit(statementLineId: string): { success: boolean; voucherId?: string; error?: string } {
     const stmt = this.statementLines.find(s => s.id === statementLineId);
     if (!stmt) return { success: false, error: "تراکنش صورتحساب یافت نشد" };
@@ -308,7 +458,7 @@ export class BankOperationsEngine {
       id: ledgerLineId,
       bank_account_id: stmt.bank_account_id,
       date: stmt.transaction_date,
-      document_number: stmt.document_number,
+      document_number: stmt.document_number || "DEP-" + Math.floor(100 + Math.random() * 900),
       debit: stmt.credit,
       credit: 0,
       description: `ثبت اتوماتیک واریزی ناشناس (اقلام باز) - ${stmt.description}`,
@@ -328,6 +478,132 @@ export class BankOperationsEngine {
 
     this.saveToStorage();
     return { success: true, voucherId: jvId };
+  }
+
+  // 8. Custom Book Adjustment (Custom double-entry created on-the-fly)
+  bookCustomAdjustment(
+    bankAccountId: string,
+    statementLineId: string,
+    ledgerType: 'DEBIT' | 'CREDIT',
+    amount: number,
+    description: string,
+    docNumber: string
+  ): { success: boolean; voucherId?: string; error?: string } {
+    const stmt = this.statementLines.find(s => s.id === statementLineId);
+    if (!stmt) return { success: false, error: "تراکنش صورتحساب یافت نشد" };
+    if (stmt.reconciliation_status !== BankStatementStatus.UNMATCHED) return { success: false, error: "این تراکنش قبلاً تطبیق داده شده است" };
+
+    const stmtAmount = stmt.credit > 0 ? stmt.credit : stmt.debit;
+    if (stmtAmount !== amount) {
+      return { success: false, error: "مبلغ سند اصلاحی باید دقیقاً برابر با مبلغ آرتیکل صورتحساب باشد." };
+    }
+
+    const jvId = "JV-ADJ-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    // Create a new ledger entry matching the direction
+    // If statement has credit (deposit), ledger must be debited (+)
+    // If statement has debit (withdrawal), ledger must be credited (-)
+    const ledgerLineId = `LL-${jvId}-ADJ`;
+    this.ledgerLines.push({
+      id: ledgerLineId,
+      bank_account_id: bankAccountId,
+      date: stmt.transaction_date,
+      document_number: docNumber || stmt.document_number || "ADJ-JV",
+      debit: ledgerType === 'DEBIT' ? amount : 0,
+      credit: ledgerType === 'CREDIT' ? amount : 0,
+      description: `اصلاحیه مغایرت بانکی: ${description}`,
+      is_reconciled: true // Instantly reconciled
+    });
+
+    stmt.reconciliation_status = BankStatementStatus.MANUALLY_MATCHED;
+
+    this.reconciliations.push({
+      id: "REC-" + Math.random().toString(36).substring(2, 9),
+      bank_statement_line_id: stmt.id,
+      journal_voucher_line_id: ledgerLineId,
+      matched_by: "USER_ADJUSTMENT",
+      matched_at: new Date().toISOString(),
+      method: ReconciliationMethod.MANUAL
+    });
+
+    this.saveToStorage();
+    return { success: true, voucherId: jvId };
+  }
+
+  // 9. Standard Bank Reconciliation Statement calculations
+  getReconciliationReport(bankAccountId: string) {
+    const allStmts = this.statementLines.filter(s => s.bank_account_id === bankAccountId);
+    const allLedg = this.ledgerLines.filter(l => l.bank_account_id === bankAccountId);
+
+    // Bank Statement Balance: get the running balance of the latest statement line
+    // or fallback to default
+    const latestStmt = allStmts.length > 0 
+      ? [...allStmts].sort((a,b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime())[allStmts.length - 1] 
+      : null;
+    const bankStatementBalance = latestStmt ? latestStmt.running_balance : (bankAccountId === "Bank_Mellat" ? 165180000 : 57500000);
+
+    // Books Balance (مانده دفاتر): cumulative ledger balance (debit increases balance, credit decreases balance)
+    // Mellat start balance can be assumed as 100,000,000 Rials + sum of ledger movements
+    const baseBalance = bankAccountId === "Bank_Mellat" ? 100000000 : 50000000;
+    const bookBalance = baseBalance + allLedg.reduce((acc, curr) => acc + (curr.debit - curr.credit), 0);
+
+    // Category 1: Debited in Books but not Credited in Bank Statement (Deposits in Transit - وجوه بین‌راهی)
+    const depositsInTransit = allLedg.filter(l => !l.is_reconciled && l.debit > 0);
+    const totalDepositsInTransit = depositsInTransit.reduce((sum, l) => sum + l.debit, 0);
+
+    // Category 2: Credited in Books but not Debited in Bank Statement (Outstanding Cheques - چک‌های عهده / صادر شده عهده شرکت که هنوز پاس نشده)
+    const outstandingCheques = allLedg.filter(l => !l.is_reconciled && l.credit > 0);
+    const totalOutstandingCheques = outstandingCheques.reduce((sum, l) => sum + l.credit, 0);
+
+    // Category 3: Deposited in Bank but not recorded in Books (واریزی‌های بانک ثبت‌نشده در دفاتر)
+    const unbookedDeposits = allStmts.filter(s => s.reconciliation_status === BankStatementStatus.UNMATCHED && s.credit > 0);
+    const totalUnbookedDeposits = unbookedDeposits.reduce((sum, s) => sum + s.credit, 0);
+
+    // Category 4: Debited in Bank but not recorded in Books (برداشت‌های بانک ثبت‌نشده در دفاتر، مثلا کارمزد یا اقساط)
+    const unbookedWithdrawals = allStmts.filter(s => s.reconciliation_status === BankStatementStatus.UNMATCHED && s.debit > 0);
+    const totalUnbookedWithdrawals = unbookedWithdrawals.reduce((sum, s) => sum + s.debit, 0);
+
+    // Reconciliation Statement Form:
+    // -------------------------------------------------------------
+    // Balance as per Bank Statement:                     bankStatementBalance
+    // Add: Deposits in Transit (وجوه بین راهی)             + totalDepositsInTransit
+    // Less: Outstanding Cheques (چک‌های عهده)               - totalOutstandingCheques
+    // = Adjusted Bank Balance:                           adjustedBankBalance
+    // -------------------------------------------------------------
+    // Balance as per Books (سند معین حسابداری):           bookBalance
+    // Add: Bank Credits not in Books (واریزی‌های ثبت‌نشده)    + totalUnbookedDeposits
+    // Less: Bank Charges not in Books (برداشت‌های ثبت‌نشده)    - totalUnbookedWithdrawals
+    // = Adjusted Books Balance:                          adjustedBookBalance
+    // -------------------------------------------------------------
+    const adjustedBankBalance = bankStatementBalance + totalDepositsInTransit - totalOutstandingCheques;
+    const adjustedBookBalance = bookBalance + totalUnbookedDeposits - totalUnbookedWithdrawals;
+
+    return {
+      bankAccountId,
+      bankStatementBalance,
+      bookBalance,
+      depositsInTransit,
+      totalDepositsInTransit,
+      outstandingCheques,
+      totalOutstandingCheques,
+      unbookedDeposits,
+      totalUnbookedDeposits,
+      unbookedWithdrawals,
+      totalUnbookedWithdrawals,
+      adjustedBankBalance,
+      adjustedBookBalance,
+      isBalanced: adjustedBankBalance === adjustedBookBalance,
+      difference: Math.abs(adjustedBankBalance - adjustedBookBalance)
+    };
+  }
+
+  getBankNamePersian(id: string): string {
+    const names: Record<string, string> = {
+      "Bank_Mellat": "بانک ملت (حساب جاری ۱۰۲۰)",
+      "Bank_Saman": "بانک سامان (حساب کوتاه‌مدت ۹۰۰)",
+      "Bank_Melli": "بانک ملی ایران (جاری ۳۰۰۲)"
+    };
+    return names[id] || id;
   }
 
   getTransfers() { return this.transfers; }

@@ -65,11 +65,24 @@ export interface SystemLedgerLine {
   description: string;
 }
 
+export interface CashTransaction {
+  id: string;
+  register_id: string;
+  transaction_type: 'RECEIPT' | 'PAYMENT'; // دریافت نقدی / پرداخت نقدی
+  amount: number;
+  date: string;
+  document_number: string;
+  payer_payee: string;
+  description: string;
+}
+
 export class PettyCashEngine {
   private funds: PettyCashFund[] = [];
   private vouchers: PettyCashVoucher[] = [];
   private lines: PettyCashLine[] = [];
   private ledger: SystemLedgerLine[] = [];
+  private registers: CashRegister[] = [];
+  private cashTransactions: CashTransaction[] = [];
 
   private accountCodes = {
     pettyCash: '1102', // تنخواه‌گردان
@@ -79,7 +92,7 @@ export class PettyCashEngine {
 
   constructor() {
     this.loadFromStorage();
-    if (this.funds.length === 0) {
+    if (this.funds.length === 0 && this.registers.length === 0) {
       this.seedInitialData();
     }
   }
@@ -97,6 +110,12 @@ export class PettyCashEngine {
 
       const storedLedger = localStorage.getItem('petty_cash_ledger_db');
       if (storedLedger) this.ledger = JSON.parse(storedLedger);
+
+      const storedRegisters = localStorage.getItem('petty_cash_registers_db');
+      if (storedRegisters) this.registers = JSON.parse(storedRegisters);
+
+      const storedCashTx = localStorage.getItem('petty_cash_cash_tx_db');
+      if (storedCashTx) this.cashTransactions = JSON.parse(storedCashTx);
     } catch (e) {
       console.error("Error loading petty cash DB", e);
     }
@@ -107,6 +126,8 @@ export class PettyCashEngine {
     localStorage.setItem('petty_cash_vouchers_db', JSON.stringify(this.vouchers));
     localStorage.setItem('petty_cash_lines_db', JSON.stringify(this.lines));
     localStorage.setItem('petty_cash_ledger_db', JSON.stringify(this.ledger));
+    localStorage.setItem('petty_cash_registers_db', JSON.stringify(this.registers));
+    localStorage.setItem('petty_cash_cash_tx_db', JSON.stringify(this.cashTransactions));
   }
 
   private seedInitialData() {
@@ -115,10 +136,31 @@ export class PettyCashEngine {
       fund_name: "تنخواه مرکزی دفتر",
       custodian_id: "EMP-001", // آقای احمدی
       max_ceiling_amount: 50000000, // 5 میلیون تومان
-      current_balance: 0,
+      current_balance: 10000000, // 1 میلیون تومان اولیه
       status: RecordStatus.ACTIVE,
       associated_account_id: this.accountCodes.pettyCash
     });
+
+    this.registers.push({
+      id: "REG-101",
+      register_name: "صندوق ریالی دفتر مرکزی",
+      branch_id: "BRN-01",
+      responsible_user_id: "EMP-002", // خانم محمدی
+      current_balance: 15000000,
+      status: RecordStatus.ACTIVE,
+      associated_account_id: "1103"
+    });
+
+    this.registers.push({
+      id: "REG-102",
+      register_name: "صندوق نقدی دبیرخانه",
+      branch_id: "BRN-01",
+      responsible_user_id: "EMP-003", // آقای تهرانی
+      current_balance: 5000000,
+      status: RecordStatus.ACTIVE,
+      associated_account_id: "1103"
+    });
+
     this.saveToStorage();
   }
 
@@ -348,4 +390,338 @@ export class PettyCashEngine {
   getVouchers() { return this.vouchers; }
   getLines(voucherId: string) { return this.lines.filter(l => l.voucher_id === voucherId); }
   getLedger() { return this.ledger; }
+
+  // --- NEW CASH REGISTER (صندوق) METHODS ---
+  getRegisters() { return this.registers; }
+  getCashTransactions() { return this.cashTransactions; }
+
+  createRegister(name: string, responsibleId: string, initialBalance: number): { success: boolean; register?: CashRegister; error?: string } {
+    if (!name) return { success: false, error: "نام صندوق الزامی است" };
+    const id = "REG-" + Math.random().toString(36).substring(2, 9);
+    const newReg: CashRegister = {
+      id,
+      register_name: name,
+      branch_id: "BRN-01",
+      responsible_user_id: responsibleId || "EMP-001",
+      current_balance: initialBalance || 0,
+      status: RecordStatus.ACTIVE,
+      associated_account_id: "1103"
+    };
+    this.registers.push(newReg);
+
+    // If initial balance is greater than zero, record a receipt transaction
+    if (initialBalance > 0) {
+      const txId = "CTX-INIT-" + Math.random().toString(36).substring(2, 9);
+      const date = new Date().toISOString().split('T')[0];
+      this.cashTransactions.push({
+        id: txId,
+        register_id: id,
+        transaction_type: 'RECEIPT',
+        amount: initialBalance,
+        date,
+        document_number: "INIT",
+        payer_payee: "موجودی اولیه خزانه‌داری",
+        description: `ثبت موجودی اولیه صندوق ${name}`
+      });
+    }
+
+    this.saveToStorage();
+    return { success: true, register: newReg };
+  }
+
+  recordCashTransaction(registerId: string, type: 'RECEIPT' | 'PAYMENT', amount: number, payer_payee: string, description: string, docNumber: string): { success: boolean; error?: string } {
+    if (amount <= 0) return { success: false, error: "مبلغ باید بزرگتر از صفر باشد" };
+    const regIndex = this.registers.findIndex(r => r.id === registerId);
+    if (regIndex === -1) return { success: false, error: "صندوق یافت نشد" };
+    
+    const reg = this.registers[regIndex];
+    if (type === 'PAYMENT' && reg.current_balance < amount) {
+      return { success: false, error: "موجودی صندوق کافی نیست" };
+    }
+
+    // Update balance
+    if (type === 'RECEIPT') {
+      reg.current_balance += amount;
+    } else {
+      reg.current_balance -= amount;
+    }
+    this.registers[regIndex] = reg;
+
+    const txId = "CTX-" + Math.random().toString(36).substring(2, 9);
+    const date = new Date().toISOString().split('T')[0];
+
+    const tx: CashTransaction = {
+      id: txId,
+      register_id: registerId,
+      transaction_type: type,
+      amount,
+      date,
+      document_number: docNumber || "CTX-" + Math.floor(Math.random() * 10000),
+      payer_payee,
+      description
+    };
+    this.cashTransactions.push(tx);
+
+    // Ledger double entry
+    const jvId = "JV-CSH-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    if (type === 'RECEIPT') {
+      this.ledger.push({
+        id: `LL-${jvId}-DB`,
+        journal_voucher_id: jvId,
+        account_code: reg.associated_account_id,
+        detailed_account_id: reg.responsible_user_id,
+        date,
+        debit: amount,
+        credit: 0,
+        description: `دریافت نقدی: ${description} (از ${payer_payee})`
+      });
+      this.ledger.push({
+        id: `LL-${jvId}-CR`,
+        journal_voucher_id: jvId,
+        account_code: '1201', // حساب‌های دریافتنی مشتریان
+        date,
+        debit: 0,
+        credit: amount,
+        description: `بستانکار بابت دریافت نقدی در صندوق (شرح: ${description})`
+      });
+    } else {
+      this.ledger.push({
+        id: `LL-${jvId}-DB`,
+        journal_voucher_id: jvId,
+        account_code: '5101', // هزینه‌های عمومی اداری
+        date,
+        debit: amount,
+        credit: 0,
+        description: `پرداخت نقدی بابت ${description} (به ${payer_payee})`
+      });
+      this.ledger.push({
+        id: `LL-${jvId}-CR`,
+        journal_voucher_id: jvId,
+        account_code: reg.associated_account_id,
+        detailed_account_id: reg.responsible_user_id,
+        date,
+        debit: 0,
+        credit: amount,
+        description: `پرداخت نقدی: ${description} (به ${payer_payee})`
+      });
+    }
+
+    this.saveToStorage();
+    return { success: true };
+  }
+
+  transferCashToBank(registerId: string, bankAccountId: string, amount: number, docNumber: string): { success: boolean; error?: string } {
+    if (amount <= 0) return { success: false, error: "مبلغ باید بزرگتر از صفر باشد" };
+    const regIndex = this.registers.findIndex(r => r.id === registerId);
+    if (regIndex === -1) return { success: false, error: "صندوق یافت نشد" };
+    
+    const reg = this.registers[regIndex];
+    if (reg.current_balance < amount) {
+      return { success: false, error: "موجودی صندوق کافی نیست" };
+    }
+
+    reg.current_balance -= amount;
+    this.registers[regIndex] = reg;
+
+    const txId = "CTX-" + Math.random().toString(36).substring(2, 9);
+    const date = new Date().toISOString().split('T')[0];
+    const docNum = docNumber || "C2B-" + Math.floor(Math.random() * 10000);
+
+    this.cashTransactions.push({
+      id: txId,
+      register_id: registerId,
+      transaction_type: 'PAYMENT',
+      amount,
+      date,
+      document_number: docNum,
+      payer_payee: "بانک ملی مرکزی",
+      description: `واریز به بانک از صندوق ${reg.register_name}`
+    });
+
+    const jvId = "JV-C2B-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    this.ledger.push({
+      id: `LL-${jvId}-DB`,
+      journal_voucher_id: jvId,
+      account_code: this.accountCodes.bank,
+      detailed_account_id: bankAccountId,
+      date,
+      debit: amount,
+      credit: 0,
+      description: `واریز نقدی از صندوق ${reg.register_name}`
+    });
+    this.ledger.push({
+      id: `LL-${jvId}-CR`,
+      journal_voucher_id: jvId,
+      account_code: reg.associated_account_id,
+      detailed_account_id: reg.responsible_user_id,
+      date,
+      debit: 0,
+      credit: amount,
+      description: `واریز به بانک از صندوق ${reg.register_name}`
+    });
+
+    this.saveToStorage();
+    return { success: true };
+  }
+
+  replenishRegisterFromBank(registerId: string, bankAccountId: string, amount: number, docNumber: string): { success: boolean; error?: string } {
+    if (amount <= 0) return { success: false, error: "مبلغ باید بزرگتر از صفر باشد" };
+    const regIndex = this.registers.findIndex(r => r.id === registerId);
+    if (regIndex === -1) return { success: false, error: "صندوق یافت نشد" };
+    
+    const reg = this.registers[regIndex];
+    reg.current_balance += amount;
+    this.registers[regIndex] = reg;
+
+    const txId = "CTX-" + Math.random().toString(36).substring(2, 9);
+    const date = new Date().toISOString().split('T')[0];
+    const docNum = docNumber || "B2C-" + Math.floor(Math.random() * 10000);
+
+    this.cashTransactions.push({
+      id: txId,
+      register_id: registerId,
+      transaction_type: 'RECEIPT',
+      amount,
+      date,
+      document_number: docNum,
+      payer_payee: "برداشت از بانک",
+      description: `تامین نقدینگی صندوق از حساب بانکی`
+    });
+
+    const jvId = "JV-B2C-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    this.ledger.push({
+      id: `LL-${jvId}-DB`,
+      journal_voucher_id: jvId,
+      account_code: reg.associated_account_id,
+      detailed_account_id: reg.responsible_user_id,
+      date,
+      debit: amount,
+      credit: 0,
+      description: `تامین صندوق ${reg.register_name} از بانک`
+    });
+    this.ledger.push({
+      id: `LL-${jvId}-CR`,
+      journal_voucher_id: jvId,
+      account_code: this.accountCodes.bank,
+      detailed_account_id: bankAccountId,
+      date,
+      debit: 0,
+      credit: amount,
+      description: `برداشت نقدی جهت شارژ صندوق ${reg.register_name}`
+    });
+
+    this.saveToStorage();
+    return { success: true };
+  }
+
+  replenishFundFromCashRegister(fundId: string, registerId: string, amount: number): { success: boolean; voucherId?: string; error?: string } {
+    if (amount <= 0) return { success: false, error: "مبلغ شارژ باید بیشتر از صفر باشد" };
+
+    const backupFunds = JSON.parse(JSON.stringify(this.funds));
+    const backupRegisters = JSON.parse(JSON.stringify(this.registers));
+    const backupLedger = JSON.parse(JSON.stringify(this.ledger));
+
+    try {
+      const fundIndex = this.funds.findIndex(f => f.id === fundId);
+      if (fundIndex === -1) throw new Error("تنخواه مورد نظر یافت نشد");
+      const fund = this.funds[fundIndex];
+
+      const regIndex = this.registers.findIndex(r => r.id === registerId);
+      if (regIndex === -1) throw new Error("صندوق مبدأ یافت نشد");
+      const reg = this.registers[regIndex];
+
+      if (reg.current_balance < amount) {
+        throw new Error(`موجودی صندوق (${reg.current_balance.toLocaleString()}) برای شارژ تنخواه کافی نیست.`);
+      }
+
+      if (fund.current_balance + amount > fund.max_ceiling_amount) {
+        throw new Error(`مبلغ شارژ (${amount.toLocaleString()}) به علاوه موجودی فعلی، از سقف مجاز تنخواه (${fund.max_ceiling_amount.toLocaleString()}) تجاوز می‌کند.`);
+      }
+
+      // Update balances
+      fund.current_balance += amount;
+      this.funds[fundIndex] = fund;
+
+      reg.current_balance -= amount;
+      this.registers[regIndex] = reg;
+
+      // Log Cash Register transaction
+      const txId = "CTX-" + Math.random().toString(36).substring(2, 9);
+      const date = new Date().toISOString().split('T')[0];
+      this.cashTransactions.push({
+        id: txId,
+        register_id: registerId,
+        transaction_type: 'PAYMENT',
+        amount,
+        date,
+        document_number: "REP-FND",
+        payer_payee: `تنخواه‌دار: ${fund.custodian_id}`,
+        description: `شارژ تنخواه‌گردان ${fund.fund_name} از صندوق`
+      });
+
+      // Journal Voucher
+      const jvId = "JV-REP-CSH-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      // Debit: Petty Cash Fund
+      this.ledger.push({
+        id: `LL-${jvId}-DB`,
+        journal_voucher_id: jvId,
+        account_code: fund.associated_account_id,
+        detailed_account_id: fund.custodian_id,
+        date,
+        debit: amount,
+        credit: 0,
+        description: `شارژ تنخواه ${fund.fund_name} از صندوق ${reg.register_name}`
+      });
+
+      // Credit: Cash Register
+      this.ledger.push({
+        id: `LL-${jvId}-CR`,
+        journal_voucher_id: jvId,
+        account_code: reg.associated_account_id,
+        detailed_account_id: reg.responsible_user_id,
+        date,
+        debit: 0,
+        credit: amount,
+        description: `شارژ تنخواه ${fund.fund_name} از صندوق ${reg.register_name}`
+      });
+
+      this.saveToStorage();
+      return { success: true, voucherId: jvId };
+
+    } catch (error: any) {
+      this.funds = backupFunds;
+      this.registers = backupRegisters;
+      this.ledger = backupLedger;
+      return { success: false, error: error.message || "خطا در عملیات شارژ تنخواه از صندوق" };
+    }
+  }
+
+  rejectVoucher(voucherId: string): { success: boolean; error?: string } {
+    const voucher = this.vouchers.find(v => v.id === voucherId);
+    if (!voucher) return { success: false, error: "صورت تنخواه یافت نشد" };
+    if (voucher.status !== VoucherStatus.SUBMITTED) {
+      return { success: false, error: "فقط صورت‌های در انتظار تایید قابل رد شدن هستند." };
+    }
+    voucher.status = VoucherStatus.REJECTED;
+    this.saveToStorage();
+    return { success: true };
+  }
+
+  deleteExpenseLine(lineId: string, voucherId: string): { success: boolean; error?: string } {
+    const voucher = this.vouchers.find(v => v.id === voucherId);
+    if (!voucher) return { success: false, error: "صورت تنخواه یافت نشد" };
+    if (voucher.status !== VoucherStatus.DRAFT && voucher.status !== VoucherStatus.REJECTED) {
+      return { success: false, error: "فقط صورت‌های پیش‌نویس یا رد شده قابل ویرایش هستند." };
+    }
+
+    const lineIndex = this.lines.findIndex(l => l.id === lineId && l.voucher_id === voucherId);
+    if (lineIndex === -1) return { success: false, error: "فاکتور یافت نشد." };
+
+    const line = this.lines[lineIndex];
+    voucher.total_expense_amount -= (line.amount + line.tax_amount);
+    this.lines.splice(lineIndex, 1);
+    this.saveToStorage();
+    return { success: true };
+  }
 }

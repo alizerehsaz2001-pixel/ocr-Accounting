@@ -1,6 +1,6 @@
 {
   "name": "ocr Accounting",
-  "description": "An AI-powered OCR for accounting, designed to extract financial ledger and invoice data seamlessly from images.",
+  "description": "An AI-powered OCR and comprehensive ERP financial system featuring Treasury, Cheque Management, Bank Reconciliation, and Petty Cash modules.",
   "requestFramePermissions": ["camera", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
