@@ -48,6 +48,14 @@ export interface Invoice {
   tax_id?: string; // 22-character Unique Tax ID (شماره منحصربه‌فرد مالیاتی)
   description?: string;
   lines: InvoiceLine[];
+  manual_rounding?: number; // Manual rounding / adjusting field
+}
+
+export interface ManualExpense {
+  id: string;
+  date: string;
+  amount: number;
+  description: string;
 }
 
 export interface InvoiceStatusHistory {
@@ -101,6 +109,7 @@ export class CommercialEngine {
   private products: Product[] = [];
   private partners: Partner[] = [];
   private inventory: InventoryLedger[] = []; // Simple inventory check
+  private manualExpenses: ManualExpense[] = [];
 
   constructor() {
     this.loadFromStorage();
@@ -121,6 +130,8 @@ export class CommercialEngine {
       if (pr) this.partners = JSON.parse(pr);
       const inv = localStorage.getItem("commercial_inventory_db");
       if (inv) this.inventory = JSON.parse(inv);
+      const exp = localStorage.getItem("commercial_expenses_db");
+      if (exp) this.manualExpenses = JSON.parse(exp);
     } catch (e) {
       console.error("Failed to load commercial DB", e);
     }
@@ -146,6 +157,10 @@ export class CommercialEngine {
     localStorage.setItem(
       "commercial_inventory_db",
       JSON.stringify(this.inventory),
+    );
+    localStorage.setItem(
+      "commercial_expenses_db",
+      JSON.stringify(this.manualExpenses),
     );
   }
 
@@ -234,6 +249,24 @@ export class CommercialEngine {
   getPartners() {
     return this.partners;
   }
+  getManualExpenses() {
+    return this.manualExpenses;
+  }
+
+  addManualExpense(data: Omit<ManualExpense, "id">) {
+    const expense: ManualExpense = {
+      ...data,
+      id: "exp-" + Math.random().toString(36).substring(2, 9),
+    };
+    this.manualExpenses.push(expense);
+    this.saveToStorage();
+    return expense;
+  }
+
+  deleteManualExpense(id: string) {
+    this.manualExpenses = this.manualExpenses.filter((e) => e.id !== id);
+    this.saveToStorage();
+  }
   getInvoices() {
     return this.invoices;
   }
@@ -267,6 +300,16 @@ export class CommercialEngine {
     this.partners = this.partners.filter((p) => p.id !== id);
     this.saveToStorage();
     return { success: true };
+  }
+
+  addProduct(product: Omit<Product, "id">): Product {
+    const newProduct: Product = {
+      ...product,
+      id: "p-auto-" + Math.random().toString(36).substring(2, 9).toUpperCase(),
+    };
+    this.products.push(newProduct);
+    this.saveToStorage();
+    return newProduct;
   }
 
   // Precision decimal helper
@@ -312,7 +355,8 @@ export class CommercialEngine {
     // We will keep VAT as sum of lines for this implementation.
 
     inv.total_vat_amount = totalVat;
-    inv.total_net_amount = taxableTotal + totalVat;
+    const rawNet = taxableTotal + totalVat;
+    inv.total_net_amount = Math.max(0, rawNet - (inv.manual_rounding || 0));
 
     this.saveToStorage();
   }
@@ -336,6 +380,7 @@ export class CommercialEngine {
       status: InvoiceStatus.DRAFT,
       lines: data.lines || [],
       description: data.description || "",
+      manual_rounding: data.manual_rounding || 0,
     };
 
     this.invoices.push(newInvoice);
@@ -359,6 +404,7 @@ export class CommercialEngine {
     inv.description = data.description !== undefined ? data.description : inv.description;
     inv.total_discount_header = data.total_discount_header !== undefined ? data.total_discount_header : inv.total_discount_header;
     inv.lines = data.lines || inv.lines;
+    inv.manual_rounding = data.manual_rounding !== undefined ? data.manual_rounding : inv.manual_rounding;
 
     this.calculateInvoiceTotals(inv.id);
     return inv;

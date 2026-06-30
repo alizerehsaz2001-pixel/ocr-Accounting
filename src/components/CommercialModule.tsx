@@ -57,6 +57,7 @@ import {
   InvoiceStatus,
   Product,
   Partner,
+  ManualExpense,
 } from "../lib/commercial-engine";
 import { CounterpartyService } from "../lib/counterparty-engine";
 
@@ -132,11 +133,13 @@ export default function CommercialModule({
   const [products, setProducts] = useState<Product[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [manualExpenses, setManualExpenses] = useState<ManualExpense[]>([]);
 
   const loadData = () => {
     setProducts([...engine.getProducts()]);
     setPartners([...engine.getPartners()]);
     setInvoices([...engine.getInvoices()]);
+    setManualExpenses([...engine.getManualExpenses()]);
   };
 
   useEffect(() => {
@@ -162,6 +165,12 @@ export default function CommercialModule({
   const [plFromDate, setPlFromDate] = useState("");
   const [plToDate, setPlToDate] = useState("");
   const [plPartnerFilter, setPlPartnerFilter] = useState("ALL");
+  const [showAddExpense, setShowAddExpense] = useState(false);
+  const [newExpenseData, setNewExpenseData] = useState({
+    date: new Date().toLocaleDateString("fa-IR"),
+    amount: 0,
+    description: "",
+  });
 
   const [newInvoice, setNewInvoice] = useState<{
     invoice_number: string;
@@ -171,6 +180,7 @@ export default function CommercialModule({
     description: string;
     total_discount_header: number;
     lines: InvoiceLine[];
+    manual_rounding: number;
   }>({
     invoice_number: "",
     invoice_type: InvoiceType.SALE,
@@ -179,12 +189,23 @@ export default function CommercialModule({
     description: "",
     total_discount_header: 0,
     lines: [],
+    manual_rounding: 0,
   });
 
   const [newItemProduct, setNewItemProduct] = useState("");
   const [newItemQty, setNewItemQty] = useState(1);
   const [newItemPrice, setNewItemPrice] = useState(0);
   const [newItemDiscount, setNewItemDiscount] = useState(0);
+  const [newItemVat, setNewItemVat] = useState(10);
+
+  const [showQuickAddProduct, setShowQuickAddProduct] = useState(false);
+  const [quickProductData, setQuickProductData] = useState({
+    name: "",
+    purchase_price: 0,
+    base_price: 0,
+    wholesale_price: 0,
+    partner_price: 0,
+  });
 
   const [isCreatingPartner, setIsCreatingPartner] = useState(false);
   const [viewingPartner, setViewingPartner] = useState<Partner | null>(null);
@@ -267,7 +288,7 @@ export default function CommercialModule({
       gross_amount: 0,
       discount_percentage: newItemDiscount,
       discount_amount: 0,
-      vat_percentage: 10,
+      vat_percentage: newItemVat,
       vat_amount: 0,
       net_amount: 0,
     };
@@ -285,6 +306,7 @@ export default function CommercialModule({
     setNewItemQty(1);
     setNewItemPrice(0);
     setNewItemDiscount(0);
+    setNewItemVat(10);
   };
 
   const removeItemFromInvoice = (index: number) => {
@@ -353,6 +375,7 @@ export default function CommercialModule({
         description: "",
         total_discount_header: 0,
         lines: [],
+        manual_rounding: 0,
       });
 
       loadData();
@@ -374,6 +397,7 @@ export default function CommercialModule({
       description: inv.description || "",
       total_discount_header: inv.total_discount_header,
       lines: inv.lines,
+      manual_rounding: inv.manual_rounding || 0,
     });
     setEditingInvoiceId(inv.id);
     setIsCreatingInvoice(true);
@@ -667,7 +691,17 @@ export default function CommercialModule({
         });
       });
 
-    const netProfit = totalRevenue - totalCogs;
+    let filteredExpenses = manualExpenses;
+    if (plFromDate) {
+      filteredExpenses = filteredExpenses.filter((e) => e.date >= plFromDate);
+    }
+    if (plToDate) {
+      filteredExpenses = filteredExpenses.filter((e) => e.date <= plToDate);
+    }
+
+    const totalManualExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+    const netProfit = totalRevenue - totalCogs - totalManualExpenses;
     const avgMarginPercent =
       totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
 
@@ -740,6 +774,8 @@ export default function CommercialModule({
     return {
       totalRevenue,
       totalCogs,
+      totalManualExpenses,
+      filteredExpenses,
       netProfit,
       avgMarginPercent,
       itemsProfitList: sortedItemsList,
@@ -748,13 +784,88 @@ export default function CommercialModule({
       topProductByMargin,
       topProductByVolume,
     };
-  }, [invoices, products, partners, plPartnerFilter, plFromDate, plToDate, plProductSearch, plProductSort, plProductSortDirection]);
+  }, [invoices, products, partners, manualExpenses, plPartnerFilter, plFromDate, plToDate, plProductSearch, plProductSort, plProductSortDirection]);
 
   return (
     <div
       className="flex-1 overflow-y-auto p-6 md:p-8 flex flex-col max-w-6xl mx-auto w-full"
       dir="rtl"
     >
+      {showAddExpense && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className={`w-full max-w-sm p-6 rounded-2xl border text-right shadow-2xl ${isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-850'}`}>
+            <div className="flex items-center justify-between border-b pb-3 mb-4 border-slate-200 dark:border-slate-800">
+              <h4 className="font-black text-sm text-amber-500">➕ ثبت هزینه دستی</h4>
+              <button
+                onClick={() => setShowAddExpense(false)}
+                className="p-1 text-slate-400 hover:text-slate-200 transition text-xs font-bold"
+              >
+                بستن
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 mb-1">تاریخ</label>
+                <input
+                  type="text"
+                  value={newExpenseData.date}
+                  onChange={(e) => setNewExpenseData(prev => ({ ...prev, date: e.target.value }))}
+                  placeholder="مثلاً: 1405/02/01"
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs border font-mono text-left focus:outline-none focus:ring-1 focus:ring-amber-500 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200'}`}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 mb-1">مبلغ (ریال)</label>
+                <input
+                  type="number"
+                  value={newExpenseData.amount}
+                  onChange={(e) => setNewExpenseData(prev => ({ ...prev, amount: Number(e.target.value) }))}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs font-mono border focus:outline-none focus:ring-1 focus:ring-amber-500 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200'}`}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 mb-1">شرح هزینه</label>
+                <textarea
+                  value={newExpenseData.description}
+                  onChange={(e) => setNewExpenseData(prev => ({ ...prev, description: e.target.value }))}
+                  className={`w-full px-3 py-1.5 rounded-lg text-xs border focus:outline-none focus:ring-1 focus:ring-amber-500 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200'}`}
+                  rows={3}
+                ></textarea>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddExpense(false)}
+                  className="px-3 py-1.5 bg-slate-100 dark:bg-slate-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-300 text-xs font-bold rounded-lg transition"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newExpenseData.description || !newExpenseData.amount) {
+                      showNotification("شرح و مبلغ الزامی است.", "error");
+                      return;
+                    }
+                    try {
+                      engine.addManualExpense(newExpenseData);
+                      setManualExpenses([...engine.getManualExpenses()]);
+                      showNotification("هزینه با موفقیت ثبت شد.", "success");
+                      setShowAddExpense(false);
+                      setNewExpenseData({ date: new Date().toLocaleDateString("fa-IR"), amount: 0, description: "" });
+                    } catch (e: any) {
+                      showNotification(e.message || "خطا در ثبت هزینه", "error");
+                    }
+                  }}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow transition active:scale-95"
+                >
+                  ثبت هزینه
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Module Title */}
       <div className="mb-6 text-right flex flex-col md:flex-row md:items-center justify-between gap-4 animate-fade-in">
         <div>
@@ -1189,8 +1300,116 @@ export default function CommercialModule({
           ) : (
             /* --- Custom Invoice Issuance / Builder Form --- */
             <div
-              className={`border rounded-2xl p-5 md:p-7 ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200/80 shadow-sm"} animate-fade-in`}
+              className={`border rounded-2xl p-5 md:p-7 relative ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200/80 shadow-sm"} animate-fade-in`}
             >
+              {/* Quick Add Product Inline Modal */}
+              {showQuickAddProduct && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                  <div className={`w-full max-w-md p-6 rounded-2xl border text-right shadow-2xl ${isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-850'}`}>
+                    <div className="flex items-center justify-between border-b pb-3 mb-4 border-slate-200 dark:border-slate-800">
+                      <h4 className="font-black text-xs text-blue-500">➕ تعریف سریع کالای تجاری جدید</h4>
+                      <button
+                        onClick={() => setShowQuickAddProduct(false)}
+                        className="p-1 text-slate-400 hover:text-slate-200 transition text-xs font-bold"
+                      >
+                        بستن
+                      </button>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 mb-1">نام کالا *</label>
+                        <input
+                          type="text"
+                          value={quickProductData.name}
+                          onChange={(e) => setQuickProductData(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="مثلاً: هارد دیسک اکسترنال 2TB"
+                          className={`w-full px-3 py-1.5 rounded-lg text-xs border focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200'}`}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1">قیمت خرید (ریال)</label>
+                          <input
+                            type="number"
+                            value={quickProductData.purchase_price}
+                            onChange={(e) => setQuickProductData(prev => ({ ...prev, purchase_price: Number(e.target.value) }))}
+                            className={`w-full px-3 py-1.5 rounded-lg text-xs font-mono border focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200'}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1">قیمت مصرف‌کننده (ریال)</label>
+                          <input
+                            type="number"
+                            value={quickProductData.base_price}
+                            onChange={(e) => setQuickProductData(prev => ({ ...prev, base_price: Number(e.target.value) }))}
+                            className={`w-full px-3 py-1.5 rounded-lg text-xs font-mono border focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200'}`}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-450 mb-1">قیمت عمده (ریال)</label>
+                          <input
+                            type="number"
+                            value={quickProductData.wholesale_price}
+                            onChange={(e) => setQuickProductData(prev => ({ ...prev, wholesale_price: Number(e.target.value) }))}
+                            className={`w-full px-3 py-1.5 rounded-lg text-xs font-mono border focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200'}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-450 mb-1">قیمت همکار (ریال)</label>
+                          <input
+                            type="number"
+                            value={quickProductData.partner_price}
+                            onChange={(e) => setQuickProductData(prev => ({ ...prev, partner_price: Number(e.target.value) }))}
+                            className={`w-full px-3 py-1.5 rounded-lg text-xs font-mono border focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-slate-50 border-slate-200'}`}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowQuickAddProduct(false)}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-850 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 dark:text-slate-300 text-xs font-bold rounded-lg transition"
+                        >
+                          انصراف
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!quickProductData.name) {
+                              showNotification("نام کالا الزامی است.", "error");
+                              return;
+                            }
+                            try {
+                              const created = engine.addProduct(quickProductData);
+                              showNotification(`کالای "${created.name}" با موفقیت تعریف شد.`, "success");
+                              // Automatically set it as selected
+                              setProducts([...engine.getProducts()]);
+                              setNewItemProduct(created.id);
+                              // Auto populate prices based on client type
+                              handleProductSelect(created.id, newInvoice.client_id, newInvoice.invoice_type);
+                              setShowQuickAddProduct(false);
+                              setQuickProductData({
+                                name: "",
+                                purchase_price: 0,
+                                base_price: 0,
+                                wholesale_price: 0,
+                                partner_price: 0
+                              });
+                            } catch (err: any) {
+                              showNotification(err.message || "خطا در تعریف کالا", "error");
+                            }
+                          }}
+                          className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow transition active:scale-95"
+                        >
+                          ثبت و انتخاب کالا
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between border-b pb-4 mb-6 border-slate-200 dark:border-slate-800">
                 <div className="text-right">
                   <h3 className="text-sm font-black flex items-center gap-1.5">
@@ -1452,11 +1671,20 @@ export default function CommercialModule({
                 <h4 className="text-[11px] font-black mb-3 text-slate-400">
                   افزودن کالا به فاکتور
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-450 mb-1">
-                      انتخاب کالا
-                    </label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-[10px] font-bold text-slate-450">
+                        انتخاب کالا
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickAddProduct(true)}
+                        className="text-[9px] text-blue-500 hover:text-blue-450 hover:underline flex items-center gap-0.5"
+                      >
+                        <Plus className="w-2.5 h-2.5" /> تعریف جدید
+                      </button>
+                    </div>
                     <select
                       value={newItemProduct}
                       onChange={(e) =>
@@ -1523,6 +1751,26 @@ export default function CommercialModule({
                       value={newItemDiscount}
                       onChange={(e) =>
                         setNewItemDiscount(Number(e.target.value))
+                      }
+                      className={`w-full px-3 py-1.5 rounded-lg text-xs border focus:outline-none font-mono ${
+                        isDarkMode
+                          ? "bg-slate-950 border-slate-800 text-white"
+                          : "bg-white border-slate-200 text-slate-800"
+                      }`}
+                      min={0}
+                      max={100}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-450 mb-1">
+                      ارزش افزوده (٪)
+                    </label>
+                    <input
+                      type="number"
+                      value={newItemVat}
+                      onChange={(e) =>
+                        setNewItemVat(Number(e.target.value))
                       }
                       className={`w-full px-3 py-1.5 rounded-lg text-xs border focus:outline-none font-mono ${
                         isDarkMode
@@ -1628,8 +1876,19 @@ export default function CommercialModule({
                                   max={100}
                                 />
                               </td>
-                              <td className="py-2.5 px-3 text-slate-400">
-                                {item.vat_percentage}٪
+                              <td className="py-2.5 px-3">
+                                <input
+                                  type="number"
+                                  value={item.vat_percentage}
+                                  onChange={(e) => handleLineChange(index, "vat_percentage", Number(e.target.value))}
+                                  className={`w-16 px-1.5 py-1 text-center font-mono rounded-lg border focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                                    isDarkMode
+                                      ? "bg-slate-950 border-slate-800 text-white"
+                                      : "bg-white border-slate-200 text-slate-800"
+                                  }`}
+                                  min={0}
+                                  max={100}
+                                />
                               </td>
                               <td className={`py-2.5 px-3 text-left font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
                                 {finalLineCost.toLocaleString("fa-IR")} ریال
@@ -1709,11 +1968,14 @@ export default function CommercialModule({
                       tVat += lVat;
                     });
 
-                    const net =
+                    const net = Math.max(
+                      0,
                       tGross -
-                      tDiscount -
-                      newInvoice.total_discount_header +
-                      tVat;
+                        tDiscount -
+                        newInvoice.total_discount_header +
+                        tVat -
+                        (newInvoice.manual_rounding || 0)
+                    );
 
                     return (
                       <>
@@ -1755,6 +2017,30 @@ export default function CommercialModule({
                                   : "bg-white border-slate-200 text-rose-600"
                               }`}
                               min={0}
+                            />
+                            <span>ریال</span>
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-450">
+                            تعدیلات و گرد کردن دستی (کسر از جمع کل):
+                          </span>
+                          <span className="font-mono text-amber-500 font-bold flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              value={newInvoice.manual_rounding || 0}
+                              onChange={(e) =>
+                                setNewInvoice((prev) => ({
+                                  ...prev,
+                                  manual_rounding: Number(e.target.value),
+                                }))
+                              }
+                              className={`w-32 px-1.5 py-0.5 text-left font-mono rounded-lg border text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                                isDarkMode
+                                  ? "bg-slate-950 border-slate-800 text-amber-400"
+                                  : "bg-white border-slate-200 text-amber-600"
+                              }`}
                             />
                             <span>ریال</span>
                           </span>
@@ -2786,17 +3072,35 @@ export default function CommercialModule({
                               </div>
                             </div>
 
-                            {/* Credit Limit Meter */}
-                            <div className="space-y-1 mt-4">
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className="text-slate-450">
-                                  بدهی جاری / سقف اعتبار:
-                                </span>
-                                <span className="font-mono font-bold">
-                                  {activeDebts.toLocaleString("fa-IR")} /{" "}
-                                  {partner.credit_limit.toLocaleString("fa-IR")} ریال
-                                </span>
-                              </div>
+                             {/* Credit Limit Meter */}
+                             <div className="space-y-1 mt-4">
+                               <div className="flex justify-between items-center text-[10px]">
+                                 <span className="text-slate-450">
+                                   بدهی جاری / سقف اعتبار (ریال):
+                                 </span>
+                                 <span className="font-mono font-bold flex items-center gap-1">
+                                   <span className="text-slate-350">{activeDebts.toLocaleString("fa-IR")} / </span>
+                                   <input
+                                     type="number"
+                                     value={partner.credit_limit}
+                                     onChange={(e) => {
+                                       const val = Number(e.target.value);
+                                       try {
+                                         engine.updatePartner(partner.id, { credit_limit: val });
+                                         setPartners([...engine.getPartners()]);
+                                       } catch (err) {
+                                         console.error(err);
+                                       }
+                                     }}
+                                     className={`w-28 px-1.5 py-0.5 text-left font-mono rounded border text-[10px] focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                                       isDarkMode
+                                         ? "bg-slate-950 border-slate-800 text-white"
+                                         : "bg-white border-slate-200 text-slate-850"
+                                     }`}
+                                     min={0}
+                                   />
+                                 </span>
+                               </div>
                               {/* Credit bar */}
                               <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
                                 <div
@@ -3249,6 +3553,12 @@ export default function CommercialModule({
             </div>
             <div className="flex flex-wrap gap-2">
               <button
+                onClick={() => setShowAddExpense(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition shadow-sm"
+              >
+                <span>➕ ثبت هزینه دستی</span>
+              </button>
+              <button
                 onClick={() => {
                   setPlProductSearch("");
                   setPlFromDate("");
@@ -3350,7 +3660,7 @@ export default function CommercialModule({
           </div>
 
           {/* KPI Dashboard Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div
               className={`p-5 rounded-2xl border ${isDarkMode ? "bg-slate-900/50 border-slate-800" : "bg-white border-slate-200 shadow-sm"}`}
             >
@@ -3384,12 +3694,28 @@ export default function CommercialModule({
             </div>
 
             <div
+              className={`p-5 rounded-2xl border ${isDarkMode ? "bg-amber-900/20 border-amber-800" : "bg-amber-50 border-amber-200 shadow-sm"}`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="block text-[10px] font-bold text-amber-600 uppercase">
+                  جمع هزینه‌های دستی
+                </span>
+                <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
+                  <Calculator className="w-4 h-4 text-amber-500" />
+                </div>
+              </div>
+              <span className={`block text-xl font-black font-mono mt-1 text-amber-600`}>
+                {profitLossReport.totalManualExpenses.toLocaleString("fa-IR")} <span className="text-xs font-sans opacity-70">ریال</span>
+              </span>
+            </div>
+
+            <div
               className={`p-5 rounded-2xl border relative overflow-hidden ${isDarkMode ? "bg-gradient-to-br from-emerald-900/20 to-slate-900 border-emerald-900/50" : "bg-gradient-to-br from-emerald-50 to-white border-emerald-100 shadow-sm"}`}
             >
               <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl"></div>
               <div className="flex items-center justify-between mb-3 relative z-10">
                 <span className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
-                  سود ناخالص واقعی
+                  سود خالص
                 </span>
                 <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
                   <span className="text-emerald-600 dark:text-emerald-400 text-xs font-black">P</span>
@@ -3796,6 +4122,63 @@ export default function CommercialModule({
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Manual Expenses Section */}
+          <div className="mt-6 border rounded-2xl p-5 flex flex-col bg-amber-50 dark:bg-amber-950/10 border-amber-200 dark:border-amber-900/50">
+            <h3 className="text-sm font-black mb-6 flex items-center justify-between gap-2 text-amber-700 dark:text-amber-500">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-500">
+                  <Calculator className="w-4 h-4" />
+                </div>
+                <span>ریز هزینه‌های دستی ثبت شده</span>
+              </div>
+              <span className="text-xs opacity-70">
+                مبلغ کل: {profitLossReport.totalManualExpenses.toLocaleString("fa-IR")} ریال
+              </span>
+            </h3>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse text-[11px]">
+                <thead>
+                  <tr className="border-b bg-amber-500/5 border-amber-200 dark:border-amber-900/50 text-amber-700 dark:text-amber-600 font-bold">
+                    <th className="py-2.5 px-4">تاریخ</th>
+                    <th className="py-2.5 px-4">مبلغ (ریال)</th>
+                    <th className="py-2.5 px-4">شرح هزینه</th>
+                    <th className="py-2.5 px-4 text-left">عملیات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profitLossReport.filteredExpenses.map((expense) => (
+                    <tr key={expense.id} className="border-b border-amber-100 dark:border-amber-900/30 hover:bg-amber-500/5 transition">
+                      <td className="py-2.5 px-4 font-mono text-slate-600 dark:text-slate-400">{expense.date}</td>
+                      <td className="py-2.5 px-4 font-mono font-bold text-amber-600">{expense.amount.toLocaleString("fa-IR")}</td>
+                      <td className="py-2.5 px-4 text-slate-700 dark:text-slate-300">{expense.description}</td>
+                      <td className="py-2.5 px-4 text-left">
+                        <button
+                          onClick={() => {
+                            if (window.confirm("آیا از حذف این هزینه اطمینان دارید؟")) {
+                              engine.deleteManualExpense(expense.id);
+                              setManualExpenses([...engine.getManualExpenses()]);
+                            }
+                          }}
+                          className="text-rose-500 hover:text-rose-600 font-bold px-2 py-1 bg-rose-500/10 rounded"
+                        >
+                          حذف
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {profitLossReport.filteredExpenses.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center italic text-amber-600/50">
+                        هیچ هزینه‌ای یافت نشد.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
