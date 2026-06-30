@@ -22,7 +22,8 @@ import {
   Layers,
   ArrowLeftRight,
   Eye,
-  Activity
+  Activity,
+  Download
 } from "lucide-react";
 import { Account, AccountLevel, DetailedAccount, AccountDetailedLink, validateAccountCode, VoucherLine } from "../lib/accounting";
 
@@ -329,6 +330,43 @@ export default function ChartOfAccounts({ isDarkMode, onBack, showNotification }
     const allIds = accounts.map(a => a.id);
     setExpandedNodes(new Set(allIds));
     showNotification("همه گره‌های درختواره گسترش یافتند.", "info");
+  };
+
+  const handleExportCSV = () => {
+    let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // BOM for UTF-8 in Excel
+    
+    if (activeTab === "tree") {
+      csvContent += "کد حساب,عنوان حساب,سطح,کد والد,مانده (ریال)\n";
+      accounts.forEach(acc => {
+        const levelName = acc.level === AccountLevel.GROUP ? "گروه" : acc.level === AccountLevel.LEDGER ? "کل" : "معین";
+        const balance = accountBalances[acc.id] || 0;
+        const parentCode = acc.parent_id ? accounts.find(a => a.id === acc.parent_id)?.code || '' : '';
+        csvContent += `${acc.code},${acc.name},${levelName},${parentCode},${balance}\n`;
+      });
+    } else if (activeTab === "detailed") {
+      csvContent += "کد تفصیلی,عنوان تفصیلی,نوع\n";
+      detailedAccounts.forEach(det => {
+        csvContent += `${det.code},${det.name},${getDetailedTypeLabel(det.type)}\n`;
+      });
+    } else {
+      csvContent += "کد تفصیلی,عنوان تفصیلی,کد معین متصل,عنوان معین متصل\n";
+      links.forEach(l => {
+        const det = detailedAccounts.find(d => d.id === l.detailed_account_id);
+        const acc = accounts.find(a => a.id === l.account_id);
+        if (det && acc) {
+          csvContent += `${det.code},${det.name},${acc.code},${acc.name}\n`;
+        }
+      });
+    }
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `coding_export_${activeTab}_${new Date().getTime()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showNotification("خروجی اکسل (CSV) با موفقیت دریافت شد.", "success");
   };
 
   const handleCollapseAll = () => {
@@ -1200,6 +1238,15 @@ export default function ChartOfAccounts({ isDarkMode, onBack, showNotification }
           {activeTab === "tree" ? (
             <>
               <button 
+                onClick={handleExportCSV}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
+                  isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+                title="دریافت خروجی اکسل"
+              >
+                <Download className="w-3.5 h-3.5" /> خروجی اکسل
+              </button>
+              <button 
                 onClick={handleExpandAll}
                 className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
                   isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -1233,6 +1280,15 @@ export default function ChartOfAccounts({ isDarkMode, onBack, showNotification }
             </>
           ) : activeTab === "detailed" ? (
             <>
+              <button 
+                onClick={handleExportCSV}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors mr-2 ${
+                  isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+                title="دریافت خروجی اکسل"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
               <select 
                 value={detailedFilterType}
                 onChange={(e) => setDetailedFilterType(e.target.value)}
@@ -1256,6 +1312,15 @@ export default function ChartOfAccounts({ isDarkMode, onBack, showNotification }
             </>
           ) : (
             <>
+              <button 
+                onClick={handleExportCSV}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors mr-2 ${
+                  isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+                title="دریافت خروجی اکسل"
+              >
+                <Download className="w-3.5 h-3.5" /> خروجی اکسل
+              </button>
               <button 
                 onClick={() => setIsAddDetailedModalOpen(true)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shrink-0"
