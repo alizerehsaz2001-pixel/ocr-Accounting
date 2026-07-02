@@ -76,6 +76,7 @@ import OnboardingModal from "./components/OnboardingModal";
 import FinancialAccountingModule from "./components/FinancialAccountingModule";
 import TreasuryModule from "./components/TreasuryModule";
 import CommercialModule from "./components/CommercialModule";
+import InventoryModule from "./components/InventoryModule";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
@@ -85,7 +86,7 @@ const ERP_MODULES = [
   { id: 1, name: "حسابداری مالی و دفتر کل (هسته مرکزی)", icon: BookOpen, isLive: true },
   { id: 2, name: "خزانه‌داری (دریافت و پرداخت)", icon: Receipt, isLive: true },
   { id: 3, name: "خرید و فروش (بازرگانی)", icon: ShoppingBag, isLive: true },
-  { id: 4, name: "انبارداری و کنترل موجودی", icon: Boxes },
+  { id: 4, name: "انبارداری و کنترل موجودی", icon: Boxes, isLive: true },
   { id: 5, name: "حقوق و دستمزد", icon: Users },
   { id: 6, name: "دارایی‌های ثابت (اموال)", icon: Building2 },
   { id: 7, name: "مالیات و تکالیف قانونی", icon: Percent },
@@ -1933,6 +1934,8 @@ export default function App() {
           <TreasuryModule isDarkMode={isDarkMode} showNotification={showNotification} />
         ) : activeErpModuleId === 3 ? (
           <CommercialModule isDarkMode={isDarkMode} showNotification={showNotification} />
+        ) : activeErpModuleId === 4 ? (
+          <InventoryModule isDarkMode={isDarkMode} showNotification={showNotification} />
         ) : (
           <div className="flex-1 overflow-y-auto p-4 flex flex-col">
           {guideOpen && (

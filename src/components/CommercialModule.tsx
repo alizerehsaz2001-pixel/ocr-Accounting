@@ -3086,7 +3086,7 @@ export default function CommercialModule({
                                      onChange={(e) => {
                                        const val = Number(e.target.value);
                                        try {
-                                         engine.updatePartner(partner.id, { credit_limit: val });
+                                         engine.updatePartner({ ...partner, credit_limit: val });
                                          setPartners([...engine.getPartners()]);
                                        } catch (err) {
                                          console.error(err);
