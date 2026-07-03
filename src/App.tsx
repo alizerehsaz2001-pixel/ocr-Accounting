@@ -251,6 +251,13 @@ export default function App() {
   });
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [isJsonVerified, setIsJsonVerified] = useState<boolean>(false);
+  const [bypassManualVerification, setBypassManualVerification] = useState<boolean>(() => {
+    return localStorage.getItem("bypass_manual_verification") === "true";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("bypass_manual_verification", bypassManualVerification.toString());
+  }, [bypassManualVerification]);
 
   // Auto-save Status States
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
@@ -615,10 +622,18 @@ export default function App() {
     return true;
   });
 
-  // Reset verification on file change
+  // Reset or auto-verify based on file change, status, and bypass setting
   useEffect(() => {
-    setIsJsonVerified(false);
-  }, [activeFile?.id]);
+    if (activeFile && activeFile.status === "success") {
+      if (bypassManualVerification) {
+        setIsJsonVerified(true);
+      } else {
+        setIsJsonVerified(false);
+      }
+    } else {
+      setIsJsonVerified(false);
+    }
+  }, [activeFile?.id, activeFile?.status, bypassManualVerification]);
 
   const [sortColumn, setSortColumn] = useState<keyof TransactionItem | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -779,17 +794,16 @@ export default function App() {
   // Synchronize rawJsonText and converterInputJson from transactions when modified by validation, editing, or API extraction
   useEffect(() => {
     if (activeFile && activeFile.status === "success") {
-      const cleanJSON = transactions.map((t) => ({
-        تاریخ: t.تاریخ,
-        شماره_سند: t.شماره_سند,
-        نام_طرف_حساب: t.نام_طرف_حساب,
-        شرح: t.شرح,
-        مبلغ_بدهکار: t.مبلغ_بدهکار,
-        مبلغ_بستانکار: t.مبلغ_بستانکار,
-        نوع_ارز: t.نوع_ارز,
-        توضیحات: t.توضیحات,
-        ضریب_اطمینان: t.ضریب_اطمینان !== undefined && t.ضریب_اطمینان !== null ? Number(t.ضریب_اطمینان) : 100,
-      }));
+      const activeColumns = (activeFile.columns && activeFile.columns.length > 0) ? activeFile.columns : DEFAULT_COLUMNS;
+      const cleanJSON = transactions.map((t) => {
+        const obj: any = {};
+        activeColumns.forEach((col: any) => {
+          const key = col.کلید;
+          obj[key] = t[key] !== undefined ? t[key] : null;
+        });
+        obj["ضریب_اطمینان"] = t.ضریب_اطمینان !== undefined && t.ضریب_اطمینان !== null ? Number(t.ضریب_اطمینان) : 100;
+        return obj;
+      });
       const formattedJson = JSON.stringify(cleanJSON, null, 2);
       setRawJsonText(formattedJson);
       setConverterInputJson(formattedJson);
@@ -1367,18 +1381,18 @@ export default function App() {
       }
       const parsed = JSON.parse(newVal);
       if (Array.isArray(parsed)) {
-        const mapped: TransactionItem[] = parsed.map((item: any, idx: number) => ({
-          id: `edited-${Date.now()}-${idx}`,
-          تاریخ: item.تاریخ !== undefined ? item.تاریخ : null,
-          شماره_سند: item.شماره_سند !== undefined ? item.شماره_سند : null,
-          نام_طرف_حساب: item.نام_طرف_حساب !== undefined ? item.نام_طرف_حساب : null,
-          شرح: item.شرح !== undefined ? item.شرح : null,
-          مبلغ_بدهکار: item.مبلغ_بدهکار !== undefined && !isNaN(Number(item.مبلغ_بدهکار)) ? Number(item.مبلغ_بدهکار) : 0,
-          مبلغ_بستانکار: item.مبلغ_بستانکار !== undefined && !isNaN(Number(item.مبلغ_بستانکار)) ? Number(item.مبلغ_بستانکار) : 0,
-          نوع_ارز: item.نوع_ارز !== undefined ? item.نوع_ارز : null,
-          توضیحات: item.توضیحات !== undefined ? item.توضیحات : null,
-          ضریب_اطمینان: item.ضریب_اطمینان !== undefined && item.ضریب_اطمینان !== null ? Number(item.ضریب_اطمینان) : 100,
-        }));
+        const mapped: TransactionItem[] = parsed.map((item: any, idx: number) => {
+          const row: any = {
+            id: `edited-${Date.now()}-${idx}`
+          };
+          Object.keys(item).forEach((key) => {
+            if (key !== "id") {
+              row[key] = item[key];
+            }
+          });
+          row.ضریب_اطمینان = item.ضریب_اطمینان !== undefined && item.ضریب_اطمینان !== null ? Number(item.ضریب_اطمینان) : 100;
+          return row as TransactionItem;
+        });
         setTransactions(mapped);
         setJsonError(null);
       } else {
@@ -2029,184 +2043,49 @@ export default function App() {
         ) : (
           <div className="flex-1 overflow-y-auto p-4 flex flex-col">
           {guideOpen && (
-            <div className={`p-4 shadow-sm animate-fade-in flex flex-col items-start gap-3 mb-4 shrink-0 rounded-xl border transition-colors ${
+            <div className={`p-4 shadow-sm animate-fade-in flex flex-col items-start gap-3 mb-4 shrink-0 rounded-xl border transition-all duration-300 ${
               isDarkMode 
-                ? "bg-blue-950/20 border-blue-900/60 text-blue-200" 
-                : "bg-blue-50/70 border-blue-100 text-blue-900"
+                ? "bg-slate-900/60 border-slate-800/80 text-slate-300" 
+                : "bg-blue-50/40 border-blue-100/60 text-slate-700"
             }`}>
-              <div className="flex items-start gap-3 w-full">
-                <HelpCircle className={`h-5 w-5 shrink-0 mt-0.5 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} />
-                <div className="flex-1 text-right">
-                  <h3 className={`font-bold text-[13px] ${isDarkMode ? "text-blue-100" : "text-blue-900"} flex items-center gap-1.5`}>
-                    <Sparkles className="h-4 w-4 text-amber-400 animate-pulse" />
-                    دستورالعمل‌ها و رهنمودهای حسابداری هوشمند (اصول تراز مالی):
-                  </h3>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 text-[11px]">
-                    <div className="space-y-2">
+              <div className="flex items-start justify-between gap-4 w-full">
+                <div className="flex items-start gap-3 flex-1">
+                  <HelpCircle className={`h-5 w-5 shrink-0 mt-0.5 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} />
+                  <div className="text-right">
+                    <h3 className={`font-bold text-xs ${isDarkMode ? "text-slate-100" : "text-slate-900"} flex items-center gap-1.5`}>
+                      راهنمای سریع سیستم حسابداری هوشمند
+                    </h3>
+                    <p className="text-[10px] mt-1 text-slate-400 dark:text-slate-400 leading-relaxed">
+                      این پلتفرم اسناد مالی را تحلیل کرده و با موازنه دوطرفه، به سرفصل‌های معین حسابداری تخصیص می‌دهد.
+                    </p>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-3.5 text-[10.5px]">
                       <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>اصل تراز و موازنه دوطرفه:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            هر تراکنش مالی استخراج‌شده بر اساس قاعده بدهکار (Debit) و بستانکار (Credit) تراز می‌شود. مجموع دارایی‌ها/هزینه‌ها باید با بدهی‌ها/حقوق‌مالکان مندرج مطابقت داشته باشد.
-                          </p>
-                        </div>
+                        <span className="text-blue-500 font-bold select-none">•</span>
+                        <span><strong>موازنه تراز:</strong> تراز خودکار بدهکار و بستانکار بر اساس موازنه دوطرفه.</span>
                       </div>
-
                       <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>تفکیک مالیات بر ارزش افزوده (VAT) و عوارض:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            نرخ مصوب مالیات ارزش افزوده سال جاری برای فاکتورهای استاندارد به‌صورت جداگانه طبقه‌بندی می‌شود. در پردازش صورت‌حساب‌ها، مالیات بر ارزش افزوده و عوارض به سرفصل حساب دارایی جاری (مالیات خرید بر ارزش افزوده) منتقل می‌شود.
-                          </p>
-                        </div>
+                        <span className="text-blue-500 font-bold select-none">•</span>
+                        <span><strong>مالیات و تخفیف:</strong> تفکیک عوارض، ارزش افزوده (VAT) و کسر هوشمند تخفیفات فاکتور.</span>
                       </div>
-
                       <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>تشخیص هوشمند تخفیفات فاکتور:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            سیستم مبالغ تخفیف‌های تجاری توصیف‌شده در فاکتورها را قبل از محاسبه مالیات استخراج کرده و مانع از توهم محاسباتی در بهای تمام شده کالای خریداری‌شده می‌گردد.
-                          </p>
-                        </div>
+                        <span className="text-blue-500 font-bold select-none">•</span>
+                        <span><strong>اسناد دست‌نویس:</strong> خوانش فوق‌هوشمند خطوط تحریری، اداری مخدوش و ناخوانا با مدل‌های Gemini.</span>
                       </div>
-
                       <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>اعتبارسنجی الگوهای عددی شناسه ملی و کد اقتصادی:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            سیستم با کنترل الگوی ۱۱ رقمی شناسه ملی و کدهای اقتصادی طرفین معامله در فاکتورهای رسمی، بستر اولیه را برای گزارش‌دهی فصلی موضوع ماده ۱۶۹ قانون مالیات‌های مستقیم تسهیل می‌نماید.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>کنترل هزینه‌های غیرقابل قبول مالیاتی:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            هوش مصنوعی قادر به شناسایی و برچسب‌گذاری (Tagging) هوشمند اقلامی است که ممکن است بر اساس استانداردهای حسابداری، هزینه‌های غیرقابل قبول مالیاتی تلقی شوند (مانند جریمه‌های دیرکرد).
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>کنترل حساب‌های ارزی و تسعیر نرخ ارز:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            تشخیص خودکار واحد پولی فاکتورهای ارزی (دلار، یورو و درهم) و ارائه پیشنهاد برای ثبت سند تسعیر نرخ ارز بر اساس تاریخ فاکتور جهت درج دقیق در دفاتر قانونی.
-                          </p>
-                        </div>
+                        <span className="text-blue-500 font-bold select-none">•</span>
+                        <span><strong>خروجی اکسل:</strong> دانلود مستقیم و راست‌چین فاکتور و تراکنش‌های استخراج‌شده به صورت XLSX.</span>
                       </div>
                     </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>تشخیص ماهیت حساب بر اساس سرفصل کل و معین:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            با تحلیل اطلاعات اقلام، هوش مصنوعی سرفصل‌های کل و معین متناسب (مانند ملزومات اداری، هزینه اجاره، پیش‌پرداخت یا خرید کالا) را تخصیص می‌دهد تا از خطای ثبتی پیشگیری شود.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>قابلیت خوانش فوق‌هوشمندِ خطوط دست‌نویس و اسناد مخدوش:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            مدل‌ها اکنون با دقت فراوان، خطوط تحریری، اداری مخدوش و شکسته نستعلیق ایرانی را می‌خوانند. موتور مجهز به تحلیل بافتاری برای حدس کلمات ادغام‌شده و بازیابی صفرهای پیوسته سریع از طریق مهندسی معکوسِ جمع کل می‌باشد. پیشنهاد می‌شود برای دست‌نویس‌های کور یا اسناد بسیار درهم‌ریخته از نسخه قدرتمند Gemini 3.1 Pro استفاده نمایید.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>شماره سریال سند و تطبیق تاریخی (Audit Trail):</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            عمر تاریخی فاکتور، تاریخ شمسی، سال مالی فعال و شماره سریال مندرج در راستای ردیابی حسابرسی اسناد مالی استخراج می‌شوند تا پرونده‌های مکرر به اشتباه دوباره ثبت نشوند.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>تفکیک خودکار حساب‌های بانکی و تنخواه‌گردان:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            شناسایی ماهیت پرداخت نقد یا نسیه؛ چنانچه پرداخت از طریق فیش بانکی/کارتخوان صورت گرفته باشد، حساب موجودی بانک درگیر می‌شود و اگر فاکتور خرد باشد، در حساب تنخواه‌گردان منظور خواهد شد.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>طبقه‌بندی دارایی‌های ثابت و تعیین هزینه استهلاک:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            مدل توانایی دارد خریدهای سرمایه‌ای بالای حد نصاب (اموال منقول/غیرمنقول مثل لپ‌تاپ و تجهیزات) را از هزینه‌های جاری تفکیک و به عنوان «اموال و ماشین‌آلات» با ثبت جداگانه لحاظ نماید.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>خروجی و مبدل اختصاصی Excel (XLSX):</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            علاوه بر خروجی مستقیم اکسل از نرم‌افزار، می‌توانید در زبانه «تبدیل‌گر اختصاصی اکسل» رشته‌های JSON ساختاریافته خود را جایگذاری نموده و فایل استاندارد اکسلِ راست‌چین و فارسی دریافت کنید.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 select-none">•</span>
-                        <div className="flex-1">
-                          <strong className={isDarkMode ? "text-blue-100" : "text-blue-950"}>دقت و شفافیت کیفیت بارگذاری:</strong>
-                          <p className={`mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"} leading-relaxed`}>
-                            کیفیت اسکن، زاویه عمودی عکس و نور محیط نقش بسزایی دارد. در صورت مخدوش بودن اعداد بسیار ریز، از ادیتور متنی JSON در زبانه فیلترها جهت اصلاح دستی مبالغ استفاده فرمایید.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className={`mt-3 pt-2 text-[10px] italic border-t w-full text-right ${isDarkMode ? "text-slate-400 border-blue-900/30" : "text-slate-700 border-blue-200/50"}`}>
-                    توصیه حسابرسی: همیشه قبل از نهایی‌سازی و کپی نمودن ساختار تفکیک‌شده، از صحت مبالغ کل و بدهکار/بستانکار ثبت شده با چک لیست اطمینان حاصل نمایید.
                   </div>
                 </div>
-                <button onClick={() => setGuideOpen(false)} className={`${isDarkMode ? "text-blue-400 hover:text-blue-200" : "text-blue-500 hover:text-blue-700"}`}>
+                <button 
+                  onClick={() => setGuideOpen(false)} 
+                  className={`p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/85 transition-colors ${isDarkMode ? "text-slate-400 hover:text-slate-200" : "text-slate-400 hover:text-slate-700"}`}
+                  title="بستن راهنما"
+                >
                   <X className="h-4 w-4" />
                 </button>
-              </div>
-
-              <div className={`mt-3 pt-3 border-t w-full text-right ${isDarkMode ? "border-blue-900/40" : "border-blue-200/60"}`}>
-                <h3 className={`font-bold text-xs mb-3 ${isDarkMode ? "text-blue-100" : "text-blue-900"}`}>راهنمای موتور هوش مصنوعی و بهینه‌سازی مصرف توکن:</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px]">
-                  <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
-                    <strong className="text-blue-500 block mb-1">Gemini 3.5 Flash (سرعت آنی و بهینه)</strong>
-                    مدل پیش‌فرض و بهینه‌شده برای پردازش‌های فوری حسابداری. سهمیه روزانه بیش از ۱۵۰۰ درخواست، فوق‌العاده مقرون‌به‌صرفه و ایده‌آل برای فاکتورهای تایپی استاندارد.
-                  </div>
-                  <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
-                    <strong className="text-purple-400 block mb-1">Gemini 3.1 Pro (سطح ممیز ارشد مالی)</strong>
-                    مجهز به عمیق‌ترین زنجیره استدلالی گوگل برای فاکتورهای با دست‌خط ناخوانا، عکس‌های مخدوش، و تسعیر حساب‌های ارزی پیچیده.
-                  </div>
-                  <div className={`p-2.5 rounded-lg md:col-span-2 ${isDarkMode ? "bg-slate-900/50 border border-slate-800" : "bg-white/60 border border-blue-100/50"}`}>
-                    <strong className="text-emerald-400 block mb-1">راهنمای بهینه‌سازی مصرف توکن (قابل تنظیم در پنل تنظیمات):</strong>
-                    <ul className="list-disc pl-4 pr-1 mt-1 space-y-1 leading-normal text-slate-400">
-                      <li><strong className="text-slate-300">رزولوشن تصاویر:</strong> با فعال‌سازی رزولوشن فوق اقتصادی یا متوازن، ابعاد اسناد تا ۷۰٪ فشرده شده که مانع هدر رفت توکن‌های ورودی می‌شود.</li>
-                      <li><strong className="text-slate-300">خلاصه سازی شرح (ECO Prompt):</strong> توضیحات طولانی تراکنش‌ها را فشرده می‌کند تا خروجی مدل کوتاه شده و سرعت پردازش افزایش یابد.</li>
-                      <li><strong className="text-slate-300">محدودیت سطرها:</strong> تعیین تعداد سطور استخراجی مانع از اسکن بی‌کیفیت یا تکراری اقلام طولانی در فاکتورهای بسیار شلوغ می‌گردد.</li>
-                    </ul>
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -2343,6 +2222,39 @@ export default function App() {
                             );
                           })}
                         </div>
+                      </div>
+
+                      {/* JSON Auto-Verification & Direct Bypass Option */}
+                      <div className={`p-3 rounded-xl border flex items-center justify-between transition-all duration-300 ${
+                        isDarkMode ? "bg-slate-900/40 border-slate-800/80" : "bg-slate-50 border-slate-200/70"
+                      }`}>
+                        <div className="flex flex-col gap-0.5 text-right flex-1 pl-2">
+                          <span className={`text-[11px] font-black ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
+                            انتقال مستقیم به JSON و صحت‌سنجی خودکار
+                          </span>
+                          <span className={`text-[9.5px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            با فعال‌سازی این گزینه، خروجی‌های هوشمند Gemini مستقیماً معتبر شناخته شده و نیاز به تایید صحت دستی نیست.
+                          </span>
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const targetState = !bypassManualVerification;
+                            setBypassManualVerification(targetState);
+                            if (targetState) {
+                              setIsJsonVerified(true);
+                            } else {
+                              setIsJsonVerified(false);
+                            }
+                          }}
+                          className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors shrink-0 mr-2 ${
+                            bypassManualVerification ? "bg-blue-600" : "bg-slate-300 dark:bg-slate-800"
+                          }`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                            bypassManualVerification ? "-translate-x-5.5" : "-translate-x-0.5"
+                          }`} />
+                        </button>
                       </div>
 
                       {/* Pre-extract Chat */}
@@ -2912,26 +2824,38 @@ export default function App() {
 
                     {/* Verification & Consent Panel */}
                     {activeFile.status === "success" && (
-                      <div className={`p-3 border-b select-none transition-colors ${
+                      <div className={`p-3 border-b select-none transition-all duration-300 ${
                         isJsonVerified 
                           ? "bg-slate-900/60 border-slate-800 text-slate-300" 
                           : "bg-amber-950/45 border-amber-900/50 text-amber-100"
                       }`} dir="rtl">
-                        <label className="flex items-start gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={isJsonVerified}
-                            onChange={(e) => {
-                              setIsJsonVerified(e.target.checked);
-                              logEvent("تایید صحت اطلاعات", e.target.checked ? "کاربر صحت اطلاعات JSON را تایید کرد." : "کاربر تایید صحت اطلاعات JSON را لغو کرد.");
-                            }}
-                            className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-800 text-amber-500 focus:ring-amber-500 cursor-pointer"
-                          />
-                          <div className="text-[11px] leading-relaxed select-none font-sans flex-1 text-right">
-                            <span className="font-bold text-amber-400 block mb-0.5">بررسی مجدد و تایید صحت اطلاعات سند مالی</span>
-                            آیا پس از بررسی دقیق، از صحت تمام اطلاعات بالا اطمینان کامل دارید؟ جهت فعال شدن دکمه کپی آرایه JSON، زدن این تیک الزامی است.
+                        {bypassManualVerification ? (
+                          <div className="flex items-center justify-between gap-2.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                              <span className="text-[11px] font-sans font-bold text-emerald-400">انتقال مستقیم فعال است</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 font-sans leading-relaxed text-right">
+                              اطلاعات هوشمند Gemini مستقیماً معتبر شناخته شده و با آرایه JSON همگام شده‌اند.
+                            </span>
                           </div>
-                        </label>
+                        ) : (
+                          <label className="flex items-start gap-2.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isJsonVerified}
+                              onChange={(e) => {
+                                setIsJsonVerified(e.target.checked);
+                                logEvent("تایید صحت اطلاعات", e.target.checked ? "کاربر صحت اطلاعات JSON را تایید کرد." : "کاربر تایید صحت اطلاعات JSON را لغو کرد.");
+                              }}
+                              className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-800 text-amber-500 focus:ring-amber-500 cursor-pointer"
+                            />
+                            <div className="text-[11px] leading-relaxed select-none font-sans flex-1 text-right">
+                              <span className="font-bold text-amber-400 block mb-0.5">بررسی مجدد و تایید صحت اطلاعات سند مالی</span>
+                              آیا پس از بررسی دقیق، از صحت تمام اطلاعات بالا اطمینان کامل دارید؟ جهت فعال شدن دکمه کپی آرایه JSON، زدن این تیک الزامی است.
+                            </div>
+                          </label>
+                        )}
                       </div>
                     )}
 
@@ -5180,6 +5104,8 @@ export default function App() {
                     }`} />
                   </button>
                 </div>
+
+
               </section>
             </div>
 
