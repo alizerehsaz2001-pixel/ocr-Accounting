@@ -3,21 +3,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export interface TransactionItem {
+export interface DynamicColumn {
+  کلید: string;
+  عنوان: string;
+  نوع_داده: string;
+}
+
+export interface DynamicFieldValue {
+  کلید: string;
+  مقدار: string | number | null;
+}
+
+export interface DynamicRow {
   id: string; // client-side unique tracker
-  تاریخ: string | null;
-  شماره_سند: string | null;
-  نام_طرف_حساب: string | null;
-  شرح: string | null;
-  مبلغ_بدهکار: number | null;
-  مبلغ_بستانکار: number | null;
-  نوع_ارز: string | null;
-  توضیحات: string | null;
   ضریب_اطمینان: number | null;
-  شناسه_ملی?: string | null;
-  شماره_مالیاتی?: string | null;
-  مالیات_ارزش_افزوده?: number | null;
-  هزینه_غیرقابل_قبول?: boolean | null;
+  فیلد_ها: DynamicFieldValue[];
+}
+
+// Keep TransactionItem for backward compatibility with other modules, or map it.
+export interface TransactionItem {
+  id: string;
+  [key: string]: any; // Allow dynamic fields
 }
 
 export interface AudioNote {
@@ -36,6 +42,7 @@ export interface UploadedFile {
   status: 'idle' | 'processing' | 'success' | 'error';
   error: string | null;
   results?: TransactionItem[];
+  columns?: DynamicColumn[]; // Added for dynamic tables
   documentType?: string;
   documentAnalysis?: string;
   tokensUsed?: number;
@@ -59,6 +66,7 @@ export interface PreviousScan {
   id: string;
   file: UploadedFile;
   transactions: TransactionItem[];
+  columns?: DynamicColumn[]; // Added for dynamic tables
   timestamp: number;
   auditLogs?: AuditLogEntry[];
 }

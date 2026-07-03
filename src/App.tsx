@@ -67,6 +67,9 @@ import {
   MessageCircle,
   Bot,
   Headphones,
+  UserX,
+  Tag,
+  ShieldAlert,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -77,21 +80,26 @@ import FinancialAccountingModule from "./components/FinancialAccountingModule";
 import TreasuryModule from "./components/TreasuryModule";
 import CommercialModule from "./components/CommercialModule";
 import InventoryModule from "./components/InventoryModule";
+import PayrollModule from "./components/PayrollModule";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
+import Markdown from "react-markdown";
+import DynamicTable from "./components/DynamicTable";
+
+const DEFAULT_COLUMNS = [
+  { کلید: "تاریخ", عنوان: "تاریخ", نوع_داده: "string" },
+  { کلید: "شماره_سند", عنوان: "شماره سند", نوع_داده: "string" },
+  { کلید: "نام_طرف_حساب", عنوان: "نام طرف حساب", نوع_داده: "string" },
+  { کلید: "شرح", عنوان: "شرح", نوع_داده: "string" },
+  { کلید: "مبلغ_بدهکار", عنوان: "مبلغ بدهکار", نوع_داده: "number" },
+  { کلید: "مبلغ_بستانکار", عنوان: "مبلغ بستانکار", نوع_داده: "number" },
+  { کلید: "نوع_ارز", عنوان: "نوع ارز", نوع_داده: "string" },
+  { کلید: "توضیحات", عنوان: "توضیحات", نوع_داده: "string" },
+];
 
 const ERP_MODULES = [
   { id: 0, name: "آنالیز تصویر پیشرفته", icon: Sparkles, isLive: true },
-  { id: 1, name: "حسابداری مالی و دفتر کل (هسته مرکزی)", icon: BookOpen, isLive: true },
-  { id: 2, name: "خزانه‌داری (دریافت و پرداخت)", icon: Receipt, isLive: true },
-  { id: 3, name: "خرید و فروش (بازرگانی)", icon: ShoppingBag, isLive: true },
-  { id: 4, name: "انبارداری و کنترل موجودی", icon: Boxes, isLive: true },
-  { id: 5, name: "حقوق و دستمزد", icon: Users },
-  { id: 6, name: "دارایی‌های ثابت (اموال)", icon: Building2 },
-  { id: 7, name: "مالیات و تکالیف قانونی", icon: Percent },
-  { id: 8, name: "گزارش‌گیری پیشرفته و داشبورد مدیریتی", icon: BarChart3 },
-  { id: 9, name: "امنیت و کنترل دسترسی کاربران", icon: Lock },
 ];
 
 export default function App() {
@@ -148,6 +156,13 @@ export default function App() {
 
   const [pendingFile, setPendingFile] = useState<{ base64: string; name: string; mimeType: string; size: number } | null>(null);
   const [customPrompt, setCustomPrompt] = useState<string>("");
+  const [preExtractChat, setPreExtractChat] = useState<{ role: 'user' | 'assistant'; text: string }[]>([]);
+  const [preExtractInput, setPreExtractInput] = useState<string>("");
+  const [isPreExtractChatLoading, setIsPreExtractChatLoading] = useState<boolean>(false);
+  const [verificationSummary, setVerificationSummary] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [isExtracting, setIsExtracting] = useState<boolean>(false);
+  const [extractionStep, setExtractionStep] = useState<number>(0);
   const [activeErpModuleId, setActiveErpModuleId] = useState<number | null>(0);
 
   // Support chatbot state variables
@@ -247,6 +262,8 @@ export default function App() {
   const [filterMinAmount, setFilterMinAmount] = useState<string>("");
   const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
   const [filterConfidence, setFilterConfidence] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [minConfidenceThreshold, setMinConfidenceThreshold] = useState<number>(0);
+  const [activeValidationSubTab, setActiveValidationSubTab] = useState<'risk' | 'threshold' | 'fields'>('risk');
   const [showFilters, setShowFilters] = useState<boolean>(false);
 
   // Document Rename States
@@ -310,6 +327,68 @@ export default function App() {
     if (tab === "json") tabName = "آرایه خام JSON";
     if (tab === "converter") tabName = "خروجی اکسل پیشرفته";
     logEvent("تغییر تب", `کاربر وارد تب «${tabName}» شد.`);
+  };
+
+  const handleSendPreExtractChat = async (textToSend?: string) => {
+    const text = textToSend || preExtractInput;
+    if (!text.trim() || !pendingFile) return;
+
+    setPreExtractInput("");
+    const newMessages = [...preExtractChat, { role: "user" as const, text }];
+    setPreExtractChat(newMessages);
+    setIsPreExtractChatLoading(true);
+
+    try {
+      const response = await fetch("/api/chat-pre-extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          messages: newMessages,
+          image: pendingFile.base64,
+          mimeType: pendingFile.mimeType,
+          model: selectedModel
+        }),
+      });
+      const data = await response.json();
+      if (data.success && data.text) {
+        setPreExtractChat((prev) => [...prev, { role: "assistant" as const, text: data.text }]);
+      } else {
+         showNotification("خطا در ارتباط با هوش مصنوعی در چت پیش از پردازش.", "error");
+      }
+    } catch (error) {
+       console.error("Error sending pre-extract chat:", error);
+       showNotification("خطا در شبکه یا سرور. لطفاً دوباره تلاش کنید.", "error");
+    } finally {
+      setIsPreExtractChatLoading(false);
+    }
+  };
+
+  const handleVerifyInstructions = async () => {
+    if (!pendingFile || preExtractChat.length === 0) return;
+    setIsVerifying(true);
+    try {
+      const response = await fetch("/api/chat-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: preExtractChat,
+          image: pendingFile.base64,
+          mimeType: pendingFile.mimeType,
+          model: selectedModel
+        }),
+      });
+      const data = await response.json();
+      if (data.success && data.text) {
+        setVerificationSummary(data.text);
+      } else {
+        showNotification("خطا در ایجاد خلاصه تاییدیه.", "error");
+      }
+    } catch (error) {
+      console.error("Error creating verification summary:", error);
+      showNotification("خطا در شبکه. لطفاً دوباره تلاش کنید.", "error");
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleSendChatMessage = async (textToSend?: string) => {
@@ -523,6 +602,8 @@ export default function App() {
 
     // 4. Confidence level filter
     const score = tr.ضریب_اطمینان ?? 100;
+    if (score < minConfidenceThreshold) return false;
+
     if (filterConfidence === "high") {
       if (score < 90) return false;
     } else if (filterConfidence === "medium") {
@@ -1119,25 +1200,31 @@ export default function App() {
         });
       }
 
-      // Now result.data is an object containing نوع_سند, تحلیل_سند, and اقلام_تراکنش
-      const transactionsArray = Array.isArray(result.data.اقلام_تراکنش) ? result.data.اقلام_تراکنش : [];
+      // Now result.data is an object containing نوع_سند, تحلیل_سند, ستون_ها, and ردیف_ها
+      const rowsArray = Array.isArray(result.data.ردیف_ها) ? result.data.ردیف_ها : (Array.isArray(result.data.اقلام_تراکنش) ? result.data.اقلام_تراکنش : []);
+      const columnsArray = Array.isArray(result.data.ستون_ها) ? result.data.ستون_ها : [];
       
-      const extractedItems: TransactionItem[] = transactionsArray.map((item: any, idx: number) => ({
-        id: `extracted-${Date.now()}-${idx}`,
-        تاریخ: item.تاریخ !== undefined ? item.تاریخ : null,
-        شماره_سند: item.شماره_سند !== undefined ? item.شماره_سند : null,
-        نام_طرف_حساب: item.نام_طرف_حساب !== undefined ? item.نام_طرف_حساب : null,
-        شرح: item.شرح !== undefined ? item.شرح : null,
-        مبلغ_بدهکار: item.مبلغ_بدهکار !== null && !isNaN(Number(item.مبلغ_بدهکار)) ? Number(item.مبلغ_بدهکار) : 0,
-        مبلغ_بستانکار: item.مبلغ_بستانکار !== null && !isNaN(Number(item.مبلغ_بستانکار)) ? Number(item.مبلغ_بستانکار) : 0,
-        نوع_ارز: item.نوع_ارز !== undefined ? item.نوع_ارز : null,
-        توضیحات: item.توضیحات !== undefined ? item.توضیحات : null,
-        ضریب_اطمینان: item.ضریب_اطمینان !== undefined && item.ضریب_اطمینان !== null ? Number(item.ضریب_اطمینان) : 100,
-        شناسه_ملی: item.شناسه_ملی !== undefined ? item.شناسه_ملی : null,
-        شماره_مالیاتی: item.شماره_مالیاتی !== undefined ? item.شماره_مالیاتی : null,
-        مالیات_ارزش_افزوده: item.مالیات_ارزش_افزوده !== null && !isNaN(Number(item.مالیات_ارزش_افزوده)) ? Number(item.مالیات_ارزش_افزوده) : null,
-        هزینه_غیرقابل_قبول: item.هزینه_غیرقابل_قبول !== undefined ? item.هزینه_غیرقابل_قبول : null,
-      }));
+      const extractedItems: TransactionItem[] = rowsArray.map((item: any, idx: number) => {
+        const row: any = {
+          id: `extracted-${Date.now()}-${idx}`,
+          ضریب_اطمینان: item.ضریب_اطمینان !== undefined && item.ضریب_اطمینان !== null ? Number(item.ضریب_اطمینان) : 100,
+        };
+
+        // If it's the dynamic format:
+        if (item.فیلد_ها && Array.isArray(item.فیلد_ها)) {
+          item.فیلد_ها.forEach((f: any) => {
+             if (f.کلید) row[f.کلید] = f.مقدار;
+          });
+        } else {
+          // Fallback to older static format keys
+          Object.keys(item).forEach(key => {
+            if (key !== 'ضریب_اطمینان') {
+              row[key] = item[key];
+            }
+          });
+        }
+        return row as TransactionItem;
+      });
 
       // Set transactions directly to current document extracted rows only
       setTransactions(extractedItems);
@@ -1149,6 +1236,7 @@ export default function App() {
         ...newFile,
         status: "success",
         results: extractedItems,
+        columns: columnsArray,
         documentType: documentType,
         documentAnalysis: documentAnalysis,
         tokensUsed: result.tokensUsed || 0,
@@ -1936,6 +2024,8 @@ export default function App() {
           <CommercialModule isDarkMode={isDarkMode} showNotification={showNotification} />
         ) : activeErpModuleId === 4 ? (
           <InventoryModule isDarkMode={isDarkMode} showNotification={showNotification} />
+        ) : activeErpModuleId === 5 ? (
+          <PayrollModule isDarkMode={isDarkMode} showNotification={showNotification} />
         ) : (
           <div className="flex-1 overflow-y-auto p-4 flex flex-col">
           {guideOpen && (
@@ -2255,96 +2345,229 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-1.5 text-right">
-                        <textarea
-                          rows={3}
-                          value={customPrompt}
-                          onChange={(e) => setCustomPrompt(e.target.value)}
-                          placeholder="مثلاً: 'تفکیک دقیق ردیف‌های با ارزش افزوده بالا' یا 'فقط اقلام مربوط به بستانکار...' یا بگذارید خالی بماند"
-                          className={`w-full text-[11.5px] font-sans p-3 rounded-2xl border outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed text-right transition-all resize-none ${
-                            isDarkMode 
-                              ? "bg-slate-950/40 border-slate-800 text-slate-100 placeholder-slate-600 focus:border-blue-500 focus:bg-slate-950/80" 
-                              : "bg-slate-50/50 border-slate-200/80 text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:bg-white"
-                          }`}
-                        />
-                      </div>
-
-                      {/* Intelligent Suggestion Chips */}
-                      <div>
-                        <span className={`text-[10px] font-bold block mb-2 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                          پیشنهادها و فیلترهای هوشمند:
+                      {/* Pre-extract Chat */}
+                      <div className="flex flex-col gap-2 mt-2">
+                        <span className={`text-[11px] font-black ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                          گفتگو با هوش مصنوعی درباره این سند قبل از استخراج (اجباری):
                         </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {[
-                            { 
-                              label: "تفکیک ارزش افزوده", 
-                              text: "مبلغ مالیات ارزش افزوده و عوارض را به طور دقیق در ستون ارزش افزوده تفکیک کن." 
-                            },
-                            { 
-                              label: "تحلیل فاکتور ارزی", 
-                              text: "این فاکتور ارزی است؛ نوع ارز را به درستی استخراج کن و معادل ریالی را در توضیحات تکمیلی بنویس." 
-                            },
-                            { 
-                              label: "مبالغ بالای ۱ میلیون", 
-                              text: "فقط اقلام و ردیف‌های مالی با مبلغ بالای ۱ میلیون تومان را استخراج کن." 
-                            },
-                            { 
-                              label: "دقت دست‌نویس مخدوش", 
-                              text: "سند دارای اقلام دست‌نویس است؛ روی خوانش ارقام مخدوش و بررسی جمع کل تمرکز کن." 
-                            }
-                          ].map((chip, idx) => {
-                            const isSelected = customPrompt === chip.text;
-                            return (
-                              <button
-                                key={idx}
-                                type="button"
-                                onClick={() => setCustomPrompt(isSelected ? "" : chip.text)}
-                                className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
-                                  isSelected 
-                                    ? "bg-blue-500/10 border-blue-500/40 text-blue-400 shadow-sm"
-                                    : isDarkMode 
-                                      ? "bg-slate-800/40 border-slate-800 text-slate-400 hover:bg-slate-800/80 hover:text-slate-300" 
-                                      : "bg-slate-50 border-slate-200/60 text-slate-600 hover:bg-slate-100 hover:text-slate-850"
-                                }`}
-                              >
-                                {chip.label}
-                              </button>
-                            );
-                          })}
+                        
+                        <div className={`flex flex-col border rounded-2xl overflow-hidden ${isDarkMode ? "border-slate-800 bg-slate-900/40" : "border-slate-200 bg-slate-50/50"}`}>
+                          {preExtractChat.length > 0 && (
+                            <div className={`p-4 max-h-[220px] overflow-y-auto flex flex-col gap-3 ${isDarkMode ? "bg-slate-900/80" : "bg-white"}`}>
+                              {preExtractChat.map((msg, idx) => (
+                                <div key={idx} className={`flex flex-col gap-1 ${msg.role === "user" ? "items-start" : "items-end"}`}>
+                                  <div className={`px-3 py-2 rounded-2xl text-[11px] leading-relaxed max-w-[85%] ${
+                                    msg.role === "user" 
+                                      ? isDarkMode ? "bg-slate-800 text-slate-200 rounded-tr-sm" : "bg-slate-100 text-slate-700 rounded-tr-sm"
+                                      : "bg-blue-600 text-white rounded-tl-sm shadow-sm"
+                                  }`}>
+                                    <Markdown>{msg.text}</Markdown>
+                                  </div>
+                                </div>
+                              ))}
+                              {isPreExtractChatLoading && (
+                                 <div className="flex justify-end">
+                                   <div className="bg-blue-600 text-white px-3 py-2 rounded-2xl rounded-tl-sm flex gap-1 items-center h-8">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-white/70 animate-bounce"></div>
+                                      <div className="w-1.5 h-1.5 rounded-full bg-white/70 animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                      <div className="w-1.5 h-1.5 rounded-full bg-white/70 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                                   </div>
+                                 </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Intelligent Suggestion Chips as input fillers */}
+                          {preExtractChat.length === 0 && (
+                            <div className="px-3 py-2 flex flex-wrap gap-1.5 border-b border-slate-100 dark:border-slate-800/50">
+                              {[
+                                { label: "چه اطلاعاتی داره؟", text: "این سند چه اطلاعاتی داره و مربوط به چیه؟" },
+                                { label: "فاکتور ارزی", text: "این فاکتور ارزی است؛ لطفاً نوع ارز را در استخراج دقت کن." },
+                                { label: "دقت دست‌نویس", text: "سند دارای اقلام دست‌نویس است؛ روی خوانش ارقام مخدوش تمرکز کن." }
+                              ].map((chip, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => setPreExtractInput(chip.text)}
+                                  className={`px-2 py-1 rounded-xl text-[9.5px] font-bold border transition-all ${
+                                    isDarkMode
+                                      ? "bg-slate-800/40 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+                                  }`}
+                                >
+                                  {chip.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="p-2 flex flex-col gap-2">
+                             <div className="flex items-center gap-2">
+                               <textarea
+                                 rows={1}
+                                 value={preExtractInput}
+                                 onChange={(e) => setPreExtractInput(e.target.value)}
+                                 onKeyDown={(e) => {
+                                   if (e.key === "Enter" && !e.shiftKey) {
+                                     e.preventDefault();
+                                     handleSendPreExtractChat();
+                                   }
+                                 }}
+                                 placeholder="درباره این سند بپرسید یا دستورالعمل بنویسید..."
+                                 className={`flex-1 bg-transparent text-[11px] outline-none px-2 resize-none ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}
+                               />
+                               <button 
+                                 onClick={() => handleSendPreExtractChat()}
+                                 disabled={!preExtractInput.trim() || isPreExtractChatLoading}
+                                 className={`p-1.5 rounded-xl shrink-0 transition-all ${
+                                   !preExtractInput.trim() || isPreExtractChatLoading 
+                                    ? "opacity-50 cursor-not-allowed" 
+                                    : "bg-blue-600 hover:bg-blue-500 text-white shadow-sm"
+                                 } ${isDarkMode && (!preExtractInput.trim() || isPreExtractChatLoading) ? "bg-slate-800 text-slate-500" : !isDarkMode && (!preExtractInput.trim() || isPreExtractChatLoading) ? "bg-slate-200 text-slate-400" : ""}`}
+                               >
+                                  <Send className={`w-4 h-4 ${(!preExtractInput.trim() || isPreExtractChatLoading) ? "" : "text-white"}`} />
+                               </button>
+                             </div>
+                             
+                             <div className="px-2 pb-1">
+                                <label className="flex items-center gap-1.5 cursor-pointer group">
+                                  <input 
+                                    type="checkbox"
+                                    checked={customPrompt !== ""}
+                                    onChange={(e) => setCustomPrompt(e.target.checked ? "لطفا طبق توافق در پیام‌های قبلی، استخراج را انجام بده و مواردی که با هم بررسی کردیم را اعمال کن." : "")}
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500/30"
+                                  />
+                                  <span className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400 group-hover:text-slate-300" : "text-slate-500 group-hover:text-slate-700"}`}>
+                                    اعمال مکالمه بالا به عنوان دستورالعمل استخراج
+                                  </span>
+                                </label>
+                             </div>
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center justify-end gap-2.5 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPendingFile(null);
-                          setCustomPrompt("");
-                        }}
-                        className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all ${
-                          isDarkMode 
-                            ? "bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200" 
-                            : "bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-slate-800"
-                        }`}
-                      >
-                        حذف و انصراف
-                      </button>
-                      
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const fileData = pendingFile;
-                          setPendingFile(null);
-                          await processImageForExtraction(fileData.base64, fileData.name, fileData.mimeType, customPrompt);
-                        }}
-                        className="px-4.5 py-2 rounded-xl text-[11px] font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5 shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 hover:-translate-y-0.5 transition-all"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-blue-200 shrink-0" />
-                        <span>شروع تحلیل و استخراج</span>
-                      </button>
-                    </div>
+                    {/* Actions or Progress */}
+                    {isExtracting ? (
+                      <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60 flex flex-col gap-3 text-right">
+                        <span className={`text-[11px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>مراحل تحلیل و بررسی هوش مصنوعی:</span>
+                        
+                        {extractionStep >= 1 && (
+                          <div className="flex items-center gap-2 text-[10px] text-blue-500">
+                            {extractionStep === 1 ? <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0" /> : <Check className="w-4 h-4 text-emerald-500 shrink-0" />}
+                            <span className={extractionStep === 1 ? "animate-pulse" : "text-slate-500"}>در حال خوانش اولیه تصویر و درک محتوای سند مالی...</span>
+                          </div>
+                        )}
+                        
+                        {extractionStep >= 2 && (
+                          <div className="flex items-center gap-2 text-[10px] text-indigo-500">
+                            {extractionStep === 2 ? <div className="w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin shrink-0" /> : <Check className="w-4 h-4 text-emerald-500 shrink-0" />}
+                            <span className={extractionStep === 2 ? "animate-pulse" : "text-slate-500"}>شروع صحت‌سنجی مبالغ و استخراج موجودیت‌ها...</span>
+                          </div>
+                        )}
+
+                        {extractionStep >= 3 && (
+                          <div className="flex items-center gap-2 text-[10px] text-emerald-500">
+                            {extractionStep === 3 ? <div className="w-3.5 h-3.5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin shrink-0" /> : <Check className="w-4 h-4 text-emerald-500 shrink-0" />}
+                            <span className={extractionStep === 3 ? "animate-pulse" : "text-slate-500"}>تهیه فایل استاندارد JSON و موازنه دوطرفه...</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : verificationSummary ? (
+                      <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60 flex flex-col gap-3">
+                        <div className={`p-4 rounded-xl text-right text-[11px] leading-relaxed ${isDarkMode ? "bg-indigo-900/20 border border-indigo-800/40 text-indigo-200" : "bg-indigo-50 border border-indigo-100 text-indigo-900"}`}>
+                          <div className="font-bold mb-2 flex items-center justify-end gap-1.5">
+                             خلاصه تاییدیه استخراج (Verification Summary)
+                             <Check className="w-4 h-4 text-emerald-500" />
+                          </div>
+                          <Markdown>{verificationSummary}</Markdown>
+                        </div>
+                        <div className="flex items-center justify-end gap-2.5 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setVerificationSummary(null);
+                            }}
+                            className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all ${
+                              isDarkMode 
+                                ? "bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200" 
+                                : "bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-slate-800"
+                            }`}
+                          >
+                            بازگشت به گفتگو
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!pendingFile || preExtractChat.length === 0) return;
+                              setIsExtracting(true);
+                              setExtractionStep(1);
+                              await new Promise(resolve => setTimeout(resolve, 1500));
+                              
+                              setExtractionStep(2);
+                              await new Promise(resolve => setTimeout(resolve, 2000));
+                              
+                              setExtractionStep(3);
+                              await new Promise(resolve => setTimeout(resolve, 1500));
+                              
+                              const fileData = pendingFile;
+                              setPendingFile(null);
+                              setIsExtracting(false);
+                              setExtractionStep(0);
+                              setVerificationSummary(null);
+                              
+                              const chatContext = preExtractChat.length > 0 
+                                ? "تاریخچه مکالمه با کاربر درباره این سند:\n" + preExtractChat.map(m => `${m.role === 'user' ? 'کاربر' : 'دستیار'}: ${m.text}`).join('\n')
+                                : "";
+                              const finalPrompt = customPrompt 
+                                ? (chatContext ? `${customPrompt}\n\n${chatContext}` : chatContext) 
+                                : chatContext;
+
+                              await processImageForExtraction(fileData.base64, fileData.name, fileData.mimeType, finalPrompt + "\n\nخلاصه تایید شده:\n" + verificationSummary);
+                            }}
+                            className={`px-4.5 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/20 hover:-translate-y-0.5`}
+                          >
+                            <Sparkles className="w-3.5 h-3.5 shrink-0 text-emerald-200" />
+                            <span>تایید نهایی و شروع استخراج</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-end gap-2.5 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingFile(null);
+                            setCustomPrompt("");
+                          }}
+                          className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all ${
+                            isDarkMode 
+                              ? "bg-slate-850 hover:bg-slate-800 text-slate-400 hover:text-slate-200" 
+                              : "bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-slate-800"
+                          }`}
+                        >
+                          حذف و انصراف
+                        </button>
+                        
+                        <button
+                          type="button"
+                          disabled={preExtractChat.length === 0 || isVerifying}
+                          onClick={handleVerifyInstructions}
+                          className={`px-4.5 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                            preExtractChat.length === 0 || isVerifying
+                              ? "bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed" 
+                              : "bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 hover:-translate-y-0.5"
+                          }`}
+                        >
+                          {isVerifying ? (
+                             <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+                          ) : (
+                             <Sparkles className={`w-3.5 h-3.5 shrink-0 ${preExtractChat.length === 0 ? "text-slate-400 dark:text-slate-500" : "text-blue-200"}`} />
+                          )}
+                          <span>بررسی و تایید دستورالعمل‌ها</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               ) : (
@@ -2947,8 +3170,9 @@ export default function App() {
                         const isBalanced = count > 0 && sumDebit === sumCredit;
 
                         return (
-                          /* Bento Grid of analysis metrics */
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+                          <div className="flex flex-col gap-5 w-full">
+                            {/* Bento Grid of analysis metrics */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
                             
                             {/* Card 1: Average confidence */}
                             <motion.div
@@ -3220,7 +3444,341 @@ export default function App() {
                             </motion.div>
 
                           </div>
-                        );
+
+                          {/* Smart Extraction Quality & Validation Dashboard */}
+                          <div className={`p-5 rounded-2xl border transition-all duration-300 ${
+                            isDarkMode ? "bg-[#111827]/40 border-slate-800" : "bg-slate-50/50 border-slate-200"
+                          }`}>
+                            {/* Tab Headers */}
+                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3 mb-4 font-sans">
+                              <div className="flex items-center gap-2">
+                                <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
+                                  <ShieldAlert className="h-4 w-4" />
+                                </div>
+                                <span className={`text-xs font-black ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>داشبورد هوشمند تحلیل و اصلاح کیفیت استخراج</span>
+                              </div>
+                              <div className="flex bg-slate-200/55 dark:bg-slate-900/60 p-1 rounded-xl">
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveValidationSubTab('threshold')}
+                                  className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${
+                                    activeValidationSubTab === 'threshold'
+                                      ? (isDarkMode ? "bg-blue-600 text-white" : "bg-white text-blue-600 shadow-sm")
+                                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                                  }`}
+                                >
+                                  شبیه‌ساز آستانه دقت ({minConfidenceThreshold}٪)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveValidationSubTab('risk')}
+                                  className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${
+                                    activeValidationSubTab === 'risk'
+                                      ? (isDarkMode ? "bg-blue-600 text-white" : "bg-white text-blue-600 shadow-sm")
+                                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                                  }`}
+                                >
+                                  آنالیز هوشمند مخاطرات
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveValidationSubTab('fields')}
+                                  className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${
+                                    activeValidationSubTab === 'fields'
+                                      ? (isDarkMode ? "bg-blue-600 text-white" : "bg-white text-blue-600 shadow-sm")
+                                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                                  }`}
+                                >
+                                  تکمیل فیلدهای کلیدی
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Tab Contents */}
+                            {activeValidationSubTab === 'threshold' && (
+                              <div className="space-y-4 animate-in fade-in duration-300 font-sans text-right" dir="rtl">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                  <div className="space-y-1.5 flex-1 text-right">
+                                    <h5 className={`text-xs font-bold ${isDarkMode ? "text-slate-100" : "text-slate-850"}`}>
+                                      تنظیم حداقل ضریب اطمینان قابل قبول (حد فیلتر هوشمند)
+                                    </h5>
+                                    <p className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                      با جابجایی این اسلایدر، تنها تراکنش‌هایی که دقت استخراج آنها از مقدار مشخص شده بالاتر است در جدول نشان داده می‌شوند. اقلام پایین‌تر موقتاً جهت بازبینی متمرکز فیلتر خواهند شد.
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-3 shrink-0 self-start md:self-auto">
+                                    <span className="text-xs font-bold font-mono text-slate-500 bg-slate-100 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200 dark:border-slate-800 min-w-[55px] text-center">
+                                      {minConfidenceThreshold.toLocaleString("fa-IR")}٪
+                                    </span>
+                                    {minConfidenceThreshold > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setMinConfidenceThreshold(0)}
+                                        className="text-[10px] font-bold text-red-500 hover:underline"
+                                      >
+                                        حذف فیلتر آستانه
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-4">
+                                  <span className="text-[10px] text-slate-400 font-bold shrink-0">۰٪</span>
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="5"
+                                    value={minConfidenceThreshold}
+                                    onChange={(e) => setMinConfidenceThreshold(Number(e.target.value))}
+                                    className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                  />
+                                  <span className="text-[10px] text-slate-400 font-bold shrink-0">۱۰۰٪</span>
+                                </div>
+
+                                {/* Stats of Threshold */}
+                                {(() => {
+                                  const passedCount = transactions.filter(t => (t.ضریب_اطمینان ?? 100) >= minConfidenceThreshold).length;
+                                  const failedCount = transactions.length - passedCount;
+                                  const passPercent = Math.round((passedCount / transactions.length) * 100);
+
+                                  return (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                      <div className={`p-3 rounded-xl border text-right flex flex-col gap-1 justify-center ${
+                                        isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-200"
+                                      }`}>
+                                        <span className="text-[9px] text-slate-400 font-bold">تعداد اقلام تایید شده نهایی (دقت بالای حد):</span>
+                                        <span className="text-sm font-black text-emerald-500 font-mono">
+                                          {passedCount.toLocaleString("fa-IR")} ردیف ({passPercent.toLocaleString("fa-IR")}٪ کل)
+                                        </span>
+                                      </div>
+                                      <div className={`p-3 rounded-xl border text-right flex flex-col gap-1 justify-center ${
+                                        isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-200"
+                                      }`}>
+                                        <span className="text-[9px] text-slate-400 font-bold">تعداد اقلام مشکوک یا نیازمند توجه:</span>
+                                        <span className="text-sm font-black text-amber-500 font-mono">
+                                          {failedCount.toLocaleString("fa-IR")} ردیف ({(100 - passPercent).toLocaleString("fa-IR")}٪ کل)
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-end">
+                                        <button
+                                          type="button"
+                                          disabled={passedCount === 0}
+                                          onClick={() => {
+                                            const updated = transactions.map(t => {
+                                              if ((t.ضریب_اطمینان ?? 100) >= minConfidenceThreshold && (t.ضریب_اطمینان ?? 100) < 100) {
+                                                return { ...t, ضریب_اطمینان: 100 };
+                                              }
+                                              return t;
+                                            });
+                                            setTransactions(updated);
+                                            try {
+                                              setRawJsonText(JSON.stringify(updated, null, 2));
+                                            } catch(e){}
+                                            logEvent("تایید دسته‌جمعی تراکنش‌ها", `کاربر کلیه تراکنش‌های با ضریب اطمینان بالاتر از ${minConfidenceThreshold}٪ را تایید نهایی کرد.`);
+                                            setNotification({ text: `کلیه اقلام بالای ${minConfidenceThreshold}٪ با موفقیت تایید نهایی و در سطح دقت ۱۰۰٪ ذخیره شدند.`, type: 'success' });
+                                          }}
+                                          className={`w-full md:w-auto px-4 py-2.5 rounded-xl text-[10.5px] font-black transition-all duration-300 flex items-center justify-center gap-1.5 shadow-sm ${
+                                            passedCount > 0
+                                              ? "bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow"
+                                              : "bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-650 cursor-not-allowed"
+                                          }`}
+                                        >
+                                          <ShieldCheck className="h-4 w-4" />
+                                          <span>تایید دسته‌جمعی و ارتقا به صحت کامل (۱۰۰٪)</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+
+                            {activeValidationSubTab === 'risk' && (
+                              <div className="space-y-3 animate-in fade-in duration-300 font-sans text-right" dir="rtl">
+                                <h5 className={`text-xs font-bold ${isDarkMode ? "text-slate-100" : "text-slate-850"}`}>
+                                  تحلیل خودکار عدم توازن‌ها و ناهماهنگی در اسناد
+                                </h5>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                  {/* Issue 1: Balance checks */}
+                                  <div className={`p-3 rounded-xl border flex items-start gap-3 ${
+                                    isBalanced 
+                                      ? (isDarkMode ? "bg-emerald-950/10 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-800")
+                                      : (isDarkMode ? "bg-rose-950/10 border-rose-900/30 text-rose-400" : "bg-rose-50 border-rose-100 text-rose-800")
+                                  }`}>
+                                    {isBalanced ? (
+                                      <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                                    ) : (
+                                      <AlertTriangle className="h-5 w-5 text-rose-500 shrink-0 mt-0.5 animate-pulse" />
+                                    )}
+                                    <div className="text-[10px] leading-relaxed flex-1">
+                                      <span className="font-bold block mb-0.5 text-xs">موازنه دو طرفه حسابداری</span>
+                                      {isBalanced ? (
+                                        <span>انطباق کامل ریاضی! مابین اقلام بدهکار و بستانکار تراز ۱۰۰٪ برقرار است.</span>
+                                      ) : (
+                                        <span>
+                                          هشدار! مابین مجموع بدهکار و بستانکار اختلاف فاحش وجود دارد. به میزان 
+                                          <span className="font-bold font-mono mx-1">{(Math.abs(sumDebit - sumCredit)).toLocaleString("fa-IR")} ریال</span> 
+                                          کسری تراز ثبت شده است. پیشنهاد می‌شود سطرهای دارای مغایرت را اصلاح کنید.
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Issue 2: Date formats */}
+                                  {(() => {
+                                    const badDates = transactions.filter(t => {
+                                      const dt = t.تاریخ || "";
+                                      if (!dt || dt === "-") return true;
+                                      // Simple regex checking for solar Hijri yyyy/mm/dd
+                                      const regex = /^\d{4}\/\d{2}\/\d{2}$/;
+                                      return !regex.test(dt);
+                                    });
+
+                                    const countBadDates = badDates.length;
+
+                                    return (
+                                      <div className={`p-3 rounded-xl border flex items-start gap-3 ${
+                                        countBadDates === 0 
+                                          ? (isDarkMode ? "bg-emerald-950/10 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-800")
+                                          : (isDarkMode ? "bg-amber-950/10 border-amber-900/30 text-amber-400" : "bg-amber-50 border-amber-100 text-amber-800")
+                                      }`}>
+                                        {countBadDates === 0 ? (
+                                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                                        ) : (
+                                          <Calendar className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                                        )}
+                                        <div className="text-[10px] leading-relaxed flex-1">
+                                          <span className="font-bold block mb-0.5 text-xs">صحت ساختاری فرمت تاریخ اسناد (Hijri)</span>
+                                          {countBadDates === 0 ? (
+                                            <span>تمامی تاریخ‌ها بر اساس استاندارد خورشیدی (سال/ماه/روز) معتبر هستند.</span>
+                                          ) : (
+                                            <span>
+                                              تعداد <span className="font-bold font-mono text-xs">{countBadDates.toLocaleString("fa-IR")} ردیف</span> فرمت تاریخ نامتعارف یا خالی دارند. تاریخ‌های نامعتبر می‌توانند باعث اخلال در گزارش‌های فصلی مالیاتی شوند.
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* Issue 3: Missing Counterparty / Subject details */}
+                                  {(() => {
+                                    const emptyParties = transactions.filter(t => !t.نام_طرف_حساب || t.نام_طرف_حساب === "-").length;
+                                    return (
+                                      <div className={`p-3 rounded-xl border flex items-start gap-3 ${
+                                        emptyParties === 0 
+                                          ? (isDarkMode ? "bg-emerald-950/10 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-800")
+                                          : (isDarkMode ? "bg-amber-950/10 border-amber-900/30 text-amber-400" : "bg-amber-50 border-amber-100 text-amber-800")
+                                      }`}>
+                                        {emptyParties === 0 ? (
+                                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                                        ) : (
+                                          <UserX className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                                        )}
+                                        <div className="text-[10px] leading-relaxed flex-1">
+                                          <span className="font-bold block mb-0.5 text-xs">ثبت سرفصل (طرف حساب مالی)</span>
+                                          {emptyParties === 0 ? (
+                                            <span>تمام تراکنش‌ها دارای سرفصل حسابداری و طرف‌حساب معین و مشخص هستند.</span>
+                                          ) : (
+                                            <span>
+                                              در <span className="font-bold font-mono text-xs">{emptyParties.toLocaleString("fa-IR")} ردیف</span> نام طرف حساب مشخص نشده است. سرفصل نامشخص موجب مسدود شدن همگام‌سازی با سامانه‌های ERP معین مالیاتی می‌گردد.
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* Issue 4: Tax ID and OCR read completeness */}
+                                  {(() => {
+                                    const lowConf = transactions.filter(t => (t.ضریب_اطمینان ?? 100) < 70).length;
+                                    return (
+                                      <div className={`p-3 rounded-xl border flex items-start gap-3 ${
+                                        lowConf === 0 
+                                          ? (isDarkMode ? "bg-emerald-950/10 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-800")
+                                          : (isDarkMode ? "bg-rose-950/10 border-rose-900/30 text-rose-450" : "bg-rose-50 border-rose-100 text-rose-800")
+                                      }`}>
+                                        {lowConf === 0 ? (
+                                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                                        ) : (
+                                          <ShieldAlert className="h-5 w-5 text-rose-500 shrink-0 mt-0.5 animate-pulse" />
+                                        )}
+                                        <div className="text-[10px] leading-relaxed flex-1">
+                                          <span className="font-bold block mb-0.5 text-xs">ریسک کیفیت OCR قلم نوری هوش مصنوعی</span>
+                                          {lowConf === 0 ? (
+                                            <span>عالی! هیچ سطر با ضریب اطمینان پایینی (کمتر از ۷۰٪) در این سند شناسایی نشد.</span>
+                                          ) : (
+                                            <span>
+                                              توجه: <span className="font-bold font-mono text-xs">{lowConf.toLocaleString("fa-IR")} ردیف</span> به دلیل خوانایی کم سند تصویر مبدا دارای ضریب اطمینان پایینی هستند. این موارد مخدوش ارزیابی شده و نیاز به تایید دارند.
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+
+                            {activeValidationSubTab === 'fields' && (
+                              <div className="space-y-4 animate-in fade-in duration-300 font-sans text-right" dir="rtl">
+                                <div className="space-y-1.5">
+                                  <h5 className={`text-xs font-bold ${isDarkMode ? "text-slate-100" : "text-slate-850"}`}>
+                                    تحلیل جامع درصد سلامت و تکمیل فیلدهای کلیدی استخراج شده
+                                  </h5>
+                                  <p className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                    نمودار درصد تکمیلی فیلدهای اطلاعاتی تراکنش‌ها جهت اطمینان از سلامت کلی داده‌ها برای ثبت رسمی در دفاتر قانونی.
+                                  </p>
+                                </div>
+
+                                {(() => {
+                                  const totalRows = transactions.length;
+                                  const dateFilled = transactions.filter(t => t.تاریخ && t.تاریخ !== "-").length;
+                                  const docFilled = transactions.filter(t => t.شماره_سند && t.شماره_سند !== "-").length;
+                                  const partyFilled = transactions.filter(t => t.نام_طرف_حساب && t.نام_طرف_حساب !== "-").length;
+                                  const amountFilled = transactions.filter(t => (Number(t.مبلغ_بدهکار) || 0) > 0 || (Number(t.مبلغ_بستانکار) || 0) > 0).length;
+
+                                  const fieldsList = [
+                                    { name: "تاریخ شمسی اسناد مالی", count: dateFilled, icon: Calendar, color: "bg-blue-500" },
+                                    { name: "نام طرف حساب یا سرفصل مالیاتی", count: partyFilled, icon: User, color: "bg-emerald-500" },
+                                    { name: "مبلغ مالی (بدهکار یا بستانکار)", count: amountFilled, icon: Coins, color: "bg-amber-500" },
+                                    { name: "شماره سند / ارجاع", count: docFilled, icon: Tag, color: "bg-purple-500" },
+                                  ];
+
+                                  return (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      {fieldsList.map((f, i) => {
+                                        const pct = totalRows > 0 ? Math.round((f.count / totalRows) * 100) : 0;
+                                        return (
+                                          <div key={i} className={`p-3 rounded-xl border text-right flex flex-col gap-2 ${
+                                            isDarkMode ? "bg-slate-900/30 border-slate-850" : "bg-white border-slate-150"
+                                          }`}>
+                                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                              <div className="flex items-center gap-1.5">
+                                                <f.icon className="h-3.5 w-3.5 opacity-70" />
+                                                <span>{f.name}</span>
+                                              </div>
+                                              <span className="font-mono text-xs">{pct.toLocaleString("fa-IR")}٪</span>
+                                            </div>
+                                            <div className="w-full bg-slate-250 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                                              <div className={`h-full transition-all duration-500 ${f.color}`} style={{ width: `${pct}%` }} />
+                                            </div>
+                                            <span className="text-[9px] text-slate-400 font-medium">
+                                              {f.count.toLocaleString("fa-IR")} مورد موفق از {totalRows.toLocaleString("fa-IR")} کل ردیف‌ها
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
+
+                        </div>
+                      );
                       })()}
                     </div>
 
@@ -3427,576 +3985,18 @@ export default function App() {
 
                     {activeFile.status === "success" && transactions.length > 0 && (
                       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden h-full">
-                        <div className="flex-1 overflow-auto">
-                          <table className="w-full text-right border-collapse text-xs">
-                            <thead className={`text-[10px] uppercase font-black sticky top-0 z-30 transition-colors duration-300 ${
-                            isDarkMode 
-                              ? "text-slate-350" 
-                              : "text-slate-500"
-                          }`}>
-                            <tr>
-                              <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none`}>
-                                <div className="flex items-center justify-center gap-1.5">
-                                  <input
-                                    type="checkbox"
-                                    checked={transactions.length > 0 && transactions.every(t => (t.ضریب_اطمینان ?? 100) === 100)}
-                                    onChange={(e) => {
-                                      const isChecked = e.target.checked;
-                                      const updated = transactions.map(t => ({
-                                        ...t,
-                                        ضریب_اطمینان: isChecked ? 100 : 80
-                                      }));
-                                      setTransactions(updated);
-                                      try {
-                                        setRawJsonText(JSON.stringify(updated, null, 2));
-                                      } catch (err) {
-                                        console.error(err);
-                                      }
-                                      logEvent("تایید گروهی ردیف‌ها", isChecked ? "کاربر تمام ردیف‌ها را تایید گروهی کرد." : "کاربر تایید گروهی ردیف‌ها را لغو کرد.");
-                                      showNotification(
-                                        isChecked 
-                                          ? "تمامی ردیف‌ها تایید گروهی شدند و ضریب اطمینان آن‌ها به ۱۰۰٪ تغییر یافت." 
-                                          : "ضریب اطمینان ردیف‌ها بازنشانی شد.",
-                                        "success"
-                                      );
-                                    }}
-                                    className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500/30 cursor-pointer bg-white dark:bg-slate-900 transition-all"
-                                    title="تایید گروهی تمامی ردیف‌ها (ضریب اطمینان ۱۰۰٪)"
-                                  />
-                                  <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500">#</span>
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("تاریخ")}
-                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس تاریخ"
-                              >
-                                <div className="flex items-center gap-1.5 font-bold">
-                                  <span>تاریخ</span>
-                                  {renderSortIcon("تاریخ")}
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("شماره_سند")}
-                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس شماره سند"
-                              >
-                                <div className="flex items-center gap-1.5 font-bold">
-                                  <span>شماره سند</span>
-                                  {renderSortIcon("شماره_سند")}
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("نام_طرف_حساب")}
-                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس طرف حساب"
-                              >
-                                <div className="flex items-center gap-1.5 font-bold">
-                                  <span>طرف حساب</span>
-                                  {renderSortIcon("نام_طرف_حساب")}
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("شناسه_ملی")}
-                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس شناسه/کد ملی"
-                              >
-                                <div className="flex items-center gap-1.5 font-bold">
-                                  <span>شناسه/کد ملی</span>
-                                  {renderSortIcon("شناسه_ملی")}
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("شرح")}
-                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس شرح"
-                              >
-                                <div className="flex items-center gap-1.5 font-bold">
-                                  <span>شرح / بابت</span>
-                                  {renderSortIcon("شرح")}
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("مالیات_ارزش_افزوده")}
-                                className={`px-3 py-3 text-left sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس ارزش افزوده"
-                              >
-                                <div className="flex items-center gap-1.5 justify-end font-bold">
-                                  {renderSortIcon("مالیات_ارزش_افزوده")}
-                                  <span>ارزش افزوده</span>
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("مبلغ_بدهکار")}
-                                className={`px-3 py-3 text-left sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس بدهکار"
-                              >
-                                <div className="flex items-center gap-1.5 justify-end font-bold">
-                                  {renderSortIcon("مبلغ_بدهکار")}
-                                  <span>بدهکار</span>
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("مبلغ_بستانکار")}
-                                className={`px-3 py-3 text-left sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس بستانکار"
-                              >
-                                <div className="flex items-center gap-1.5 justify-end font-bold">
-                                  {renderSortIcon("مبلغ_بستانکار")}
-                                  <span>بستانکار</span>
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("نوع_ارز")}
-                                className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس ارز"
-                              >
-                                <div className="flex items-center gap-1.5 justify-center font-bold">
-                                  <span>ارز</span>
-                                  {renderSortIcon("نوع_ارز")}
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("ضریب_اطمینان")}
-                                className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none cursor-pointer group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس دقت استخراج"
-                              >
-                                <div className="flex items-center gap-1.5 justify-center font-bold">
-                                  <span>دقت استخراج</span>
-                                  {renderSortIcon("ضریب_اطمینان")}
-                                </div>
-                              </th>
-                              <th 
-                                onClick={() => handleSort("توضیحات")}
-                                className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-                                title="مرتب‌سازی بر اساس توضیحات تکمیلی"
-                              >
-                                <div className="flex items-center gap-1.5 font-bold">
-                                  <span>توضیحات تکمیلی</span>
-                                  {renderSortIcon("توضیحات")}
-                                </div>
-                              </th>
-                              <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b ${isDarkMode ? "border-slate-800" : "border-slate-200"} font-bold`}>عملیات</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 relative">
-                            <AnimatePresence mode="popLayout">
-                              {sortedTransactions.map((tr, index) => {
-                              const originalIndex = transactions.findIndex(t => t.id === tr.id);
-                              const score = tr.ضریب_اطمینان ?? 100;
-                              const isEdited = isRowEdited(tr, originalIndex);
-                              const isCurrentlyEditing = editingRowIndex === originalIndex && editingRowData !== null;
-                              
-                              let badgeBg = "bg-emerald-500/10 border-emerald-500/15 text-emerald-600 dark:text-emerald-400";
-                              let progressBg = "bg-emerald-500";
-                              let scoreDesc = "عالی / بدون ابهام";
-                              if (score < 60) {
-                                badgeBg = "bg-rose-500/10 border-rose-500/15 text-rose-600 dark:text-rose-400";
-                                progressBg = "bg-rose-500";
-                                scoreDesc = "ناخوانا / نامعتبر";
-                              } else if (score < 85) {
-                                badgeBg = "bg-amber-500/10 border-amber-500/15 text-amber-600 dark:text-amber-400";
-                                progressBg = "bg-amber-500";
-                                scoreDesc = "دست‌نویس مخدوش";
-                              }
-
-                              const getAvatarChar = (name: string) => {
-                                if (!name || name === "-") return "👤";
-                                const trimmed = name.trim();
-                                return trimmed.charAt(0);
-                              };
-
-                              const inputClass = `w-full text-[11px] px-1.5 py-1 rounded border outline-none font-sans ${
-                                isDarkMode 
-                                  ? "bg-[#0B0F19] border-slate-700 text-slate-100 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
-                                  : "bg-white border-slate-300 text-slate-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                              }`;
-
-                              const isManual = String(tr.id).startsWith("manual-");
-                              return (
-                                <motion.tr
-                                  key={tr.id || index}
-                                  initial={isManual ? { opacity: 0, y: 24, filter: "blur(4px)", scale: 0.98 } : { opacity: 0, y: 12, filter: "blur(2px)" }}
-                                  animate={{ opacity: 1, y: 0, filter: "blur(0px)", scale: 1 }}
-                                  exit={{ opacity: 0, y: -20, filter: "blur(3px)", scale: 0.97 }}
-                                  transition={isManual ? { duration: 0.45, ease: [0.16, 1, 0.3, 1] } : { duration: 0.35, ease: "easeOut", delay: Math.min(index * 0.04, 0.6) }}
-                                  className={`transition-all duration-300 ease-out group hover:relative hover:z-10 hover:-translate-y-0.5 hover:scale-[1.006] ${
-                                    isCurrentlyEditing
-                                      ? (isDarkMode ? "bg-slate-800 border-y-4 border-slate-700 shadow-xl" : "bg-slate-50 border-y-4 border-slate-200 shadow-xl")
-                                      : isEdited
-                                      ? "bg-amber-50/30 border-r-4 border-r-amber-500 hover:bg-amber-100/40 dark:bg-amber-500/5 dark:border-r-amber-500/80 hover:shadow-lg dark:hover:shadow-black/30"
-                                      : isDarkMode
-                                        ? "bg-transparent hover:bg-slate-800/90 hover:shadow-xl hover:shadow-black/35"
-                                        : "bg-transparent hover:bg-white hover:shadow-xl hover:shadow-slate-200/50"
-                                  }`}
-                                >
-                                  {isCurrentlyEditing ? (
-                                    <td colSpan={13} className="p-0">
-                                       <div className={`mx-4 my-5 p-6 rounded-2xl border-2 shadow-sm ${isDarkMode ? "bg-slate-900 border-blue-500/30" : "bg-white border-blue-200"}`}>
-                                           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b pb-4 border-slate-100 dark:border-slate-800">
-                                              <div className="flex items-center gap-4">
-                                                 <div className={`p-3 rounded-2xl ${isDarkMode ? "bg-blue-500/20 text-blue-400" : "bg-blue-100 text-blue-600"}`}>
-                                                    <FileEdit className="w-5 h-5" />
-                                                 </div>
-                                                 <div>
-                                                    <h4 className={`text-base font-bold tracking-tight ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>ویرایش دقیق ردیف {index + 1}</h4>
-                                                    <p className={`text-[12px] mt-1 line-clamp-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تمامی فیلدها را با دقت بررسی و اصلاح نمایید.</p>
-                                                 </div>
-                                              </div>
-                                              <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0">
-                                                <button onClick={handleCancelEdit} className={`px-5 py-2.5 text-xs font-bold rounded-xl border flex-1 md:flex-none transition-colors ${isDarkMode ? "border-slate-700 hover:bg-slate-800 text-slate-300" : "border-slate-300 hover:bg-slate-50 text-slate-600"}`}>انصراف</button>
-                                                <button onClick={() => handleSaveRow(originalIndex)} className="px-6 py-2.5 text-xs font-bold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-sm flex items-center justify-center gap-2 flex-1 md:flex-none transition-all"><Check className="w-4 h-4"/> ذخیره اطلاعات</button>
-                                              </div>
-                                           </div>
-
-                                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
-                                              <div className="space-y-2 cursor-text">
-                                                <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>تاریخ</label>
-                                                <input type="text" className={`${inputClass} text-sm py-2.5 px-3 shadow-none focus:ring-2`} value={editingRowData.تاریخ || ""} onChange={(e) => handleFieldChange("تاریخ", e.target.value)} dir="ltr" placeholder="1402/12/01" />
-                                              </div>
-                                              <div className="space-y-2 cursor-text">
-                                                <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>شماره سند</label>
-                                                <input type="text" className={`${inputClass} text-sm py-2.5 px-3 shadow-none focus:ring-2`} value={editingRowData.شماره_سند || ""} onChange={(e) => handleFieldChange("شماره_سند", e.target.value)} dir="ltr" placeholder="شماره پیگیری" />
-                                              </div>
-                                              <div className="space-y-2 xl:col-span-2 cursor-text relative">
-                                                <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>طرف حساب</label>
-                                                <input 
-                                                  type="text" 
-                                                  className={`${inputClass} text-sm py-2.5 px-3 shadow-none focus:ring-2`} 
-                                                  value={editingRowData.نام_طرف_حساب || ""} 
-                                                  onChange={(e) => handleFieldChange("نام_طرف_حساب", e.target.value)} 
-                                                  onFocus={() => setIsCounterpartyFocused(true)}
-                                                  onBlur={() => setTimeout(() => setIsCounterpartyFocused(false), 200)}
-                                                  placeholder="نام شخص یا شرکت" 
-                                                />
-                                                {isCounterpartyFocused && activeSuggestions.length > 0 && (
-                                                  <div className={`absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-auto rounded-xl border p-1 shadow-2xl transition-all ${
-                                                    isDarkMode 
-                                                      ? "bg-slate-900 border-slate-750 text-slate-100" 
-                                                      : "bg-white border-slate-200 text-slate-850"
-                                                  }`}
-                                                  onMouseDown={(e) => e.preventDefault()}
-                                                  >
-                                                    <div className="px-2 py-1 text-[9px] font-bold text-slate-400 select-none">پیشنهاد بر اساس سوابق:</div>
-                                                    {activeSuggestions.map((item, sugIdx) => (
-                                                      <button
-                                                        key={sugIdx}
-                                                        type="button"
-                                                        onClick={() => handleSelectSuggestion(item)}
-                                                        className={`w-full text-right px-3 py-2 rounded-lg text-xs flex flex-col gap-0.5 transition-colors ${
-                                                          isDarkMode ? "hover:bg-slate-800 text-slate-200" : "hover:bg-slate-100 text-slate-800"
-                                                        }`}
-                                                      >
-                                                        <span className="font-bold">{item.name}</span>
-                                                        {(item.nationalId || item.taxId) && (
-                                                          <span className="text-[10px] text-slate-400 flex items-center gap-2">
-                                                            {item.nationalId && <span>شناسه ملی: {item.nationalId}</span>}
-                                                            {item.taxId && <span>شماره مالیاتی: {item.taxId}</span>}
-                                                          </span>
-                                                        )}
-                                                      </button>
-                                                    ))}
-                                                  </div>
-                                                )}
-                                              </div>
-                                              <div className="space-y-2 cursor-text">
-                                                <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>دقت استخراج (%)</label>
-                                                <input type="number" min="0" max="100" className={`${inputClass} text-sm py-2.5 px-3 text-center shadow-none focus:ring-2`} value={editingRowData.ضریب_اطمینان ?? 100} onChange={(e) => handleFieldChange("ضریب_اطمینان", Math.min(100, Math.max(0, Number(e.target.value))))} />
-                                              </div>
-
-                                              <div className="space-y-2 xl:col-span-2 cursor-text">
-                                                <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>شرح / بابت</label>
-                                                <input type="text" className={`${inputClass} text-sm py-2.5 px-3 shadow-none focus:ring-2`} value={editingRowData.شرح || ""} onChange={(e) => handleFieldChange("شرح", e.target.value)} placeholder="توضیح مختصری وارد کنید..." />
-                                              </div>
-                                              
-                                              <div className="space-y-2 cursor-text">
-                                                <label className={`text-[11px] font-semibold tracking-wide opacity-0`}>هزینه غیرقابل قبول</label>
-                                                <label className="flex items-center justify-center gap-2 cursor-pointer h-[42px] px-3 rounded-lg bg-rose-50/50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 hover:bg-rose-100/50 transition-colors">
-                                                  <input type="checkbox" checked={editingRowData.هزینه_غیرقابل_قبول || false} onChange={(e) => handleFieldChange("هزینه_غیرقابل_قبول", e.target.checked)} className="w-[18px] h-[18px] text-rose-600 rounded border-rose-300 outline-none focus:ring-rose-500 cursor-pointer" />
-                                                  <span className="text-[11px] text-rose-700 dark:text-rose-400 font-bold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>هزینه غیرقابل قبول مالیاتی </span>
-                                                </label>
-                                              </div>
-
-                                              <div className="space-y-2 cursor-text">
-                                                <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>شناسه/کد ملی</label>
-                                                <input type="text" className={`${inputClass} text-sm py-2.5 px-3 font-mono shadow-none focus:ring-2`} value={editingRowData.شناسه_ملی || ""} onChange={(e) => handleFieldChange("شناسه_ملی", e.target.value)} dir="ltr" placeholder="شناسه ده رقمی" />
-                                              </div>
-                                              <div className="space-y-2 cursor-text">
-                                                <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>شماره مالیاتی (مودیان)</label>
-                                                <input type="text" className={`${inputClass} text-sm py-2.5 px-3 font-mono shadow-none focus:ring-2`} value={editingRowData.شماره_مالیاتی || ""} onChange={(e) => handleFieldChange("شماره_مالیاتی", e.target.value)} dir="ltr" placeholder="۲۲ کاراکتر" />
-                                              </div>
-                                              <div className="space-y-2 cursor-text">
-                                                <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>نوع ارز</label>
-                                                <input type="text" className={`${inputClass} text-sm py-2.5 px-3 shadow-none focus:ring-2`} value={editingRowData.نوع_ارز || ""} onChange={(e) => handleFieldChange("نوع_ارز", e.target.value)} placeholder="ریال / تومان" />
-                                              </div>
-
-                                              <div className="space-y-2 cursor-text">
-                                                <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>مالیات ارزش افزوده</label>
-                                                <input type="number" className={`${inputClass} text-sm py-2.5 px-3 font-mono shadow-none focus:ring-2`} value={editingRowData.مالیات_ارزش_افزوده ?? ""} onChange={(e) => handleFieldChange("مالیات_ارزش_افزوده", e.target.value === "" ? null : Number(e.target.value))} placeholder="0" />
-                                              </div>
-                                              <div className="space-y-2 cursor-text">
-                                                <label className={`text-[11px] font-bold tracking-wide ${isDarkMode ? "text-emerald-400" : "text-emerald-600"} flex items-center justify-between`}>
-                                                   مبلغ بدهکار
-                                                   {editingRowData.مبلغ_بدهکار > 0 && <span className="text-[10px] font-normal opacity-70">({Number(editingRowData.مبلغ_بدهکار).toLocaleString("fa-IR")})</span>}
-                                                </label>
-                                                <input type="number" className={`${inputClass} text-sm py-2.5 px-3 font-mono border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500 dark:border-emerald-500/30 shadow-none focus:ring-2`} value={editingRowData.مبلغ_بدهکار ?? ""} onChange={(e) => handleFieldChange("مبلغ_بدهکار", e.target.value === "" ? 0 : Number(e.target.value))} placeholder="0" />
-                                              </div>
-                                              <div className="space-y-2 cursor-text">
-                                                <label className={`text-[11px] font-bold tracking-wide pr-1 flex items-center justify-between`}>
-                                                   مبلغ بستانکار
-                                                   {editingRowData.مبلغ_بستانکار > 0 && <span className="text-[10px] font-normal opacity-70">({Number(editingRowData.مبلغ_بستانکار).toLocaleString("fa-IR")})</span>}
-                                                </label>
-                                                <input type="number" className={`${inputClass} text-sm py-2.5 px-3 font-mono shadow-none focus:ring-2`} value={editingRowData.مبلغ_بستانکار ?? ""} onChange={(e) => handleFieldChange("مبلغ_بستانکار", e.target.value === "" ? 0 : Number(e.target.value))} placeholder="0" />
-                                              </div>
-                                              <div className="space-y-2 xl:col-span-2 cursor-text">
-                                                <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>توضیحات تکمیلی</label>
-                                                <input type="text" className={`${inputClass} text-sm py-2.5 px-3 shadow-none focus:ring-2`} value={editingRowData.توضیحات || ""} onChange={(e) => handleFieldChange("توضیحات", e.target.value)} placeholder="موارد بیشتر..." />
-                                              </div>
-                                           </div>
-                                       </div>
-                                    </td>
-                                  ) : (
-                                    <>
-                                  <td className="px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75 first:rounded-r-xl transition-all duration-300 group-hover:border-b-transparent">
-                                    <div className="flex items-center justify-center gap-2 font-mono font-bold text-slate-400">
-                                      <input
-                                        type="checkbox"
-                                        checked={(tr.ضریب_اطمینان ?? 100) === 100}
-                                        onChange={(e) => {
-                                          const isChecked = e.target.checked;
-                                          const updated = [...transactions];
-                                          updated[originalIndex] = {
-                                            ...tr,
-                                            ضریب_اطمینان: isChecked ? 100 : 80
-                                          };
-                                          setTransactions(updated);
-                                          try {
-                                            setRawJsonText(JSON.stringify(updated, null, 2));
-                                          } catch (err) {
-                                            console.error(err);
-                                          }
-                                          logEvent("تایید انفرادی ردیف", isChecked ? `کاربر ردیف شماره ${originalIndex + 1} را تایید کرد.` : `کاربر تایید ردیف شماره ${originalIndex + 1} را لغو کرد.`);
-                                        }}
-                                        className="h-4 w-4 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500/30 cursor-pointer bg-white dark:bg-slate-900 transition-all"
-                                        title="تایید انفرادی ردیف (تنظیم ضریب اطمینان به ۱۰۰٪)"
-                                      />
-                                      <div className="flex items-center gap-1.5 shrink-0">
-                                        {(tr.ضریب_اطمینان ?? 100) === 100 ? (
-                                          <ShieldCheck 
-                                            className="h-5 w-5 text-emerald-500 fill-emerald-500/5 cursor-help transition-all duration-300 hover:scale-110 shrink-0" 
-                                            title="سند تأیید نهایی شده توسط کاربر (صحت کامل)"
-                                          />
-                                        ) : (
-                                          <Shield 
-                                            className="h-5 w-5 text-amber-500 fill-amber-500/5 cursor-help transition-all duration-300 hover:scale-110 shrink-0" 
-                                            title="پیش‌نویس استخراج هوش مصنوعی (نیاز به بازبینی و تایید)"
-                                          />
-                                        )}
-                                        <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">{index + 1}</span>
-                                      </div>
-                                      {isEdited && !isCurrentlyEditing && (
-                                        <span
-                                          className="p-1 bg-amber-500 text-white rounded-lg shadow-sm"
-                                          title="تغییر یافته توسط کاربر (ویرایش دستی)"
-                                        >
-                                          <FileEdit className="h-3 w-3" />
-                                        </span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  
-                                  {/* تاریخ */}
-                                  <td className="px-3 py-3.5 font-mono text-slate-700 dark:text-slate-300 border-b border-l border-slate-200/60 dark:border-slate-800/75 transition-all duration-300 group-hover:border-b-transparent">
-                                    <div className="flex items-center gap-1.5">
-                                      <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
-                                      <span className="font-bold text-[11px] tracking-tight">
-                                        {tr.تاریخ || <span className="text-slate-300 dark:text-slate-700 font-normal">[بدون تاریخ]</span>}
-                                      </span>
-                                    </div>
-                                  </td>
-
-                                  {/* شماره سند */}
-                                  <td className="px-3 py-3.5 font-mono text-slate-700 dark:text-slate-300 border-b border-l border-slate-200/60 dark:border-slate-800/75 transition-all duration-300 group-hover:border-b-transparent">
-                                    {tr.شماره_سند ? (
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold ${isDarkMode ? "bg-slate-800 text-slate-350 border border-slate-700" : "bg-slate-100 text-slate-700 border border-slate-200"}`}>
-                                        <span className="text-[10px] opacity-50">#</span>
-                                        <span>{tr.شماره_سند}</span>
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-300 dark:text-slate-700 font-light">-</span>
-                                    )}
-                                  </td>
-
-                                  {/* طرف حساب */}
-                                  <td className="px-3 py-3.5 border-b border-l border-slate-200/60 dark:border-slate-800/75 max-w-[160px] transition-all duration-300 group-hover:border-b-transparent">
-                                    <div className="flex items-center gap-2">
-                                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 shadow-inner ${
-                                        isDarkMode 
-                                          ? "bg-gradient-to-br from-indigo-500/10 to-blue-500/10 text-blue-400 border border-blue-500/15" 
-                                          : "bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 border border-blue-100/80"
-                                      }`}>
-                                        {getAvatarChar(tr.نام_طرف_حساب || "")}
-                                      </div>
-                                      <span className={`font-extrabold text-[12px] truncate max-w-[130px] tracking-tight ${
-                                        isDarkMode ? "text-slate-200" : "text-slate-850"
-                                      }`} title={tr.نام_طرف_حساب || ""}>
-                                        {tr.نام_طرف_حساب || <span className="text-slate-300 dark:text-slate-700 font-normal">-</span>}
-                                      </span>
-                                    </div>
-                                  </td>
-
-                                  {/* شناسه/کد ملی/مالیاتی */}
-                                  <td className="px-3 py-3.5 border-b border-l border-slate-200/60 dark:border-slate-800/75 transition-all duration-300 group-hover:border-b-transparent">
-                                    <div className="flex flex-col gap-1 text-[10px]">
-                                      {tr.شناسه_ملی && (
-                                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono self-start ${
-                                          isDarkMode ? "bg-[#0b0f19] text-blue-400 border border-slate-850" : "bg-slate-50 text-blue-700 border border-slate-200/60"
-                                        }`}>
-                                          <span className="opacity-70">👤</span>
-                                          <span>{tr.شناسه_ملی}</span>
-                                        </div>
-                                      )}
-                                      {tr.شماره_مالیاتی && (
-                                        <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono self-start truncate max-w-[120px] ${
-                                          isDarkMode ? "bg-[#0b0f19] text-emerald-400 border border-slate-850" : "bg-slate-50 text-emerald-700 border border-slate-200/60"
-                                        }`} title={tr.شماره_مالیاتی}>
-                                          <span className="opacity-70">🧾</span>
-                                          <span>{tr.شماره_مالیاتی.substring(0, 8)}...</span>
-                                        </div>
-                                      )}
-                                      {(!tr.شناسه_ملی && !tr.شماره_مالیاتی) && <span className="text-slate-300 dark:text-slate-700 font-light">-</span>}
-                                    </div>
-                                  </td>
-
-                                  {/* شرح */}
-                                  <td className="px-3 py-3.5 border-b border-l border-slate-200/60 dark:border-slate-800/75 max-w-[200px] transition-all duration-300 group-hover:border-b-transparent">
-                                    <div className="flex flex-col gap-1.5">
-                                      <span className={`font-semibold text-[11.5px] leading-relaxed break-words ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                                        {tr.شرح || <span className="text-slate-400 dark:text-slate-600 font-normal">[بدون شرح]</span>}
-                                      </span>
-                                      {tr.هزینه_غیرقابل_قبول && (
-                                        <div className={`inline-flex items-center gap-1.5 text-[9px] font-extrabold px-2 py-0.5 rounded-lg self-start border ${
-                                          isDarkMode ? "bg-rose-500/10 border-rose-550/20 text-rose-400 animate-pulse" : "bg-rose-50 border-rose-200 text-rose-700"
-                                        }`}>
-                                          <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
-                                          <span>هزینه غیرقابل قبول مالیاتی</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </td>
-
-                                  {/* ارزش افزوده */}
-                                  <td className="px-3 py-3.5 text-left border-b border-l border-slate-200/60 dark:border-slate-800/75 bg-rose-500/[0.015] dark:bg-rose-500/[0.02] max-w-[100px] transition-all duration-300 group-hover:border-b-transparent">
-                                    {tr.مالیات_ارزش_افزوده !== null && tr.مالیات_ارزش_افزوده > 0 ? (
-                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-lg font-mono font-bold text-xs ${
-                                        isDarkMode ? "bg-rose-500/5 border border-rose-500/15 text-rose-450" : "bg-rose-50 border border-rose-100 text-rose-700"
-                                      }`}>
-                                        {Number(tr.مالیات_ارزش_افزوده).toLocaleString("fa-IR")}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-350 dark:text-slate-700 font-mono">۰</span>
-                                    )}
-                                  </td>
-
-                                  {/* بدهکار */}
-                                  <td className="px-3 py-3.5 text-left border-b border-l border-slate-200/60 dark:border-slate-800/75 bg-emerald-500/[0.015] dark:bg-emerald-500/[0.02] max-w-[110px] transition-all duration-300 group-hover:border-b-transparent">
-                                    {tr.مبلغ_بدهکار !== null && tr.مبلغ_بدهکار > 0 ? (
-                                      <span className={`inline-flex items-center px-2.5 py-1 rounded-xl font-mono font-extrabold text-xs md:text-[13px] shadow-sm ${
-                                        isDarkMode ? "bg-emerald-500/10 border border-emerald-500/15 text-emerald-400" : "bg-emerald-50 border border-emerald-100 text-emerald-750"
-                                      }`}>
-                                        {Number(tr.مبلغ_بدهکار).toLocaleString("fa-IR")}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-350 dark:text-slate-700 font-mono">۰</span>
-                                    )}
-                                  </td>
-
-                                  {/* بستانکار */}
-                                  <td className="px-3 py-3.5 text-left border-b border-l border-slate-200/60 dark:border-slate-800/75 bg-blue-500/[0.015] dark:bg-blue-500/[0.02] max-w-[110px] transition-all duration-300 group-hover:border-b-transparent">
-                                    {tr.مبلغ_بستانکار !== null && tr.مبلغ_بستانکار > 0 ? (
-                                      <span className={`inline-flex items-center px-2.5 py-1 rounded-xl font-mono font-extrabold text-xs md:text-[13px] shadow-sm ${
-                                        isDarkMode ? "bg-slate-500/10 border border-slate-500/15 text-slate-300" : "bg-slate-100 border border-slate-200 text-slate-750"
-                                      }`}>
-                                        {Number(tr.مبلغ_بستانکار).toLocaleString("fa-IR")}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-350 dark:text-slate-700 font-mono">۰</span>
-                                    )}
-                                  </td>
-
-                                  {/* ارز */}
-                                  <td className="px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75 bg-indigo-500/[0.01] dark:bg-indigo-500/[0.015] transition-all duration-300 group-hover:border-b-transparent">
-                                    {tr.نوع_ارز && tr.نوع_ارز !== "-" ? (
-                                      <span className={`px-2 py-0.5 rounded-lg text-[9.5px] font-extrabold border ${
-                                        isDarkMode ? "bg-slate-800 border-slate-700 text-slate-400" : "bg-slate-100 border-slate-200/80 text-slate-600"
-                                      }`}>
-                                        {tr.نوع_ارز}
-                                      </span>
-                                    ) : (
-                                      <span className="text-slate-350 dark:text-slate-700 font-light">-</span>
-                                    )}
-                                  </td>
-
-                                  {/* دقت استخراج */}
-                                  <td className="px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75 transition-all duration-300 group-hover:border-b-transparent">
-                                    <div className="flex flex-col items-center justify-center min-w-[85px] gap-1 mx-auto">
-                                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${badgeBg}`}>
-                                        <span className={`w-1.5 h-1.5 rounded-full ${progressBg} animate-pulse`} />
-                                        <span>{score}%</span>
-                                      </span>
-                                      <div className={`w-14 rounded-full h-1 overflow-hidden shrink-0 ${isDarkMode ? "bg-slate-800" : "bg-slate-150"}`}>
-                                        <div className={`h-full ${progressBg}`} style={{ width: `${score}%` }} />
-                                      </div>
-                                      <span className="text-[8px] text-slate-400 font-extrabold tracking-tight block shrink-0">{scoreDesc}</span>
-                                    </div>
-                                  </td>
-
-                                  {/* توضیحات تکمیلی */}
-                                  <td className="px-3 py-3.5 text-slate-500 dark:text-slate-400 border-b border-l border-slate-200/60 dark:border-slate-800/75 max-w-[140px] truncate transition-all duration-300 group-hover:border-b-transparent" title={tr.توضیحات || ""}>
-                                    {tr.توضیحات || <span className="text-slate-300 dark:text-slate-700 font-light">-</span>}
-                                  </td>
-
-                                  {/* عملیات */}
-                                  <td className="px-3 py-3.5 text-center border-b border-slate-100 dark:border-slate-800/40 last:rounded-l-xl transition-all duration-300 group-hover:border-b-transparent">
-                                    <div className="flex items-center justify-center gap-2">
-                                      <motion.button
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => handleStartEdit(originalIndex, tr)}
-                                        className={`p-1.5 rounded-xl font-sans text-[10.5px] font-bold flex items-center gap-1.5 transition-all border ${
-                                          isDarkMode 
-                                            ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750 hover:text-white hover:border-slate-600" 
-                                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300 shadow-sm"
-                                        }`}
-                                        title="ویرایش ردیف"
-                                      >
-                                        <FileEdit className="h-3.5 w-3.5 text-blue-500" />
-                                        <span>ویرایش</span>
-                                      </motion.button>
-                                      <motion.button
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={() => handleDeleteRow(originalIndex)}
-                                        className={`p-1.5 rounded-xl font-sans text-[10.5px] font-bold flex items-center gap-1.5 transition-all border ${
-                                          isDarkMode 
-                                            ? "bg-rose-500/5 border-rose-500/10 text-rose-400 hover:bg-rose-500/15" 
-                                            : "bg-rose-50 border-rose-150 text-rose-600 hover:bg-rose-100/60"
-                                        }`}
-                                        title="حذف این ردیف"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                                        <span>حذف</span>
-                                      </motion.button>
-                                    </div>
-                                  </td>
-                                  </>
-                                  )}
-                                </motion.tr>
-                              );
-                            })}
-                            </AnimatePresence>
-                          </tbody>
-                        </table>
+                          <div className="flex-1 overflow-auto">
+                          <DynamicTable 
+                             transactions={transactions} 
+                             columns={(activeFile.columns && activeFile.columns.length > 0) ? activeFile.columns : DEFAULT_COLUMNS} 
+                             isDarkMode={isDarkMode} 
+                             onUpdateTransactions={(updated) => {
+                                setTransactions(updated);
+                                try { setRawJsonText(JSON.stringify(updated, null, 2)); } catch (err) {}
+                             }} 
+                             onLogEvent={logEvent}
+                             onShowNotification={showNotification}
+                          />
                       </div>
 
                       {/* Balance Calculator Widget (Right Side) */}
@@ -4007,6 +4007,12 @@ export default function App() {
                         const isBalanced = imbalanceAmount === 0;
                         
                         const totalSum = totalDebit + totalCredit;
+                        
+                        // If it's a dynamic table without standard debit/credit ledger columns, we don't show the ledger balance widget.
+                        if (totalSum === 0 && activeFile.columns && !activeFile.columns.some(c => c.کلید === "مبلغ_بدهکار" || c.کلید === "مبلغ_بستانکار")) {
+                           return null;
+                        }
+
                         const debitPercent = totalSum > 0 ? Math.round((totalDebit / totalSum) * 100) : 50;
                         const creditPercent = totalSum > 0 ? Math.round((totalCredit / totalSum) * 100) : 50;
                         
@@ -4314,7 +4320,7 @@ export default function App() {
 
                                 {/* Row 5: Missing descriptions */}
                                 {(() => {
-                                  const missingDescCount = filteredTransactions.filter(t => !t.شرح_تراکنش || t.شرح_تراکنش.trim() === "").length;
+                                  const missingDescCount = filteredTransactions.filter(t => !t.شرح || t.شرح.trim() === "").length;
                                   const hasMissingDesc = missingDescCount > 0;
                                   return (
                                     <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
@@ -4393,7 +4399,7 @@ export default function App() {
                                 {/* Row 9: Smart Risk Assessment */}
                                 {(() => {
                                   const missingDatesCount = filteredTransactions.filter(t => !t.تاریخ || t.تاریخ.trim() === "").length;
-                                  const missingDescCount = filteredTransactions.filter(t => !t.شرح_تراکنش || t.شرح_تراکنش.trim() === "").length;
+                                  const missingDescCount = filteredTransactions.filter(t => !t.شرح || t.شرح.trim() === "").length;
                                   const totalMissing = missingDatesCount + missingDescCount;
                                   
                                   const lowConfCount = filteredTransactions.filter(tr => (tr.ضریب_اطمینان ?? 100) < 70).length;
@@ -5295,27 +5301,43 @@ export default function App() {
                   </div>
                   <button
                       onClick={() => {
-                        const worksheetData = transactions.map((t, idx) => ({
-                           "ردیف": idx + 1,
-                           "تاریخ": t.تاریخ,
-                           "شماره_سند": t.شماره_سند,
-                           "نام_طرف_حساب": t.نام_طرف_حساب,
-                           "شناسه_کد_ملی": t.شناسه_ملی || "",
-                           "شماره_مالیاتی": t.شماره_مالیاتی || "",
-                           "شرح": t.شرح,
-                           "هزینه_غیرقابل_قبول": t.هزینه_غیرقابل_قبول ? "بله" : "خیر",
-                           "ارزش_افزوده": t.مالیات_ارزش_افزوده || 0,
-                           "مبلغ_بدهکار": t.مبلغ_بدهکار || 0,
-                           "مبلغ_بستانکار": t.مبلغ_بستانکار || 0,
-                           "نوع_ارز": t.نوع_ارز,
-                           "توضیحات": t.توضیحات,
-                           "ضریب_اطمینان": t.ضریب_اطمینان || 100
-                        }));
+                        let worksheetData;
+                        let colWidths;
+                        
+                        if (activeFile?.columns && activeFile.columns.length > 0) {
+                           worksheetData = transactions.map((t, idx) => {
+                             const row: any = { "ردیف": idx + 1 };
+                             activeFile.columns!.forEach(col => {
+                               row[col.عنوان] = col.نوع_داده === 'number' && t[col.کلید] ? Number(t[col.کلید]) : t[col.کلید];
+                             });
+                             row["ضریب_اطمینان"] = t.ضریب_اطمینان || 100;
+                             return row;
+                           });
+                           colWidths = [{ wch: 5 }, ...activeFile.columns.map(() => ({ wch: 20 })), { wch: 10 }];
+                        } else {
+                           worksheetData = transactions.map((t, idx) => ({
+                              "ردیف": idx + 1,
+                              "تاریخ": t.تاریخ,
+                              "شماره_سند": t.شماره_سند,
+                              "نام_طرف_حساب": t.نام_طرف_حساب,
+                              "شناسه_کد_ملی": t.شناسه_ملی || "",
+                              "شماره_مالیاتی": t.شماره_مالیاتی || "",
+                              "شرح": t.شرح,
+                              "هزینه_غیرقابل_قبول": t.هزینه_غیرقابل_قبول ? "بله" : "خیر",
+                              "ارزش_افزوده": t.مالیات_ارزش_افزوده || 0,
+                              "مبلغ_بدهکار": t.مبلغ_بدهکار || 0,
+                              "مبلغ_بستانکار": t.مبلغ_بستانکار || 0,
+                              "نوع_ارز": t.نوع_ارز,
+                              "توضیحات": t.توضیحات,
+                              "ضریب_اطمینان": t.ضریب_اطمینان || 100
+                           }));
+                           colWidths = [
+                              { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 30 }, { wch: 10 }
+                           ];
+                        }
 
                         const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-                        worksheet["!cols"] = [
-                           { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 30 }, { wch: 10 }
-                        ];
+                        worksheet["!cols"] = colWidths;
                         if (!worksheet['!views']) worksheet['!views'] = [];
                         worksheet['!views'].push({ rightToLeft: true });
 

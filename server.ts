@@ -175,70 +175,47 @@ app.post("/api/extract", async (req, res) => {
               type: Type.STRING,
               description: "تحلیل هوشمند و کلی در مورد کیفیت سند، ایرادات احتمالی ارقام، قواعد مالیاتی حاکم بر این نوع سند، و اطمینان کلی از صحت داده‌ها.",
             },
-            اقلام_تراکنش: {
+            ستون_ها: {
               type: Type.ARRAY,
-              description: "لیست اقلام و تراکنش‌های استخراج شده از این سند.",
+              description: "لیست ستون‌های متناسب با این نوع سند. این ستون‌ها کاملا داینامیک هستند و بر اساس نوع سند (مثلا فاکتور نیاز به نام کالا، تعداد، فی، و مالیات دارد اما فیش واریزی نیاز به تاریخ، مبلغ، شماره پیگیری، مبدا و مقصد دارد) ساخته می‌شوند.",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  تاریخ: {
-                    type: Type.STRING,
-                    description: "تاریخ تراکنش یا سند (مثلاً ۱۴۰۲/۱۲/۰۵). اگر وجود نداشت یا ناخوانا بود null بگذارید. همیشه به زبان فارسی/شمسی بنویسید اگر در مدرک به همین شکل است.",
-                  },
-                  شماره_سند: {
-                    type: Type.STRING,
-                    description: "شماره سند یا شماره پیگیری تراکنش. در صورت وجود ثبت گردد، در غیر این صورت null.",
-                  },
-                  نام_طرف_حساب: {
-                    type: Type.STRING,
-                    description: "نام خریدار، فروشنده، شرکت یا شخص طرف حساب تراکنش.",
-                  },
-                  شرح: {
-                    type: Type.STRING,
-                    description: "شرح یا بابت تراکنش (مثلاً خرید لوازم یدکی، دریافت بابت تسویه حساب). اگر ناخوانا بود null.",
-                  },
-                  مبلغ_بدهکار: {
-                     type: Type.NUMBER,
-                     description: "مبلغ بدهکار به صورت عددی خالص بدون کاراکتر اضافی و جداکننده هزارگان. مقدار پیش فرض 0.",
-                  },
-                  مبلغ_بستانکار: {
-                     type: Type.NUMBER,
-                     description: "مبلغ بستانکار به صورت عددی خالص بدون کاراکتر اضافی و جداکننده هزارگان. مقدار پیش فرض 0.",
-                  },
-                  نوع_ارز: {
-                    type: Type.STRING,
-                    description: "نوع ارز مثل ریال، تومان، دلار، یورو. اگر ذکر نشده ریال پیش‌فرض است.",
-                  },
-                  توضیحات: {
-                    type: Type.STRING,
-                    description: "توضیحات اضافه نظیر شماره چک، خط خوردگی ها، کسورات قانونی یا شرایط پرداخت.",
-                  },
+                  کلید: { type: Type.STRING, description: "کلید انگلیسی یکتا برای این ستون (مانند quantity, item_name, date, amount, debit, credit)" },
+                  عنوان: { type: Type.STRING, description: "عنوان فارسی برای نمایش به کاربر در جدول (مانند تعداد/مقدار, نام کالا, مبلغ کل, بدهکار)" },
+                  نوع_داده: { type: Type.STRING, description: "نوع داده این ستون: number یا string" }
+                },
+                required: ["کلید", "عنوان", "نوع_داده"]
+              }
+            },
+            ردیف_ها: {
+              type: Type.ARRAY,
+              description: "لیست اقلام و داده‌های استخراج شده متناسب با ستون‌های تعریف شده.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
                   ضریب_اطمینان: {
                     type: Type.INTEGER,
-                    description: "درصد اطمینان از صحت استخراج این ردیف (بین 0 تا 100) براساس وضوح تصویر و دست‌خط.",
+                    description: "درصد اطمینان از صحت استخراج این ردیف (بین 0 تا 100) براساس وضوح تصویر.",
                   },
-                  شناسه_ملی: {
-                    type: Type.STRING,
-                    description: "شناسه ملی اشخاص حقوقی یا اشخاص حقیقی طرف حساب. (اختیاری، استخراج در صورت وجود)",
-                  },
-                  شماره_مالیاتی: {
-                    type: Type.STRING,
-                    description: "شماره منحصر به فرد مالیاتی ۲۲ کاراکتری صورت‌حساب الکترونیکی سامانه مودیان. (در صورت وجود حتما و عینا استخراج شود)",
-                  },
-                  مالیات_ارزش_افزوده: {
-                    type: Type.NUMBER,
-                    description: "مبلغ مالیات بر ارزش افزوده (VAT) مندرج در فاکتور یا صورتحساب. در صورت عدم ذکر، 0 لحاظ شود.",
-                  },
-                  هزینه_غیرقابل_قبول: {
-                    type: Type.BOOLEAN,
-                    description: "مشخص کننده اینکه آیا این ردیف هزینه غیرقابل قبول مالیاتی (مثل جریمه دیرکرد) است یا خیر.",
-                  },
+                  فیلد_ها: {
+                    type: Type.ARRAY,
+                    description: "مقادیر استخراج شده برای این ردیف.",
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        کلید: { type: Type.STRING, description: "کلید انگلیسی ستون مربوطه (منطبق با ستون_ها)" },
+                        مقدار: { type: Type.STRING, description: "مقدار استخراج شده (حتی اعداد به فرم رشته). در صورت خالی بودن null یا خالی." }
+                      },
+                      required: ["کلید"]
+                    }
+                  }
                 },
-                required: ["تاریخ", "شماره_سند", "نام_طرف_حساب", "شرح", "مبلغ_بدهکار", "مبلغ_بستانکار", "نوع_ارز", "توضیحات", "ضریب_اطمینان"],
-              },
+                required: ["ضریب_اطمینان", "فیلد_ها"]
+              }
             },
           },
-          required: ["نوع_سند", "تحلیل_سند", "اقلام_تراکنش"],
+          required: ["نوع_سند", "تحلیل_سند", "ستون_ها", "ردیف_ها"],
         },
       },
     };
@@ -321,6 +298,104 @@ app.post("/api/extract", async (req, res) => {
   } catch (error: any) {
     console.error("API Error in extraction:", error);
     res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در پردازش فایل" });
+  }
+});
+
+// Pre-extraction chat endpoint
+app.post("/api/chat-pre-extract", async (req, res) => {
+  try {
+    const { messages, image, mimeType, model } = req.body;
+    
+    if (!messages || !Array.isArray(messages)) {
+       return res.status(400).json({ error: "لیست پیام‌ها ارسال نشده است." });
+    }
+    
+    const ai = getGeminiClient();
+    const systemInstruction = "شما یک دستیار حسابدار هوشمند هستید. کاربر تصویری از یک سند مالی (فاکتور، فیش، چک و ...) آپلود کرده است. شما باید به سوالات کاربر در مورد این سند پاسخ دهید و در صورت نیاز راهنمایی کنید که چه چیزهایی از این سند قابل استخراج است. پس از این چت، داده‌ها در فرمت JSON استخراج خواهند شد. همیشه مودبانه، تخصصی و به زبان فارسی پاسخ دهید.";
+    
+    const formattedMessages = messages.map((msg: any, index: number) => {
+      const msgParts: any[] = [{ text: msg.text }];
+      // Attach the image to the last user message
+      if (index === messages.length - 1 && msg.role === "user" && image) {
+        msgParts.push({
+          inlineData: {
+            mimeType: mimeType || "image/png",
+            data: image,
+          },
+        });
+      }
+      return {
+        role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
+        parts: msgParts,
+      };
+    });
+
+    const selectedModel = model || "gemini-3.5-flash";
+
+    const response = await ai.models.generateContent({
+      model: selectedModel,
+      contents: formattedMessages,
+      config: {
+        systemInstruction: systemInstruction,
+      },
+    });
+
+    const tokensUsed = response.usageMetadata?.totalTokenCount || 0;
+
+    res.json({ success: true, text: response.text, tokensUsed });
+  } catch (error: any) {
+    console.error("API Error in pre-extract chat:", error);
+    res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در پردازش پیام" });
+  }
+});
+
+// Pre-extraction verification endpoint
+app.post("/api/chat-verification", async (req, res) => {
+  try {
+    const { messages, image, mimeType, model } = req.body;
+    
+    if (!messages || !Array.isArray(messages)) {
+       return res.status(400).json({ error: "لیست پیام‌ها ارسال نشده است." });
+    }
+    
+    const ai = getGeminiClient();
+    const systemInstruction = "شما یک دستیار حسابدار هستید. کاربر با شما درباره یک سند مالی گفتگو کرده است. وظیفه شما این است که این گفتگو و تصویر سند را بررسی کرده و یک خلاصه برای کاربر تهیه کنید (Verification Summary). این خلاصه باید در یک فرمت ساختاریافته (مارک‌داون) باشد که شامل موجودیت‌های استخراج شده کلیدی مانند شناسه ملی (Tax ID)، تاریخ‌ها، نام شرکت‌ها یا افراد، و توافقات یا دستورالعمل‌های خاص استخراج باشد. این به کاربر اجازه می‌دهد قبل از تایید نهایی استخراج، مطمئن شود که سیستم خواسته‌های او را متوجه شده است.";
+    
+    const formattedMessages: any[] = messages.map((msg: any) => {
+      return {
+        role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
+        parts: [{ text: msg.text }],
+      };
+    });
+    
+    // Add image as final context
+    formattedMessages.push({
+       role: "user",
+       parts: [
+         { text: "لطفاً با توجه به این گفتگو و این سند مالی، خلاصه تاییدیه استخراج (Verification Summary) را تهیه کن." },
+         {
+           inlineData: {
+             mimeType: mimeType || "image/png",
+             data: image,
+           }
+         }
+       ]
+    });
+
+    const selectedModel = model || "gemini-3.5-flash";
+
+    const response = await ai.models.generateContent({
+      model: selectedModel,
+      contents: formattedMessages,
+      config: {
+        systemInstruction: systemInstruction,
+      },
+    });
+
+    res.json({ success: true, text: response.text });
+  } catch (error: any) {
+    console.error("API Error in verification chat:", error);
+    res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در بررسی و تایید" });
   }
 });
 
