@@ -189,6 +189,8 @@ export default function CommercialModule({
     description: "",
     total_discount_header: 0,
     lines: [],
+
+
     manual_rounding: 0,
   });
 
@@ -375,6 +377,8 @@ export default function CommercialModule({
         description: "",
         total_discount_header: 0,
         lines: [],
+
+
         manual_rounding: 0,
       });
 
@@ -1465,6 +1469,10 @@ export default function CommercialModule({
                         ...prev,
                         invoice_type: selectedType,
                         lines: [],
+                      invoice_number: "",
+                      manual_rounding: 0,
+
+
                       }));
                     }}
                     className={`w-full px-3 py-2 rounded-xl text-xs border focus:ring-1 focus:ring-blue-500 focus:outline-none ${
@@ -1501,6 +1509,10 @@ export default function CommercialModule({
                         ...prev,
                         client_id: pId,
                         lines: [],
+                      invoice_number: "",
+                      manual_rounding: 0,
+
+
                       }));
                     }}
                     className={`w-full px-3 py-2 rounded-xl text-xs border focus:ring-1 focus:ring-blue-500 focus:outline-none ${
@@ -2080,6 +2092,10 @@ export default function CommercialModule({
                       invoice_date: new Date().toLocaleDateString("fa-IR"),
                       client_id: "",
                       lines: [],
+                      invoice_number: "",
+                      manual_rounding: 0,
+
+
                       total_discount_header: 0,
                       description: "",
                     });

@@ -16,6 +16,7 @@ export enum InvoiceStatus {
 }
 
 export interface InvoiceLine {
+  net_total?: number;
   id: string;
   invoice_id: string;
   product_id: string;
@@ -69,6 +70,7 @@ export interface InvoiceStatusHistory {
 
 // Supporting Interfaces for dependencies
 export interface Product {
+  code?: string;
   id: string;
   name: string;
   base_price: number;

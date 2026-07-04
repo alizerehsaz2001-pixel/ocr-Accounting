@@ -36,7 +36,7 @@ function getGeminiClient(): GoogleGenAI {
 // Persian/Farsi financial documents extraction endpoint
 app.post("/api/extract", async (req, res) => {
   try {
-    const { image, mimeType, model, tokenSettings, userPrompt } = req.body;
+    const { image, mimeType, model, tokenSettings, userPrompt, chatFiles } = req.body;
 
     if (!image) {
        res.status(400).json({ error: "تصویر سند ارسال نشده است." });
@@ -156,11 +156,24 @@ app.post("/api/extract", async (req, res) => {
     const textPart = {
       text: promptText,
     };
+    
+    const parts: any[] = [imagePart, textPart];
+    
+    if (chatFiles && Array.isArray(chatFiles)) {
+       chatFiles.forEach((f: any) => {
+          parts.push({
+             inlineData: {
+                mimeType: f.mimeType || "application/pdf",
+                data: f.base64
+             }
+          });
+       });
+    }
 
     let response;
     const generateConfig = {
       model: selectedModel,
-      contents: { parts: [imagePart, textPart] },
+      contents: { parts: parts },
       config: {
         systemInstruction: systemInstruction,
         responseMimeType: "application/json",
@@ -314,7 +327,19 @@ app.post("/api/chat-pre-extract", async (req, res) => {
     const systemInstruction = "شما یک دستیار حسابدار هوشمند هستید. کاربر تصویری از یک سند مالی (فاکتور، فیش، چک و ...) آپلود کرده است. شما باید به سوالات کاربر در مورد این سند پاسخ دهید و در صورت نیاز راهنمایی کنید که چه چیزهایی از این سند قابل استخراج است. پس از این چت، داده‌ها در فرمت JSON استخراج خواهند شد. همیشه مودبانه، تخصصی و به زبان فارسی پاسخ دهید.";
     
     const formattedMessages = messages.map((msg: any, index: number) => {
-      const msgParts: any[] = [{ text: msg.text }];
+      const msgParts: any[] = [{ text: msg.text || "فایل ضمیمه شد." }];
+      
+      if (msg.files && Array.isArray(msg.files)) {
+         msg.files.forEach((f: any) => {
+            msgParts.push({
+               inlineData: {
+                  mimeType: f.mimeType || "application/pdf",
+                  data: f.base64
+               }
+            });
+         });
+      }
+
       // Attach the image to the last user message
       if (index === messages.length - 1 && msg.role === "user" && image) {
         msgParts.push({
@@ -362,9 +387,22 @@ app.post("/api/chat-verification", async (req, res) => {
     const systemInstruction = "شما یک دستیار حسابدار هستید. کاربر با شما درباره یک سند مالی گفتگو کرده است. وظیفه شما این است که این گفتگو و تصویر سند را بررسی کرده و یک خلاصه برای کاربر تهیه کنید (Verification Summary). این خلاصه باید در یک فرمت ساختاریافته (مارک‌داون) باشد که شامل موجودیت‌های استخراج شده کلیدی مانند شناسه ملی (Tax ID)، تاریخ‌ها، نام شرکت‌ها یا افراد، و توافقات یا دستورالعمل‌های خاص استخراج باشد. این به کاربر اجازه می‌دهد قبل از تایید نهایی استخراج، مطمئن شود که سیستم خواسته‌های او را متوجه شده است.";
     
     const formattedMessages: any[] = messages.map((msg: any) => {
+      const parts: any[] = [{ text: msg.text || "فایل ضمیمه شد." }];
+      
+      if (msg.files && Array.isArray(msg.files)) {
+         msg.files.forEach((f: any) => {
+            parts.push({
+               inlineData: {
+                  mimeType: f.mimeType || "application/pdf",
+                  data: f.base64
+               }
+            });
+         });
+      }
+
       return {
         role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
-        parts: [{ text: msg.text }],
+        parts: parts,
       };
     });
     

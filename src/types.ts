@@ -69,4 +69,5 @@ export interface PreviousScan {
   columns?: DynamicColumn[]; // Added for dynamic tables
   timestamp: number;
   auditLogs?: AuditLogEntry[];
+  folder?: string;
 }

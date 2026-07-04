@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
+  Landmark, Package,
   FileJson,
   Cpu,
   UploadCloud,
@@ -38,6 +39,9 @@ import {
   Search,
   Filter,
   Fingerprint,
+  Eye,
+  Info,
+  ExternalLink,
   QrCode,
   Link,
   Globe,
@@ -71,17 +75,14 @@ import {
   Tag,
   ShieldAlert,
   Copy,
+  Paperclip,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
 import AudioNotesSection from "./components/AudioNotesSection";
 import ThemeSwitcher from "./components/ThemeSwitcher";
 import OnboardingModal from "./components/OnboardingModal";
-import FinancialAccountingModule from "./components/FinancialAccountingModule";
-import TreasuryModule from "./components/TreasuryModule";
-import CommercialModule from "./components/CommercialModule";
-import InventoryModule from "./components/InventoryModule";
-import PayrollModule from "./components/PayrollModule";
+import AuditLogsModal from "./components/AuditLogsModal";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
@@ -157,8 +158,9 @@ export default function App() {
 
   const [pendingFile, setPendingFile] = useState<{ base64: string; name: string; mimeType: string; size: number } | null>(null);
   const [customPrompt, setCustomPrompt] = useState<string>("");
-  const [preExtractChat, setPreExtractChat] = useState<{ role: 'user' | 'assistant'; text: string }[]>([]);
+  const [preExtractChat, setPreExtractChat] = useState<{ role: 'user' | 'assistant'; text: string; files?: { base64: string; name: string; mimeType: string; size: number }[] }[]>([]);
   const [preExtractInput, setPreExtractInput] = useState<string>("");
+  const [preExtractFiles, setPreExtractFiles] = useState<{ base64: string; name: string; mimeType: string; size: number }[]>([]);
   const [isPreExtractChatLoading, setIsPreExtractChatLoading] = useState<boolean>(false);
   const [verificationSummary, setVerificationSummary] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
@@ -197,6 +199,93 @@ export default function App() {
     }
     return [];
   });
+
+  useEffect(() => {
+    localStorage.setItem("previous_scans", JSON.stringify(previousScans));
+  }, [previousScans]);
+
+  const [userDefinedFolders, setUserDefinedFolders] = useState<string[]>(() => {
+    const saved = localStorage.getItem("user_defined_folders");
+    return saved ? JSON.parse(saved) : ["Tax", "Utilities", "Salaries"];
+  });
+
+  useEffect(() => {
+    localStorage.setItem("user_defined_folders", JSON.stringify(userDefinedFolders));
+  }, [userDefinedFolders]);
+
+  const [selectedFolderFilter, setSelectedFolderFilter] = useState<string>("all");
+
+  const [historySearchQuery, setHistorySearchQuery] = useState<string>("");
+  const [historyDocType, setHistoryDocType] = useState<string>("all");
+  const [historyDateRange, setHistoryDateRange] = useState<string>("all");
+
+  const availableDocumentTypes = useMemo(() => {
+    const typesSet = new Set<string>();
+    previousScans.forEach((scan) => {
+      if (scan.file && scan.file.documentType) {
+        typesSet.add(scan.file.documentType);
+      }
+    });
+    return Array.from(typesSet);
+  }, [previousScans]);
+
+  const filteredPreviousScans = useMemo(() => {
+    return previousScans.filter((scan) => {
+      // 1. Search Query (File Name or Doc Type)
+      if (historySearchQuery.trim()) {
+        const query = historySearchQuery.toLowerCase();
+        const fileName = (scan.file?.name || "").toLowerCase();
+        const docType = (scan.file?.documentType || "").toLowerCase();
+        if (!fileName.includes(query) && !docType.includes(query)) {
+          return false;
+        }
+      }
+
+      // 2. Document Type Filter
+      if (historyDocType !== "all") {
+        const scanDocType = scan.file?.documentType || "سند نامشخص";
+        if (scanDocType !== historyDocType) {
+          return false;
+        }
+      }
+
+      // 3. Date Range Filter
+      if (historyDateRange !== "all") {
+        const scanDate = new Date(scan.timestamp);
+        const now = new Date();
+        const diffTime = Math.abs(now.getTime() - scanDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (historyDateRange === "today") {
+          const isToday = scanDate.getDate() === now.getDate() &&
+            scanDate.getMonth() === now.getMonth() &&
+            scanDate.getFullYear() === now.getFullYear();
+          if (!isToday) return false;
+        } else if (historyDateRange === "yesterday") {
+          const yesterday = new Date(now);
+          yesterday.setDate(now.getDate() - 1);
+          const isYesterday = scanDate.getDate() === yesterday.getDate() &&
+            scanDate.getMonth() === yesterday.getMonth() &&
+            scanDate.getFullYear() === yesterday.getFullYear();
+          if (!isYesterday) return false;
+        } else if (historyDateRange === "week") {
+          if (diffDays > 7) return false;
+        } else if (historyDateRange === "month") {
+          if (diffDays > 30) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [previousScans, historySearchQuery, historyDocType, historyDateRange]);
+
+  const fileManagerFilteredScans = useMemo(() => {
+    return previousScans.filter(scan => {
+      if (selectedFolderFilter === "all") return true;
+      if (selectedFolderFilter === "uncategorized") return !scan.folder;
+      return scan.folder === selectedFolderFilter;
+    });
+  }, [previousScans, selectedFolderFilter]);
 
   // AI Model Selection & Daily Quota States
   const [selectedModel, setSelectedModel] = useState<string>(() => {
@@ -329,23 +418,52 @@ export default function App() {
     setAuditLogs(prev => [newLog, ...prev]);
   };
 
-  const [activeTab, setActiveTab] = useState<"analysis" | "json" | "converter">("analysis");
+  const [activeTab, setActiveTab] = useState<"analysis" | "json" | "converter" | "unified">("analysis");
 
-  const handleTabChange = (tab: "analysis" | "json" | "converter") => {
+  const handleTabChange = (tab: "analysis" | "json" | "converter" | "unified") => {
     setActiveTab(tab);
     let tabName = "";
     if (tab === "analysis") tabName = "آنالیز تصویر پیشرفته";
     if (tab === "json") tabName = "آرایه خام JSON";
     if (tab === "converter") tabName = "خروجی اکسل پیشرفته";
+    if (tab === "unified") tabName = "نمای ۳۶۰ درجه یکپارچه";
     logEvent("تغییر تب", `کاربر وارد تب «${tabName}» شد.`);
+  };
+
+  const handlePreExtractFilesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+       const newFiles = Array.from(e.target.files);
+       newFiles.forEach(file => {
+         if (file.size > 5 * 1024 * 1024) {
+            showNotification(`حجم فایل ${file.name} بیشتر از 5 مگابایت است.`, "error");
+            return;
+         }
+         const reader = new FileReader();
+         reader.onload = (event) => {
+           const base64String = (event.target?.result as string).split(',')[1];
+           setPreExtractFiles(prev => [...prev, {
+              base64: base64String,
+              name: file.name,
+              mimeType: file.type || "application/pdf",
+              size: file.size
+           }]);
+         };
+         reader.readAsDataURL(file);
+       });
+    }
+    // reset input value so the same file can be selected again
+    e.target.value = '';
   };
 
   const handleSendPreExtractChat = async (textToSend?: string) => {
     const text = textToSend || preExtractInput;
-    if (!text.trim() || !pendingFile) return;
+    if ((!text.trim() && preExtractFiles.length === 0) || !pendingFile) return;
 
     setPreExtractInput("");
-    const newMessages = [...preExtractChat, { role: "user" as const, text }];
+    const filesToAttach = [...preExtractFiles];
+    setPreExtractFiles([]);
+
+    const newMessages = [...preExtractChat, { role: "user" as const, text, files: filesToAttach }];
     setPreExtractChat(newMessages);
     setIsPreExtractChatLoading(true);
 
@@ -704,15 +822,15 @@ export default function App() {
     try {
       const stored = localStorage.getItem("system_users");
       return stored ? JSON.parse(stored) : [
-        { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000 },
-        { id: 2, name: "محمد کریمی (حسابدار ارشد)", role: "user", status: "active", apiUsage: 12400 },
-        { id: 3, name: "حسابدار پاره‌وقت", role: "user", status: "suspended", apiUsage: 850 }
+        { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000, extraStorage: 0 },
+        { id: 2, name: "محمد کریمی (حسابدار ارشد)", role: "user", status: "active", apiUsage: 12400, extraStorage: 0 },
+        { id: 3, name: "حسابدار پاره‌وقت", role: "user", status: "suspended", apiUsage: 850, extraStorage: 0 }
       ];
     } catch {
       return [
-        { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000 },
-        { id: 2, name: "محمد کریمی (حسابدار ارشد)", role: "user", status: "active", apiUsage: 12400 },
-        { id: 3, name: "حسابدار پاره‌وقت", role: "user", status: "suspended", apiUsage: 850 }
+        { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000, extraStorage: 0 },
+        { id: 2, name: "محمد کریمی (حسابدار ارشد)", role: "user", status: "active", apiUsage: 12400, extraStorage: 0 },
+        { id: 3, name: "حسابدار پاره‌وقت", role: "user", status: "suspended", apiUsage: 850, extraStorage: 0 }
       ];
     }
   });
@@ -720,9 +838,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<any>(() => {
      try {
        const stored = localStorage.getItem("current_user");
-       return stored ? JSON.parse(stored) : { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000 };
+       return stored ? JSON.parse(stored) : { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000, extraStorage: 0 };
      } catch {
-       return { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000 };
+       return { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000, extraStorage: 0 };
      }
   });
 
@@ -733,6 +851,22 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("current_user", JSON.stringify(currentUser));
   }, [currentUser]);
+
+  // Keep currentUser synced with users list when admin changes fields (like extraStorage)
+  useEffect(() => {
+    if (currentUser) {
+      const matched = users.find(u => u.id === currentUser.id);
+      if (matched) {
+        const hasDiff = matched.extraStorage !== currentUser.extraStorage || 
+                        matched.role !== currentUser.role || 
+                        matched.status !== currentUser.status || 
+                        matched.apiUsage !== currentUser.apiUsage;
+        if (hasDiff) {
+          setCurrentUser(matched);
+        }
+      }
+    }
+  }, [users]);
 
   const [notification, setNotification] = useState<{
     text: string;
@@ -1151,7 +1285,7 @@ export default function App() {
   };
 
   // Main processing pipeline
-  const processImageForExtraction = async (base64Image: string, fileName: string, fileMimeType: string, userPrompt: string = "") => {
+  const processImageForExtraction = async (base64Image: string, fileName: string, fileMimeType: string, userPrompt: string = "", chatFiles: any[] = []) => {
     logEvent("آپلود و پردازش سند", `کاربر سند جدیدی با نام ${fileName} را آپلود و به هوش مصنوعی ارسال کرد.`);
     showNotification("در حال ارسال تصویر به هوش مصنوعی حسابدار و استخراج داده‌های مالی...", "info");
 
@@ -1175,6 +1309,7 @@ export default function App() {
           model: selectedModel,
           tokenSettings,
           userPrompt,
+          chatFiles,
         }),
       });
 
@@ -1273,7 +1408,7 @@ export default function App() {
             timestamp: Date.now(),
           },
           ...filtered,
-        ].slice(0, 5);
+        ].slice(0, 50);
       });
 
       logEvent("پایان موفقیت‌آمیز استخراج", `هوش مصنوعی اطلاعات سند ${fileName} را استخراج کرد. (تعداد ${extractedItems.length} ردیف)`);
@@ -1311,6 +1446,14 @@ export default function App() {
         showNotification("تنها فایل‌های تصویر و PDF پشتیبانی می‌شوند.", "error");
         return;
       }
+      // Check storage limit
+      const extraStorageBytes = (currentUser?.extraStorage || 0) * 1024 * 1024 * 1024;
+      const MAX_STORAGE = 5 * 1024 * 1024 * 1024 + extraStorageBytes;
+      const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file.size || 0), 0);
+      if (usedStorage + file.size > MAX_STORAGE) {
+        showNotification("ظرفیت حافظه ابری شما تکمیل شده است. لطفاً فایل‌های اضافی را حذف کنید یا از مدیر درخواست فضای اضافه نمایید.", "error");
+        return;
+      }
       try {
         const base64 = await convertFileToBase64(file);
         // Map any image format to standard JPEG except for PDF
@@ -1336,6 +1479,14 @@ export default function App() {
         showNotification("تنها فایل‌های تصویر و PDF پشتیبانی می‌شوند.", "error");
         return;
       }
+      // Check storage limit
+      const extraStorageBytes = (currentUser?.extraStorage || 0) * 1024 * 1024 * 1024;
+      const MAX_STORAGE = 5 * 1024 * 1024 * 1024 + extraStorageBytes;
+      const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file.size || 0), 0);
+      if (usedStorage + file.size > MAX_STORAGE) {
+        showNotification("ظرفیت حافظه ابری شما تکمیل شده است. لطفاً فایل‌های اضافی را حذف کنید یا از مدیر درخواست فضای اضافه نمایید.", "error");
+        return;
+      }
       try {
         const base64 = await convertFileToBase64(file);
         const targetMime = file.type === "application/pdf" ? "application/pdf" : "image/jpeg";
@@ -1359,11 +1510,22 @@ export default function App() {
       const parts = dataUrl.split(",");
       const mimeType = parts[0].split(":")[1].split(";")[0];
       const rawBase64 = parts[1];
+      const estimatedSize = Math.round((rawBase64.length * 3) / 4);
+
+      // Check storage limit
+      const extraStorageBytes = (currentUser?.extraStorage || 0) * 1024 * 1024 * 1024;
+      const MAX_STORAGE = 5 * 1024 * 1024 * 1024 + extraStorageBytes;
+      const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file.size || 0), 0);
+      if (usedStorage + estimatedSize > MAX_STORAGE) {
+        showNotification("ظرفیت حافظه ابری شما تکمیل شده است. لطفاً فایل‌های اضافی را حذف کنید یا از مدیر درخواست فضای اضافه نمایید.", "error");
+        return;
+      }
+
       setPendingFile({
         base64: rawBase64,
         name: `اسکن_دوربین_${Date.now()}.jpg`,
         mimeType: mimeType,
-        size: Math.round((rawBase64.length * 3) / 4)
+        size: estimatedSize
       });
       setCustomPrompt("");
     } catch (err) {
@@ -1779,9 +1941,95 @@ export default function App() {
             <History className="h-3.5 w-3.5 text-slate-500" />
           </div>
 
+          {/* Search & Filters for History */}
+          {previousScans.length > 0 && (
+            <div className="px-4 mb-3 space-y-2">
+              {/* Search input with search icon */}
+              <div className="relative flex items-center">
+                <Search className="absolute right-2.5 h-3.5 w-3.5 text-slate-500 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="جستجو در نام یا نوع سند..."
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  className="w-full bg-slate-900/60 border border-slate-800/80 rounded-lg py-1.5 pr-8 pl-6 text-[10px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-colors text-right"
+                  dir="rtl"
+                />
+                {historySearchQuery && (
+                  <button
+                    onClick={() => setHistorySearchQuery("")}
+                    className="absolute left-2 text-slate-500 hover:text-slate-300 transition"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filters Row */}
+              <div className="grid grid-cols-2 gap-1.5">
+                {/* Document Type Dropdown */}
+                <div className="relative">
+                  <select
+                    value={historyDocType}
+                    onChange={(e) => setHistoryDocType(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800/80 rounded-lg px-1.5 py-1 text-[9.5px] text-slate-300 focus:outline-none focus:border-indigo-500/50 transition-colors text-right cursor-pointer"
+                    dir="rtl"
+                  >
+                    <option value="all">همه نوع سند</option>
+                    {availableDocumentTypes.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Date Range Dropdown */}
+                <div className="relative">
+                  <select
+                    value={historyDateRange}
+                    onChange={(e) => setHistoryDateRange(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800/80 rounded-lg px-1.5 py-1 text-[9.5px] text-slate-300 focus:outline-none focus:border-indigo-500/50 transition-colors text-right cursor-pointer"
+                    dir="rtl"
+                  >
+                    <option value="all">همه زمان‌ها</option>
+                    <option value="today">امروز</option>
+                    <option value="yesterday">دیروز</option>
+                    <option value="week">۷ روز اخیر</option>
+                    <option value="month">۳۰ روز اخیر</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Reset Active Filters badge if any are filtered */}
+              {(historySearchQuery !== "" || historyDocType !== "all" || historyDateRange !== "all") && (
+                <div className="flex justify-between items-center text-[9px] text-indigo-400 font-medium px-0.5">
+                  <span className="text-slate-500">
+                    یافت شده: {filteredPreviousScans.length} مورد
+                  </span>
+                  <button
+                    onClick={() => {
+                      setHistorySearchQuery("");
+                      setHistoryDocType("all");
+                      setHistoryDateRange("all");
+                    }}
+                    className="hover:text-indigo-300 transition-colors flex items-center gap-0.5"
+                  >
+                    پاک کردن فیلترها
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="px-2 space-y-1 overflow-y-auto max-h-[220px]">
-            {previousScans.length > 0 ? (
-              previousScans.map((scan) => {
+            {previousScans.length === 0 ? (
+              <div className="px-3 py-4 text-center rounded-xl border border-dashed border-slate-800/40 text-[10px] text-slate-500 italic">
+                سندی اخیراً اسکن نشده است.
+              </div>
+            ) : filteredPreviousScans.length > 0 ? (
+              filteredPreviousScans.map((scan) => {
                 const isActive = activeFile?.id === scan.id;
                 const timeStr = new Date(scan.timestamp).toLocaleTimeString("fa-IR", {
                   hour: "2-digit",
@@ -1801,14 +2049,21 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
                       <FileText className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-blue-400" : "text-slate-500"}`} />
-                      <div className="flex flex-col text-right truncate min-w-0">
+                      <div className="flex flex-col text-right truncate min-w-0 flex-1">
                         <span className="text-[11px] font-bold truncate leading-tight" title={scan.file.name}>
                           {scan.file.name}
                         </span>
-                        <div className="flex gap-1.5 items-center text-[8.5px] text-slate-500 mt-1 font-mono">
-                          <span className="text-emerald-500 font-bold">{scan.transactions.length} ردیف</span>
-                          <span>•</span>
-                          <span>{timeStr}</span>
+                        <div className="flex items-center justify-between gap-1 mt-1 font-mono text-[8.5px]">
+                          <div className="flex gap-1.5 items-center text-slate-500">
+                            <span className="text-emerald-500 font-bold">{scan.transactions.length} ردیف</span>
+                            <span>•</span>
+                            <span>{timeStr}</span>
+                          </div>
+                          {scan.file.documentType && (
+                            <span className="bg-slate-800 text-indigo-400 border border-slate-700/60 rounded px-1 text-[8px] font-bold shrink-0 max-w-[70px] truncate" title={scan.file.documentType}>
+                              {scan.file.documentType}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1827,8 +2082,18 @@ export default function App() {
                 );
               })
             ) : (
-              <div className="px-3 py-4 text-center rounded-xl border border-dashed border-slate-800/40 text-[10px] text-slate-500 italic">
-                سندی اخیراً اسکن نشده است.
+              <div className="px-3 py-4 text-center rounded-xl border border-dashed border-slate-800/40 text-[10px] text-slate-500">
+                <p className="mb-2">سندی با این مشخصات یافت نشد.</p>
+                <button
+                  onClick={() => {
+                    setHistorySearchQuery("");
+                    setHistoryDocType("all");
+                    setHistoryDateRange("all");
+                  }}
+                  className="px-2 py-1 text-[9px] bg-slate-850 hover:bg-slate-800 hover:text-white text-slate-300 rounded transition"
+                >
+                  پاک کردن فیلترها
+                </button>
               </div>
             )}
           </div>
@@ -1959,36 +2224,52 @@ export default function App() {
       {/* Main Workspace Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Header toolbar */}
-        <header className={`h-12 border-b flex items-center justify-between px-4 lg:px-6 shrink-0 select-none transition-all duration-300 ${
-          isDarkMode ? "bg-slate-900/80 backdrop-blur-md border-slate-800 text-slate-100" : "bg-white/80 backdrop-blur-md border-slate-200 text-slate-800"
+        <header className={`h-11 border-b flex items-center justify-between px-3 lg:px-5 shrink-0 select-none transition-all duration-300 backdrop-blur-md ${
+          isDarkMode ? "bg-slate-900/75 border-slate-800/80 text-slate-100" : "bg-white/80 border-slate-200/60 text-slate-800"
         }`}>
-          <div className="flex items-center gap-3 md:gap-5">
-            <div className={`p-2 rounded-xl bg-gradient-to-br shadow-sm ${isDarkMode ? "from-blue-600 to-indigo-600 text-white" : "from-blue-500 to-indigo-500 text-white"}`}>
-              <FileJson className="w-4 h-4" />
-            </div>
-            <h1 className="text-[15px] font-black tracking-tight animate-fade-in" dir="ltr">
-              <span className="text-blue-500">ocr</span> Accounting
-            </h1>
-            <div className="hidden md:block h-6 w-px bg-slate-200 dark:bg-slate-700 mx-2"></div>
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold ${
-              activeFile?.status === "processing" 
-                ? isDarkMode ? "bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse" : "bg-amber-50 text-amber-700 border border-amber-200 animate-pulse" 
-                : isDarkMode ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" : "bg-blue-50 text-blue-700 border border-blue-200"
+          <div className="flex items-center gap-2 md:gap-4">
+            <div className={`p-1.5 rounded-lg bg-gradient-to-br shadow-sm ${
+              isDarkMode ? "from-blue-600/90 to-indigo-600/90 text-blue-100" : "from-blue-500 to-indigo-500 text-white"
             }`}>
-              {activeFile?.status === "processing" && <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>}
-              {activeFile?.status === "processing" ? "در حال تحلیل هوشمند..." : "آماده تفکیک خودکار اسناد"}
+              <FileJson className="w-3.5 h-3.5" />
+            </div>
+            <h1 className="text-[13px] font-black tracking-tight animate-fade-in flex items-center gap-1 font-sans" dir="ltr">
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-indigo-500">OCR</span>
+              <span className={isDarkMode ? "text-slate-300 font-bold" : "text-slate-800 font-bold"}>Accounting</span>
+            </h1>
+            <div className="hidden md:block h-4 w-px bg-slate-200 dark:bg-slate-800/80 mx-1"></div>
+            
+            {/* Extremely sleeker status pill */}
+            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold border transition-colors ${
+              activeFile?.status === "processing" 
+                ? isDarkMode ? "bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse" : "bg-amber-50 text-amber-700 border-amber-200 animate-pulse" 
+                : isDarkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+            }`}>
+              <span className="relative flex h-1.5 w-1.5">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  activeFile?.status === "processing" ? "bg-amber-400" : "bg-emerald-400"
+                }`}></span>
+                <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${
+                  activeFile?.status === "processing" ? "bg-amber-500" : "bg-emerald-500"
+                }`}></span>
+              </span>
+              <span>
+                {activeFile?.status === "processing" ? "در حال تحلیل هوشمند..." : "آماده تفکیک خودکار اسناد"}
+              </span>
             </span>
           </div>
 
-          <div className="flex items-center gap-2 md:gap-3">
+          <div className="flex items-center gap-1.5 md:gap-2">
             <button
               onClick={() => setIsAuditLogsOpen(true)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all border text-[11px] font-bold ${
-                isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600 hover:bg-slate-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:shadow-sm"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all border text-[10px] font-bold ${
+                isDarkMode 
+                  ? "bg-slate-800/40 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700" 
+                  : "bg-slate-50/50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
               }`}
               title="سیاهه رویدادها (گزارش‌گیری)"
             >
-              <Activity className="h-4 w-4" />
+              <Activity className="h-3.5 w-3.5 text-indigo-400 dark:text-indigo-500 shrink-0" />
               <span className="hidden sm:inline">سیاهه رویدادها</span>
             </button>
             <button
@@ -1996,55 +2277,52 @@ export default function App() {
                 setIsFileManagerOpen(true);
                 logEvent("مشاهده فایل‌ها", "کاربر بخش مدیریت فایل‌ها و وضعیت حافظه را باز کرد.");
               }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all border text-[11px] font-bold ${
-                isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600 hover:bg-slate-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:shadow-sm"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all border text-[10px] font-bold ${
+                isDarkMode 
+                  ? "bg-slate-800/40 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700" 
+                  : "bg-slate-50/50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
               }`}
               title="مدیریت اسناد و فایل‌ها (فضای ابری)"
             >
-              <HardDrive className="h-4 w-4" />
+              <HardDrive className="h-3.5 w-3.5 text-blue-400 dark:text-blue-500 shrink-0" />
               <span className="hidden sm:inline">مدیریت فایل‌ها</span>
             </button>
             {currentUser?.role === "admin" && (
               <button
                 onClick={() => handleOpenProtectedPanel("admin")}
-                className={`p-2 rounded-xl transition-all border ${
-                  isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600 hover:bg-slate-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:shadow-sm"
+                className={`p-1.5 rounded-lg transition-all border ${
+                  isDarkMode 
+                    ? "bg-slate-800/40 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700" 
+                    : "bg-slate-50/50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
                 }`}
                 title="پنل مدیریت سامانه"
               >
-                <Shield className="h-4 w-4" />
+                <Shield className="h-3.5 w-3.5 text-rose-400 dark:text-rose-500" />
               </button>
             )}
             <button
               onClick={() => handleOpenProtectedPanel("user")}
-              className={`p-2 rounded-xl transition-all border ${
-                isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-slate-600 hover:bg-slate-700" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:shadow-sm"
+              className={`p-1.5 rounded-lg transition-all border ${
+                isDarkMode 
+                  ? "bg-slate-800/40 border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-700" 
+                  : "bg-slate-50/50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
               }`}
               title="پنل کاربری و API Keys"
             >
-              <User className="h-4 w-4" />
+              <User className="h-3.5 w-3.5 text-emerald-400 dark:text-emerald-500" />
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all hidden sm:block"
+              className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg text-[10px] font-bold shadow-sm hover:shadow hover:-translate-y-0.5 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              آپلود فایل جدید
+              <Upload className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden xs:inline">آپلود سند جدید</span>
             </button>
           </div>
         </header>
 
         {/* Workspace body */}
-        {activeErpModuleId === 1 ? (
-          <FinancialAccountingModule isDarkMode={isDarkMode} showNotification={showNotification} />
-        ) : activeErpModuleId === 2 ? (
-          <TreasuryModule isDarkMode={isDarkMode} showNotification={showNotification} />
-        ) : activeErpModuleId === 3 ? (
-          <CommercialModule isDarkMode={isDarkMode} showNotification={showNotification} />
-        ) : activeErpModuleId === 4 ? (
-          <InventoryModule isDarkMode={isDarkMode} showNotification={showNotification} />
-        ) : activeErpModuleId === 5 ? (
-          <PayrollModule isDarkMode={isDarkMode} showNotification={showNotification} />
-        ) : (
+        {false ? null : (
           <div className="flex-1 overflow-y-auto p-4 flex flex-col">
           {guideOpen && (
             <div className={`p-4 shadow-sm animate-fade-in flex flex-col items-start gap-3 mb-4 shrink-0 rounded-xl border transition-all duration-300 ${
@@ -2394,6 +2672,16 @@ export default function App() {
                                       : "bg-blue-600 text-white rounded-tl-sm shadow-sm"
                                   }`}>
                                     <Markdown>{msg.text}</Markdown>
+                                    {msg.files && msg.files.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-2">
+                                        {msg.files.map((file, fIdx) => (
+                                          <div key={fIdx} className="flex items-center gap-1 bg-white/20 px-1.5 py-0.5 rounded text-[10px]">
+                                            <Paperclip className="w-3 h-3" />
+                                            <span className="truncate max-w-[100px]">{file.name}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                   <div className={`flex items-center gap-2 px-1 opacity-0 group-hover:opacity-100 transition-opacity ${msg.role === "user" ? "self-start" : "self-end"}`}>
                                     <button 
@@ -2463,7 +2751,30 @@ export default function App() {
                           )}
 
                           <div className="p-2 flex flex-col gap-2">
+                             {preExtractFiles.length > 0 && (
+                               <div className="flex flex-wrap gap-2 mb-1 px-1">
+                                  {preExtractFiles.map((file, idx) => (
+                                    <div key={idx} className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+                                      <FileText className="w-3.5 h-3.5" />
+                                      <span className="truncate max-w-[120px]">{file.name}</span>
+                                      <button onClick={() => setPreExtractFiles(prev => prev.filter((_, i) => i !== idx))} className="hover:text-red-500 mr-1">
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ))}
+                               </div>
+                             )}
                              <div className="flex items-center gap-2">
+                               <label className="cursor-pointer p-1.5 rounded-xl border transition-colors border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700">
+                                  <input 
+                                    type="file" 
+                                    className="hidden" 
+                                    multiple
+                                    accept="image/*,application/pdf"
+                                    onChange={handlePreExtractFilesUpload}
+                                  />
+                                  <Paperclip className="w-4 h-4" />
+                               </label>
                                <textarea
                                  rows={1}
                                  value={preExtractInput}
@@ -2474,19 +2785,19 @@ export default function App() {
                                      handleSendPreExtractChat();
                                    }
                                  }}
-                                 placeholder="درباره این سند بپرسید یا دستورالعمل بنویسید..."
+                                 placeholder="درباره این سند بپرسید یا فایل مستندات ضمیمه کنید..."
                                  className={`flex-1 bg-transparent text-[11px] outline-none px-2 resize-none ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}
                                />
                                <button 
                                  onClick={() => handleSendPreExtractChat()}
-                                 disabled={!preExtractInput.trim() || isPreExtractChatLoading}
+                                 disabled={(!preExtractInput.trim() && preExtractFiles.length === 0) || isPreExtractChatLoading}
                                  className={`p-1.5 rounded-xl shrink-0 transition-all ${
-                                   !preExtractInput.trim() || isPreExtractChatLoading 
+                                   (!preExtractInput.trim() && preExtractFiles.length === 0) || isPreExtractChatLoading 
                                     ? "opacity-50 cursor-not-allowed" 
                                     : "bg-blue-600 hover:bg-blue-500 text-white shadow-sm"
-                                 } ${isDarkMode && (!preExtractInput.trim() || isPreExtractChatLoading) ? "bg-slate-800 text-slate-500" : !isDarkMode && (!preExtractInput.trim() || isPreExtractChatLoading) ? "bg-slate-200 text-slate-400" : ""}`}
+                                 } ${isDarkMode && ((!preExtractInput.trim() && preExtractFiles.length === 0) || isPreExtractChatLoading) ? "bg-slate-800 text-slate-500" : !isDarkMode && ((!preExtractInput.trim() && preExtractFiles.length === 0) || isPreExtractChatLoading) ? "bg-slate-200 text-slate-400" : ""}`}
                                >
-                                  <Send className={`w-4 h-4 ${(!preExtractInput.trim() || isPreExtractChatLoading) ? "" : "text-white"}`} />
+                                  <Send className={`w-4 h-4 ${((!preExtractInput.trim() && preExtractFiles.length === 0) || isPreExtractChatLoading) ? "" : "text-white"}`} />
                                </button>
                              </div>
                              
@@ -2584,7 +2895,14 @@ export default function App() {
                                 ? (chatContext ? `${customPrompt}\n\n${chatContext}` : chatContext) 
                                 : chatContext;
 
-                              await processImageForExtraction(fileData.base64, fileData.name, fileData.mimeType, finalPrompt + "\n\nخلاصه تایید شده:\n" + verificationSummary);
+                              const allChatFiles = preExtractChat.reduce((acc, msg) => {
+                                if (msg.files && Array.isArray(msg.files)) {
+                                  acc.push(...msg.files);
+                                }
+                                return acc;
+                              }, [] as any[]);
+
+                              await processImageForExtraction(fileData.base64, fileData.name, fileData.mimeType, finalPrompt + "\n\nخلاصه تایید شده:\n" + verificationSummary, allChatFiles);
                             }}
                             className={`px-4.5 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/20 hover:-translate-y-0.5`}
                           >
@@ -2903,6 +3221,17 @@ export default function App() {
                       <Sheet className="h-3.5 w-3.5 text-emerald-500" />
                       <span>خروجی اکسل پیشرفته</span>
                     </button>
+                    <button
+                      onClick={() => handleTabChange("unified")}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 ${
+                        activeTab === "unified"
+                          ? isDarkMode ? "bg-indigo-900/40 text-indigo-400 shadow-sm" : "bg-white text-indigo-700 shadow-sm"
+                          : isDarkMode ? "text-slate-400 hover:text-[#f1f5f9]" : "text-slate-600 hover:text-slate-950"
+                      }`}
+                    >
+                      <Eye className="h-3.5 w-3.5 text-indigo-500" />
+                      <span>نمای یکپارچه ۳۶۰ درجه</span>
+                    </button>
                   </div>
 
                   <button
@@ -2915,7 +3244,191 @@ export default function App() {
                   </button>
                 </div>
 
-                {activeTab === "json" ? (
+                {activeTab === "unified" ? (
+                  /* Unified Tab */
+                  <div className={`rounded-xl border flex-1 flex flex-col overflow-hidden shadow-sm transition-all duration-300 ${
+                    isDarkMode ? "bg-[#1E293B] border-slate-800 text-slate-100" : "bg-white border-slate-200 text-[#1A1A1B]"
+                  }`}>
+                    {/* Header bar */}
+                    <div className={`p-4 border-b flex flex-wrap gap-4 items-center justify-between transition-colors duration-300 ${
+                      isDarkMode ? "bg-[#162032] border-slate-800" : "bg-slate-50 border-slate-200"
+                    }`}>
+                      <div className="flex items-center gap-2.5">
+                        <div className={`p-2 rounded-lg shrink-0 ${isDarkMode ? "bg-indigo-950/40 text-indigo-400" : "bg-indigo-50 text-indigo-600"}`}>
+                          <Eye className="h-5 w-5" />
+                        </div>
+                        <div className="text-right">
+                          <h4 className={`text-xs font-bold ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>نمای یکپارچه ۳۶۰ درجه سند مالی</h4>
+                          <p className={`text-[10px] mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>مشاهده تصویر فیزیکی سند، ویژگی‌ها و ساختار JSON در یک نگاه</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={copyJSONToClipboard}
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm flex items-center gap-1.5 transition cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>کپی کل JSON</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Dual Pane split view */}
+                    <div className="flex-1 flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x lg:divide-x-reverse divide-slate-200 dark:divide-slate-800 overflow-hidden min-h-0">
+                      
+                      {/* Pane 1: Document View and Characteristics */}
+                      <div className="flex-1 flex flex-col overflow-y-auto p-4 space-y-4">
+                        <div className="space-y-1 text-right">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">سند بارگذاری شده</span>
+                          <h5 className="text-xs font-black">پیش‌نمایش تصویر سند فیزیکی</h5>
+                        </div>
+
+                        {/* Interactive Preview Frame */}
+                        <div className={`p-4 rounded-xl border flex items-center justify-center min-h-[220px] max-h-[340px] overflow-hidden transition-colors ${
+                          isDarkMode ? "bg-slate-900/60 border-slate-800" : "bg-slate-50 border-slate-200"
+                        }`}>
+                          {!activeFile?.preview ? (
+                            <div className="flex flex-col items-center justify-center text-center text-slate-500 py-6">
+                               <FileJson className="h-12 w-12 mb-2 opacity-55 text-blue-400" />
+                               <span className="text-xs font-semibold truncate max-w-[200px]">{activeFile?.name}</span>
+                               <span className="text-[10px] opacity-70">سند دیجیتال (بدون تصویر فیزیکی)</span>
+                            </div>
+                          ) : activeFile.preview.startsWith("data:application/pdf") ? (
+                            <div className="flex flex-col items-center justify-center text-center text-slate-500 py-6">
+                               <FileText className="h-12 w-12 mb-2 opacity-55 text-blue-400" />
+                               <span className="text-xs font-semibold truncate max-w-[200px]">{activeFile?.name}</span>
+                               <span className="text-[10px] opacity-70">فایل PDF بارگذاری شده است</span>
+                               <a 
+                                 href={activeFile.preview} 
+                                 download={activeFile.name}
+                                 className="mt-3 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[9px] font-bold inline-flex items-center gap-1"
+                               >
+                                 <Download className="w-3 h-3" /> دانلود فایل PDF
+                               </a>
+                            </div>
+                          ) : (
+                            <div className="relative group max-h-[300px]">
+                              <img
+                                src={activeFile.preview}
+                                alt={activeFile.name}
+                                className="max-h-[280px] object-contain rounded-lg shadow-sm border border-slate-200 dark:border-slate-800"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-lg">
+                                <a
+                                  href={activeFile.preview}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold flex items-center gap-1"
+                                >
+                                  <ExternalLink className="w-3 h-3" /> نمایش اندازه بزرگ
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Characteristics/Properties Card */}
+                        <div className={`p-4 rounded-xl border space-y-3.5 text-right font-sans ${
+                          isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-slate-50 border-slate-200"
+                        }`}>
+                          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800/80 pb-2">
+                            <span className="text-[10px] text-slate-400">شناسنامه و ویژگی‌های سند (Document DNA)</span>
+                            <Info className="w-3.5 h-3.5 text-indigo-500" />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 text-[11px]">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-slate-400 text-[9.5px]">نام فایل:</span>
+                              <span className="font-bold truncate" title={activeFile?.name}>{activeFile?.name}</span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-slate-400 text-[9.5px]">نوع سند شناسایی‌شده:</span>
+                              <span className="font-bold text-indigo-400">
+                                {activeFile?.documentType || "نامشخص"}
+                              </span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-slate-400 text-[9.5px]">حجم فایل:</span>
+                              <span className="font-mono">{activeFile ? Math.round(activeFile.size / 1024) : 0} KB</span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-slate-400 text-[9.5px]">تعداد اقلام استخراج‌شده:</span>
+                              <span className="font-bold text-emerald-500 font-mono">{transactions.length} ردیف</span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-slate-400 text-[9.5px]">مدل پردازشگر:</span>
+                              <span className="font-bold text-amber-500">{selectedModel}</span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-slate-400 text-[9.5px]">کل توکن‌های مصرف‌شده:</span>
+                              <span className="font-mono">{activeFile?.tokensUsed || 0} توکن</span>
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* Pane 2: Extracted JSON */}
+                      <div className="flex-1 flex flex-col min-h-[300px] lg:min-h-0 overflow-hidden bg-[#1E1E1E]">
+                        
+                        {/* Header bar of JSON block */}
+                        <div className="px-4 py-2 border-b border-slate-800 bg-[#252526] flex justify-between items-center shrink-0">
+                          <span className="text-[10px] text-slate-400 font-bold font-sans">کدهای استخراج شده JSON</span>
+                          <div className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-[8.5px] text-slate-400 font-sans">همگام‌سازی زنده فعال است</span>
+                          </div>
+                        </div>
+
+                        {/* Textarea code block */}
+                        <div className="flex-1 relative flex flex-col overflow-hidden">
+                          {activeFile?.status === "processing" ? (
+                            <div className="absolute inset-0 bg-[#1E1E1E] flex flex-col items-center justify-center text-slate-400 select-none">
+                              <div className="h-6 w-6 animate-pulse rounded-full bg-blue-500 mb-2" />
+                              <span className="text-xs">در حال پردازش داده‌ها...</span>
+                            </div>
+                          ) : (
+                            <textarea
+                              value={rawJsonText}
+                              onChange={handleJsonTextChange}
+                              placeholder="// دیتایی هنوز استخراج نشده است"
+                              className="w-full flex-1 p-4 bg-[#1E1E1E] text-indigo-300 font-mono text-[11px] leading-relaxed outline-none border-none resize-none overflow-y-auto"
+                              dir="ltr"
+                            />
+                          )}
+                        </div>
+
+                        {/* JSON status footer */}
+                        <div className="p-3 bg-[#181818] border-t border-slate-800/80 text-[10px] select-none shrink-0 flex items-center justify-between">
+                          {jsonError ? (
+                            <span className="text-rose-400 flex items-center gap-1.5 font-bold">
+                              <AlertCircle className="h-3.5 w-3.5" />
+                              ساختار JSON نامعتبر است
+                            </span>
+                          ) : (
+                            <span className="text-emerald-400 flex items-center gap-1.5 font-bold">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              فرمت ساختار کاملاً معتبر است
+                            </span>
+                          )}
+                          <button
+                            onClick={() => {
+                              setConverterInputJson(rawJsonText);
+                              setIsConverterVerified(false);
+                              handleTabChange("converter");
+                            }}
+                            className="text-[9px] px-2 py-0.5 rounded bg-indigo-600/30 text-indigo-300 hover:bg-indigo-600/50 border border-indigo-500/30 transition cursor-pointer"
+                          >
+                            انتقال به اکسل
+                          </button>
+                        </div>
+
+                      </div>
+
+                    </div>
+                  </div>
+                ) : activeTab === "json" ? (
                   /* JSON Tab */
                   <div className="bg-[#1E1E1E] rounded-xl border border-slate-800 flex-1 flex flex-col overflow-hidden font-mono shadow-md">
                     {/* JSON Header Bar */}
@@ -5575,6 +6088,7 @@ export default function App() {
                            <th className="p-3 text-center">نقش</th>
                            <th className="p-3 text-center">وضعیت</th>
                            <th className="p-3 text-left">توکن مصرفی</th>
+                           <th className="p-3 text-center">فضای ذخیره‌سازی</th>
                            <th className="p-3 text-center">دسترسی</th>
                         </tr>
                      </thead>
@@ -5597,6 +6111,38 @@ export default function App() {
                                  }`}>{u.status === "active" ? "فعال" : "مسدود"}</span>
                               </td>
                               <td className="p-3 text-left font-mono text-[10px]">{u.apiUsage.toLocaleString("fa-IR")}</td>
+                              <td className="p-3 text-center">
+                                 <div className="flex items-center justify-center gap-1.5">
+                                    <span className="font-semibold text-[10px] text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded">
+                                       {(5 + (u.extraStorage || 0)).toLocaleString("fa-IR")} گیگ
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        const currentExtra = u.extraStorage || 0;
+                                        const input = prompt(`فضای اضافه تخصیص یافته به ${u.name} را وارد کنید (به گیگابایت):`, currentExtra.toString());
+                                        if (input !== null) {
+                                          const parsed = parseFloat(input);
+                                          if (!isNaN(parsed) && parsed >= 0) {
+                                            setUsers(prev => prev.map(usr => {
+                                              if (usr.id === u.id) {
+                                                return { ...usr, extraStorage: parsed };
+                                              }
+                                              return usr;
+                                            }));
+                                            logEvent("تخصیص فضا", `مدیر فضا اضافه کاربر «${u.name}» را به ${parsed} گیگابایت تغییر داد.`);
+                                            showNotification(`فضای اضافه کاربر «${u.name}» با موفقیت به ${parsed} گیگابایت تغییر یافت.`, "success");
+                                          } else {
+                                            showNotification("لطفاً یک عدد معتبر و بزرگتر یا مساوی صفر وارد کنید.", "error");
+                                          }
+                                        }
+                                      }}
+                                      className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 transition-colors"
+                                      title="تخصیص فضای اختصاصی"
+                                    >
+                                       <HardDrive className="w-3.5 h-3.5 text-indigo-500 hover:text-indigo-600" />
+                                    </button>
+                                 </div>
+                              </td>
                               <td className="p-3 text-center">
                                  <button
                                      onClick={() => {
@@ -5876,7 +6422,7 @@ export default function App() {
                 <div>
                   <h3 className="font-bold text-sm">فضای ابری و مدیریت اسناد</h3>
                   <p className={`text-[11px] mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    شما <span className="font-bold text-emerald-500">۵ گیگابایت</span> فضای ذخیره‌سازی رایگان دارید
+                    فضای شما: <span className="font-bold text-emerald-500">{(5 + (currentUser?.extraStorage || 0)).toLocaleString("fa-IR")} گیگابایت</span> {(currentUser?.extraStorage || 0) > 0 && `(۵ گیگ رایگان + ${currentUser.extraStorage} گیگ اضافه)`}
                   </p>
                 </div>
               </div>
@@ -5890,7 +6436,8 @@ export default function App() {
             
             <div className="flex-1 overflow-y-auto p-5">
               {(() => {
-                const MAX_STORAGE = 5 * 1024 * 1024 * 1024; // 5GB
+                const extraBytes = (currentUser?.extraStorage || 0) * 1024 * 1024 * 1024;
+                const MAX_STORAGE = 5 * 1024 * 1024 * 1024 + extraBytes; // 5GB + extra storage
                 const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file.size || 0), 0);
                 const percentUsed = Math.min(100, (usedStorage / MAX_STORAGE) * 100);
                 
@@ -5908,29 +6455,145 @@ export default function App() {
                     <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
                       <div className="flex items-center justify-between mb-2">
                         <span className={`text-xs font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>وضعیت حافظه</span>
-                        <span className="text-xs font-bold text-indigo-500" dir="ltr">{formatBytes(usedStorage)} / 5 GB</span>
+                        <span className="text-xs font-bold text-indigo-500" dir="ltr">
+                          {formatBytes(usedStorage)} / {(5 + (currentUser?.extraStorage || 0)).toLocaleString("fa-IR")} GB
+                        </span>
                       </div>
                       <div className={`w-full h-2.5 rounded-full overflow-hidden ${isDarkMode ? "bg-slate-700" : "bg-slate-200"}`}>
                         <div className={`h-full rounded-full transition-all duration-500 ${percentUsed > 90 ? "bg-rose-500" : percentUsed > 75 ? "bg-amber-500" : "bg-indigo-500"}`} style={{width: `${percentUsed}%`}}></div>
                       </div>
-                      <p className={`text-[10px] mt-2 text-left ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                        {percentUsed.toFixed(2)}% استفاده شده
-                      </p>
+                      <div className="flex items-center justify-between mt-2">
+                        <p className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                          {percentUsed.toFixed(2)}% استفاده شده
+                        </p>
+                        {(currentUser?.extraStorage || 0) > 0 && (
+                          <p className="text-[9px] font-bold text-emerald-500">
+                            شامل {currentUser.extraStorage.toLocaleString("fa-IR")} گیگابایت فضای اختصاصی ادمین
+                          </p>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="space-y-3">
-                       <h4 className="font-bold text-xs flex items-center gap-2">
-                          <Folder className="w-4 h-4 text-indigo-500" />
-                          لیست فایل‌های ذخیره شده
-                       </h4>
-                       {previousScans.length === 0 ? (
-                          <div className={`py-12 flex flex-col items-center justify-center border-2 border-dashed rounded-xl ${isDarkMode ? "border-slate-700 text-slate-500" : "border-slate-200 text-slate-400"}`}>
-                             <Folder className="w-12 h-12 mb-3 opacity-50" />
-                             <span className="text-sm font-bold">هیچ فایلی ذخیره نشده است.</span>
+                    <div className="space-y-4">
+                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-150 dark:border-slate-800">
+                         <h4 className="font-bold text-xs flex items-center gap-2">
+                            <Folder className="w-4 h-4 text-indigo-500" />
+                            لیست فایل‌های ذخیره شده
+                         </h4>
+                         
+                         {/* Add New Folder Button */}
+                         <button
+                           onClick={() => {
+                             const name = prompt("نام پوشه جدید را وارد کنید:");
+                             if (name && name.trim()) {
+                               const trimmed = name.trim();
+                               if (userDefinedFolders.includes(trimmed)) {
+                                 showNotification("پوشه‌ای با این نام از قبل وجود دارد.", "error");
+                               } else {
+                                 setUserDefinedFolders(prev => [...prev, trimmed]);
+                                 logEvent("ایجاد پوشه جدید", `کاربر پوشه جدید با نام «${trimmed}» ایجاد کرد.`);
+                                 showNotification(`پوشه «${trimmed}» با موفقیت ایجاد شد.`, "success");
+                               }
+                             }
+                           }}
+                           className={`px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-colors border ${
+                             isDarkMode 
+                               ? "bg-slate-850 border-slate-700 text-slate-300 hover:bg-slate-850" 
+                               : "bg-indigo-50 border-indigo-100 text-indigo-600 hover:bg-indigo-100/80"
+                           }`}
+                         >
+                           <PlusCircle className="w-3.5 h-3.5" />
+                           <span>ایجاد پوشه جدید</span>
+                         </button>
+                       </div>
+
+                       {/* Folders Pills/Tabs Filter List */}
+                       <div className="flex flex-wrap items-center gap-2 py-1.5" dir="rtl">
+                         <span className={`text-[10px] font-bold ml-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>فیلتر پوشه:</span>
+                         
+                         {/* 'All' filter */}
+                         <button
+                           onClick={() => setSelectedFolderFilter("all")}
+                           className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all ${
+                             selectedFolderFilter === "all"
+                               ? "bg-indigo-600 text-white shadow-sm"
+                               : isDarkMode
+                                 ? "bg-slate-800 text-slate-300 hover:bg-slate-750"
+                                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                           }`}
+                         >
+                           همه اسناد
+                         </button>
+
+                         {/* 'Uncategorized' filter */}
+                         <button
+                           onClick={() => setSelectedFolderFilter("uncategorized")}
+                           className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all ${
+                             selectedFolderFilter === "uncategorized"
+                               ? "bg-indigo-600 text-white shadow-sm"
+                               : isDarkMode
+                                 ? "bg-slate-800 text-slate-300 hover:bg-slate-750"
+                                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                           }`}
+                         >
+                           دسته‌بندی نشده
+                         </button>
+
+                         {/* User Defined Folders */}
+                         {userDefinedFolders.map(folder => {
+                           const isSelected = selectedFolderFilter === folder;
+                           return (
+                             <div key={folder} className="flex items-center gap-1">
+                               <button
+                                 onClick={() => setSelectedFolderFilter(folder)}
+                                 className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all flex items-center gap-1 ${
+                                   isSelected
+                                     ? "bg-indigo-600 text-white shadow-sm"
+                                     : isDarkMode
+                                       ? "bg-slate-800 text-slate-300 hover:bg-slate-750"
+                                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                 }`}
+                               >
+                                 <Folder className="w-3 h-3 text-current opacity-70" />
+                                 <span>{folder}</span>
+                               </button>
+
+                               {/* Delete Folder button */}
+                               <button
+                                 onClick={() => {
+                                   if (window.confirm(`آیا مطمئن هستید که می‌خواهید پوشه «${folder}» را حذف کنید؟ اسناد این پوشه حذف نمی‌شوند و فقط به حالت بدون پوشه برمی‌گردند.`)) {
+                                     setUserDefinedFolders(prev => prev.filter(f => f !== folder));
+                                     setPreviousScans(prev => prev.map(s => s.folder === folder ? { ...s, folder: undefined } : s));
+                                     if (selectedFolderFilter === folder) {
+                                       setSelectedFolderFilter("all");
+                                     }
+                                     logEvent("حذف پوشه", `کاربر پوشه «${folder}» را حذف کرد.`);
+                                     showNotification(`پوشه «${folder}» حذف شد.`, "info");
+                                   }
+                                 }}
+                                 className={`p-1 rounded-full transition-colors ${
+                                   isDarkMode ? "hover:bg-slate-800 text-slate-500 hover:text-rose-400" : "hover:bg-slate-200 text-slate-400 hover:text-rose-600"
+                                 }`}
+                                 title="حذف پوشه"
+                               >
+                                 <X className="w-3 h-3" />
+                               </button>
+                             </div>
+                           );
+                         })}
+                       </div>
+                       {fileManagerFilteredScans.length === 0 ? (
+                          <div className={`py-12 flex flex-col items-center justify-center border border-dashed rounded-xl ${isDarkMode ? "border-slate-800 text-slate-500" : "border-slate-200 text-slate-400"}`}>
+                             <Folder className="w-12 h-12 mb-3 opacity-30" />
+                             <span className="text-sm font-bold">
+                               {previousScans.length === 0 
+                                 ? "هیچ فایلی ذخیره نشده است." 
+                                 : `هیچ سندی در پوشه «${selectedFolderFilter === "uncategorized" ? "دسته‌بندی نشده" : selectedFolderFilter}» وجود ندارد.`}
+                             </span>
                           </div>
                        ) : (
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {previousScans.map((scan) => (
+                            {fileManagerFilteredScans.map((scan) => (
                                <div key={scan.id} className={`p-4 rounded-xl border flex flex-col justify-between transition-all hover:shadow-md ${isDarkMode ? "bg-slate-800/50 border-slate-700 hover:border-slate-600" : "bg-white border-slate-200 hover:border-slate-300"}`}>
                                  <div className="flex items-start gap-3 mb-4">
                                     <div className="w-10 h-10 shrink-0 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
@@ -5946,6 +6609,32 @@ export default function App() {
                                           <span className="text-[10px] text-slate-500" dir="ltr">{formatBytes(scan.file.size)}</span>
                                           <span className="text-[10px] text-slate-400">•</span>
                                           <span className="text-[10px] text-slate-500">{new Date(scan.timestamp).toLocaleDateString("fa-IR")}</span>
+                                       </div>
+                                       
+                                       {/* Folder Selector Dropdown */}
+                                       <div className="flex items-center gap-1.5 mt-2.5">
+                                         <span className={`text-[9px] font-bold shrink-0 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>پوشه:</span>
+                                         <div className="relative flex-1">
+                                           <select
+                                             value={scan.folder || ""}
+                                             onChange={(e) => {
+                                               const val = e.target.value;
+                                               setPreviousScans(prev => prev.map(s => s.id === scan.id ? { ...s, folder: val || undefined } : s));
+                                               showNotification(`سند «${scan.file.name}» به پوشه «${val || "دسته‌بندی نشده"}» انتقال یافت.`, "success");
+                                             }}
+                                             className={`w-full text-[10px] font-bold py-1 pr-1.5 pl-6 rounded-lg border outline-none appearance-none transition-all cursor-pointer ${
+                                               isDarkMode 
+                                                 ? "bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500 hover:bg-slate-950 focus:border-indigo-500" 
+                                                 : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:border-indigo-500 focus:border-indigo-500"
+                                             }`}
+                                           >
+                                             <option value="">دسته‌بندی نشده</option>
+                                             {userDefinedFolders.map(folder => (
+                                               <option key={folder} value={folder}>{folder}</option>
+                                             ))}
+                                           </select>
+                                           <Folder className="w-3 h-3 absolute left-1.5 top-1/2 -translate-y-1/2 text-indigo-450 pointer-events-none" />
+                                         </div>
                                        </div>
                                     </div>
                                  </div>
@@ -5985,68 +6674,14 @@ export default function App() {
           </div>
         </div>
       )}
-      
-      {isAuditLogsOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
-          <div 
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
-            onClick={() => setIsAuditLogsOpen(false)}
-          ></div>
-          
-          <div className={`relative w-full max-w-2xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up transform transition-all ${
-            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border border-slate-200 text-slate-800"
-          }`} dir="rtl">
-            <div className={`p-5 border-b flex items-center justify-between shrink-0 ${isDarkMode ? "bg-slate-800/80 border-slate-700" : "bg-slate-50/80 border-slate-100"}`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-xl ${isDarkMode ? "bg-slate-800 text-blue-400" : "bg-white shadow-sm text-blue-600"}`}>
-                  <Activity className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm">سیاهه رویدادها (Audit Logs)</h3>
-                  <p className={`text-[11px] mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>گزارش جامع تمامی اقدامات کاربر در سامانه</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsAuditLogsOpen(false)}
-                className={`p-2 rounded-lg transition-colors ${isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-200 text-slate-500 hover:text-slate-900"}`}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-5">
-               {auditLogs.length === 0 ? (
-                 <div className="flex flex-col items-center justify-center py-10 opacity-50">
-                    <Activity className="h-10 w-10 mb-3" />
-                    <span className="text-xs">هیچ رویدادی ثبت نشده است.</span>
-                 </div>
-               ) : (
-                 <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent dark:before:via-slate-700">
-                    {auditLogs.map((log) => {
-                       const d = new Date(log.timestamp);
-                       const timeStr = d.toLocaleTimeString("fa-IR");
-                       const dateStr = d.toLocaleDateString("fa-IR");
-                       return (
-                         <div key={log.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                            <div className="flex items-center justify-center w-8 h-8 rounded-full border-4 border-white dark:border-slate-900 bg-blue-500 text-white shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10">
-                               <Activity className="w-3.5 h-3.5" />
-                            </div>
-                            <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2rem)] p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm transition-transform hover:-translate-y-1">
-                               <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
-                                  <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400">{log.action}</h4>
-                                  <time className="text-[10px] text-slate-500 dark:text-slate-400 font-mono" dir="ltr">{dateStr} {timeStr}</time>
-                               </div>
-                               <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">{log.details}</p>
-                            </div>
-                         </div>
-                       );
-                    })}
-                 </div>
-               )}
-            </div>
-          </div>
-        </div>
-      )}
+
+      <AuditLogsModal 
+        isOpen={isAuditLogsOpen} 
+        onClose={() => setIsAuditLogsOpen(false)} 
+        auditLogs={auditLogs} 
+        isDarkMode={isDarkMode} 
+        onClearLogs={() => setAuditLogs([])} 
+      />
 
       {/* Floating Chatbot Widget */}
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-4" dir="rtl">

@@ -389,7 +389,7 @@ const InventoryModule: React.FC<InventoryModuleProps> = ({ isDarkMode, showNotif
         doc
       });
     } else {
-      showNotification("سند اصلی فیزیکی این تراکنش یافت نشد.", "warning");
+      showNotification("سند اصلی فیزیکی این تراکنش یافت نشد.", "error");
     }
   };
 

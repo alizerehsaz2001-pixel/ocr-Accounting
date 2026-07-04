@@ -1,7 +1,7 @@
 export enum WarehouseDocType {
   RECEIPT = "RECEIPT", // رسید انبار (ورود)
   REMITTANCE = "REMITTANCE", // حواله انبار (خروج)
-  ISSUE = "REMITTANCE", // سازگاری با سیستم‌های قدیمی‌تر (حواله)
+  ISSUE = "ISSUE", // سازگاری با سیستم‌های قدیمی‌تر (حواله)
   TRANSFER = "TRANSFER", // انتقال بین انبارها
   ADJUSTMENT = "ADJUSTMENT" // تعدیل (کسر و اضافه انبارگردانی)
 }
