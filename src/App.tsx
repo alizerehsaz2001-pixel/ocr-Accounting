@@ -70,6 +70,7 @@ import {
   UserX,
   Tag,
   ShieldAlert,
+  Copy,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -282,6 +283,9 @@ export default function App() {
   const [biometricTarget, setBiometricTarget] = useState<'admin' | 'user' | null>(null);
   const [biometricStatus, setBiometricStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
   const [biometricErrorMessage, setBiometricErrorMessage] = useState<string>("");
+
+  // AI Extraction Guide Tab State
+  const [activeGuideTab, setActiveGuideTab] = useState<'general' | 'bypass' | 'advanced'>('general');
   const [isBiometricSupported, setIsBiometricSupported] = useState<boolean>(false);
 
   // Check if browser/hardware has User Verifying Platform Authenticator
@@ -2257,6 +2261,122 @@ export default function App() {
                         </button>
                       </div>
 
+                      {/* Interactive Document Extraction Guide (راهنمای تعاملی استخراج اسناد) */}
+                      <div className={`p-4 rounded-xl border flex flex-col gap-3 transition-all duration-300 ${
+                        isDarkMode ? "bg-slate-950/50 border-slate-800/80" : "bg-white border-slate-200 shadow-sm"
+                      }`}>
+                        <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800/60" dir="rtl">
+                          <BookOpen className="w-4 h-4 text-blue-500" />
+                          <span className={`text-[11.5px] font-black ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>
+                            راهنمای هوشمند استخراج و صحت‌سنجی
+                          </span>
+                        </div>
+
+                        {/* Guide Navigation Sub-Tabs */}
+                        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-slate-100 dark:bg-slate-900" dir="rtl">
+                          {[
+                            { id: "general", label: "اصول کلی استخراج" },
+                            { id: "bypass", label: "انتقال خودکار (Bypass)" },
+                            { id: "advanced", label: "تکنیک‌های حرفه‌ای" }
+                          ].map((tab) => (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setActiveGuideTab(tab.id as any)}
+                              className={`flex-1 py-1 px-2 rounded-md text-[10px] font-bold transition-all text-center ${
+                                activeGuideTab === tab.id
+                                  ? isDarkMode
+                                    ? "bg-slate-800 text-blue-400 shadow-sm"
+                                    : "bg-white text-blue-600 shadow-sm border border-slate-200/50"
+                                  : isDarkMode
+                                    ? "text-slate-500 hover:text-slate-300"
+                                    : "text-slate-500 hover:text-slate-750"
+                              }`}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Guide Content Area */}
+                        <div className="text-right text-[11px] leading-relaxed" dir="rtl">
+                          {activeGuideTab === "general" && (
+                            <div className="flex flex-col gap-2">
+                              <p className={`${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                                سامانه هوش مصنوعی جمنی، ساختار اسناد حسابداری و فاکتورها را تحلیل کرده و آن‌ها را موازنه می‌کند:
+                              </p>
+                              <ul className="list-disc pr-4 space-y-1 text-slate-400 dark:text-slate-400 text-[10.5px]">
+                                <li>
+                                  <strong className={isDarkMode ? "text-slate-200" : "text-slate-700"}>تطابق حساب‌ها:</strong> فیلدهای بستانکار و بدهکار با تراز کل در انتهای سند صحت‌سنجی می‌شوند.
+                                </li>
+                                <li>
+                                  <strong className={isDarkMode ? "text-slate-200" : "text-slate-700"}>تفکیک اقلام:</strong> کدهای پیگیری، نام مشتری، مبالغ جزئی و ارزهای خارجی به دقت تفکیک می‌گردند.
+                                </li>
+                              </ul>
+                            </div>
+                          )}
+
+                          {activeGuideTab === "bypass" && (
+                            <div className="flex flex-col gap-2">
+                              <p className={`${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                                با فعال‌سازی <span className="font-bold text-blue-400">انتقال مستقیم</span>، فرآیند تایید دستی حذف می‌شود:
+                              </p>
+                              <ul className="list-disc pr-4 space-y-1 text-slate-400 dark:text-slate-400 text-[10.5px]">
+                                <li>خروجی‌های ساختاریافته فورا پس از استخراج به تب خام JSON فرستاده می‌شوند.</li>
+                                <li>نیاز به بررسی تک‌تک تیک‌های سبز نبوده و برای واردات دسته‌ای اسناد مالی فوق‌العاده کاربردی است.</li>
+                              </ul>
+                            </div>
+                          )}
+
+                          {activeGuideTab === "advanced" && (
+                            <div className="flex flex-col gap-2">
+                              <p className={`${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                                نحوه بهبود نتایج استخراج با پرامپت‌های تخصصی:
+                              </p>
+                              <ul className="list-disc pr-4 space-y-1 text-slate-400 dark:text-slate-400 text-[10.5px]">
+                                <li>
+                                  <strong className={isDarkMode ? "text-slate-200" : "text-slate-700"}>تصحیح مقادیر دست‌نویس:</strong> مدل <span className="text-purple-400 font-bold">Pro</span> توانایی ویژه‌ای در کشف ارقام مخدوش فاکتورهای فیزیکی دارد.
+                                </li>
+                                <li>
+                                  <strong className={isDarkMode ? "text-slate-200" : "text-slate-700"}>افزودن فیلد دلخواه:</strong> در گفتگو بنویسید <span className="font-mono text-blue-500 bg-blue-500/5 px-1 py-0.5 rounded text-[9.5px]">«یک ستون به نام شماره پیگیری اضافه کن»</span> تا خروجی JSON فورا با ساختار درخواستی همگام شود.
+                                </li>
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Interactive Preset Prompts for instant injection */}
+                        <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/60" dir="rtl">
+                          <span className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            الگوهای سریع آماده‌سازی سند (برای اعمال کلیک کنید):
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              { label: "🧾 فاکتور خرید", text: "این یک فاکتور خرید رسمی است؛ اقلام فاکتور، کد کالا، تعداد، مبلغ واحد و تخفیف‌ها را به طور دقیق در ساختار فیلدها استخراج کن." },
+                              { label: "💳 رسید بانکی", text: "این یک رسید پرداخت مالی است؛ شماره پیگیری، تاریخ دقیق، نام بانک فرستنده و گیرنده، شماره کارت و مبلغ کل را تفکیک کن." },
+                              { label: "✍️ سند دست‌نویس", text: "این یک فاکتور یا برگه حسابداری دست‌نویس است. با دقت بالایی فیلدهای متنی و ارقامی که ممکن است ناخوانا باشند را پردازش کرده و تطبیق بده." },
+                              { label: "🌐 فاکتور ارزی", text: "این فاکتور دارای مبادلات ارزی است. دقت کن که ستون نوع ارز و مبالغ معادل دقیقاً طبق واحد پول درج شده ثبت شوند." }
+                            ].map((preset, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  setPreExtractInput(preset.text);
+                                  showNotification(`الگوی «${preset.label}» بارگذاری شد. با دکمه ارسال می‌توانید گفتگو را شروع کنید.`, "info");
+                                }}
+                                className={`text-[9.5px] px-2 py-1 rounded-lg border transition-all duration-200 hover:-translate-y-0.5 ${
+                                  isDarkMode
+                                    ? "bg-slate-900 border-slate-800 hover:border-blue-500/50 text-slate-300 hover:text-blue-400"
+                                    : "bg-slate-50 border-slate-200 hover:border-blue-300 hover:bg-blue-50/30 text-slate-600 hover:text-blue-700"
+                                }`}
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Pre-extract Chat */}
                       <div className="flex flex-col gap-2 mt-2">
                         <span className={`text-[11px] font-black ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
@@ -2265,21 +2385,35 @@ export default function App() {
                         
                         <div className={`flex flex-col border rounded-2xl overflow-hidden ${isDarkMode ? "border-slate-800 bg-slate-900/40" : "border-slate-200 bg-slate-50/50"}`}>
                           {preExtractChat.length > 0 && (
-                            <div className={`p-4 max-h-[220px] overflow-y-auto flex flex-col gap-3 ${isDarkMode ? "bg-slate-900/80" : "bg-white"}`}>
+                            <div className={`p-4 max-h-[300px] overflow-y-auto flex flex-col gap-4 ${isDarkMode ? "bg-slate-900/80" : "bg-white"}`}>
                               {preExtractChat.map((msg, idx) => (
-                                <div key={idx} className={`flex flex-col gap-1 ${msg.role === "user" ? "items-start" : "items-end"}`}>
-                                  <div className={`px-3 py-2 rounded-2xl text-[11px] leading-relaxed max-w-[85%] ${
+                                <div key={idx} className={`flex flex-col gap-1.5 group ${msg.role === "user" ? "items-start" : "items-end"}`}>
+                                  <div className={`px-3.5 py-2.5 rounded-2xl text-[12px] leading-relaxed max-w-[85%] relative ${
                                     msg.role === "user" 
-                                      ? isDarkMode ? "bg-slate-800 text-slate-200 rounded-tr-sm" : "bg-slate-100 text-slate-700 rounded-tr-sm"
+                                      ? isDarkMode ? "bg-slate-800 text-slate-200 rounded-tr-sm" : "bg-slate-100 text-slate-800 rounded-tr-sm"
                                       : "bg-blue-600 text-white rounded-tl-sm shadow-sm"
                                   }`}>
                                     <Markdown>{msg.text}</Markdown>
+                                  </div>
+                                  <div className={`flex items-center gap-2 px-1 opacity-0 group-hover:opacity-100 transition-opacity ${msg.role === "user" ? "self-start" : "self-end"}`}>
+                                    <button 
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(msg.text);
+                                        showNotification("متن پیام کپی شد", "success");
+                                      }}
+                                      className={`p-1 rounded-md flex items-center justify-center transition-colors ${
+                                        isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500 hover:text-slate-700"
+                                      }`}
+                                      title="کپی متن پیام"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
                                   </div>
                                 </div>
                               ))}
                               {isPreExtractChatLoading && (
                                  <div className="flex justify-end">
-                                   <div className="bg-blue-600 text-white px-3 py-2 rounded-2xl rounded-tl-sm flex gap-1 items-center h-8">
+                                   <div className="bg-blue-600 text-white px-3 py-2.5 rounded-2xl rounded-tl-sm flex gap-1.5 items-center h-9">
                                       <div className="w-1.5 h-1.5 rounded-full bg-white/70 animate-bounce"></div>
                                       <div className="w-1.5 h-1.5 rounded-full bg-white/70 animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                                       <div className="w-1.5 h-1.5 rounded-full bg-white/70 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
@@ -2295,13 +2429,14 @@ export default function App() {
                               {[
                                 { label: "چه اطلاعاتی داره؟", text: "این سند چه اطلاعاتی داره و مربوط به چیه؟" },
                                 { label: "فاکتور ارزی", text: "این فاکتور ارزی است؛ لطفاً نوع ارز را در استخراج دقت کن." },
-                                { label: "دقت دست‌نویس", text: "سند دارای اقلام دست‌نویس است؛ روی خوانش ارقام مخدوش تمرکز کن." }
+                                { label: "دقت دست‌نویس", text: "سند دارای اقلام دست‌نویس است؛ روی خوانش ارقام مخدوش تمرکز کن." },
+                                { label: "خلاصه وضعیت", text: "یه خلاصه از اقلام اصلی و مبلغ نهایی بهم بده." }
                               ].map((chip, idx) => (
                                 <button
                                   key={idx}
                                   type="button"
                                   onClick={() => setPreExtractInput(chip.text)}
-                                  className={`px-2 py-1 rounded-xl text-[9.5px] font-bold border transition-all ${
+                                  className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
                                     isDarkMode
                                       ? "bg-slate-800/40 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                                       : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
@@ -2310,6 +2445,20 @@ export default function App() {
                                   {chip.label}
                                 </button>
                               ))}
+                            </div>
+                          )}
+
+                          {preExtractChat.length > 0 && (
+                            <div className="px-3 py-1.5 flex justify-end border-b border-slate-100 dark:border-slate-800/50">
+                               <button
+                                  onClick={() => setPreExtractChat([])}
+                                  className={`flex items-center gap-1 text-[9px] px-2 py-1 rounded-lg transition-colors ${
+                                    isDarkMode ? "text-slate-400 hover:text-red-400 hover:bg-red-900/20" : "text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                  }`}
+                               >
+                                 <Trash2 className="w-3 h-3" />
+                                 <span>پاک کردن تاریخچه</span>
+                               </button>
                             </div>
                           )}
 
