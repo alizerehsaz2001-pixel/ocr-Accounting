@@ -76,6 +76,9 @@ import {
   ShieldAlert,
   Copy,
   Paperclip,
+  CheckSquare,
+  Square,
+  Plus,
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -214,6 +217,10 @@ export default function App() {
   }, [userDefinedFolders]);
 
   const [selectedFolderFilter, setSelectedFolderFilter] = useState<string>("all");
+  const [fileManagerSearchQuery, setFileManagerSearchQuery] = useState<string>("");
+  const [fileManagerSortBy, setFileManagerSortBy] = useState<string>("newest");
+  const [fileManagerTypeFilter, setFileManagerTypeFilter] = useState<string>("all");
+  const [selectedScanIds, setSelectedScanIds] = useState<string[]>([]);
 
   const [historySearchQuery, setHistorySearchQuery] = useState<string>("");
   const [historyDocType, setHistoryDocType] = useState<string>("all");
@@ -280,12 +287,53 @@ export default function App() {
   }, [previousScans, historySearchQuery, historyDocType, historyDateRange]);
 
   const fileManagerFilteredScans = useMemo(() => {
-    return previousScans.filter(scan => {
-      if (selectedFolderFilter === "all") return true;
-      if (selectedFolderFilter === "uncategorized") return !scan.folder;
-      return scan.folder === selectedFolderFilter;
+    let result = previousScans.filter(scan => {
+      // 1. Folder filter
+      if (selectedFolderFilter !== "all") {
+        if (selectedFolderFilter === "uncategorized") {
+          if (scan.folder) return false;
+        } else if (scan.folder !== selectedFolderFilter) {
+          return false;
+        }
+      }
+      
+      // 2. Search query filter
+      if (fileManagerSearchQuery.trim()) {
+        const query = fileManagerSearchQuery.toLowerCase();
+        const nameMatch = (scan.file?.name || "").toLowerCase().includes(query);
+        const docTypeMatch = (scan.file?.documentType || "").toLowerCase().includes(query);
+        const analysisMatch = (scan.file?.documentAnalysis || "").toLowerCase().includes(query);
+        if (!nameMatch && !docTypeMatch && !analysisMatch) return false;
+      }
+      
+      // 3. Type filter
+      if (fileManagerTypeFilter !== "all") {
+        const isPdf = scan.file?.name?.toLowerCase().endsWith(".pdf") || scan.file?.preview?.startsWith("data:application/pdf");
+        if (fileManagerTypeFilter === "pdf" && !isPdf) return false;
+        if (fileManagerTypeFilter === "image" && isPdf) return false;
+      }
+      
+      return true;
     });
-  }, [previousScans, selectedFolderFilter]);
+    
+    // 4. Sorting
+    result.sort((a, b) => {
+      if (fileManagerSortBy === "newest") {
+        return b.timestamp - a.timestamp;
+      } else if (fileManagerSortBy === "oldest") {
+        return a.timestamp - b.timestamp;
+      } else if (fileManagerSortBy === "largest") {
+        return (b.file?.size || 0) - (a.file?.size || 0);
+      } else if (fileManagerSortBy === "smallest") {
+        return (a.file?.size || 0) - (b.file?.size || 0);
+      } else if (fileManagerSortBy === "alphabetical") {
+        return (a.file?.name || "").localeCompare(b.file?.name || "", 'fa');
+      }
+      return 0;
+    });
+    
+    return result;
+  }, [previousScans, selectedFolderFilter, fileManagerSearchQuery, fileManagerTypeFilter, fileManagerSortBy]);
 
   // AI Model Selection & Daily Quota States
   const [selectedModel, setSelectedModel] = useState<string>(() => {
@@ -3693,35 +3741,35 @@ export default function App() {
                       : "bg-white border-slate-200 text-[#1A1A1B]"
                   }`}>
                     {/* Header Summary */}
-                    <div className={`p-5 md:p-6 border-b flex flex-col gap-5 transition-colors duration-300 ${
+                    <div className={`p-4 md:p-5 border-b flex flex-col gap-4 transition-colors duration-300 ${
                       isDarkMode ? "bg-[#111827]/80 border-slate-800/80" : "bg-slate-50 border-slate-200"
                     }`}>
                       {/* Top Row with Main Title and Information */}
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex items-center gap-3.5">
-                          <div className={`p-2.5 rounded-2xl shrink-0 shadow-sm ${
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-xl shrink-0 shadow-sm ${
                             isDarkMode 
                               ? "bg-blue-500/10 text-blue-400 border border-blue-500/15" 
                               : "bg-blue-50 text-blue-600 border border-blue-100"
                           }`}>
-                            <Sparkles className="h-6 w-6 animate-pulse" />
+                            <Sparkles className="h-5 w-5 animate-pulse" />
                           </div>
                           <div>
                             <h4 className={`text-sm font-black tracking-tight ${isDarkMode ? "text-slate-100" : "text-slate-900"}`}>
-                              تحلیل صحت‌سنجی و میزان اطمینان استخراج داده‌ها
+                              تحلیل صحت‌سنجی و میزان اطمینان استخراج
                             </h4>
-                            <p className={`text-[11px] mt-1 font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                              کنترل خودکار همخوانی ارقام ریاضی، کیفیت قلم نوری هوش مصنوعی و تطابق تراز مالی اسناد
+                            <p className={`text-[10px] mt-0.5 font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              کنترل همخوانی ارقام، کیفیت قلم نوری و تطابق تراز مالی
                             </p>
                           </div>
                         </div>
 
                         {/* Quick indicator badge */}
                         <div className="flex items-center gap-2 self-start md:self-auto">
-                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${
                             isDarkMode ? "bg-[#0b0f19] text-slate-400 border border-slate-850" : "bg-white text-slate-500 border border-slate-200/80"
                           }`}>
-                            سند جاری: <span className="font-mono text-blue-500 font-extrabold">{activeFile.name}</span>
+                            سند: <span className="font-mono text-blue-500 font-extrabold">{activeFile.name}</span>
                           </span>
                         </div>
                       </div>
@@ -3756,41 +3804,41 @@ export default function App() {
                         const isBalanced = count > 0 && sumDebit === sumCredit;
 
                         return (
-                          <div className="flex flex-col gap-5 w-full">
+                          <div className="flex flex-col gap-4 w-full">
                             {/* Bento Grid of analysis metrics */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 w-full">
                             
                             {/* Card 1: Average confidence */}
                             <motion.div
-                              whileHover={{ y: -3, scale: 1.01 }}
+                              whileHover={{ y: -2, scale: 1.01 }}
                               onClick={() => setFilterConfidence(filterConfidence === "high" ? "all" : "high")}
-                              className={`border p-4 rounded-2xl shadow-sm flex flex-col justify-between cursor-pointer transition-all duration-300 ${
+                              className={`border p-3.5 rounded-xl shadow-sm flex flex-col justify-between cursor-pointer transition-all duration-300 ${
                                 filterConfidence === "high"
-                                  ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-500/10"
+                                  ? "bg-emerald-600 border-emerald-500 text-white shadow-emerald-500/10"
                                   : isDarkMode 
                                     ? "bg-[#0b0f19] border-slate-850 hover:border-slate-750" 
                                     : "bg-white border-slate-200/90 hover:border-slate-300"
                               }`}
                               title="کلیک جهت فیلتر ردیف‌های با دقت بالا"
                             >
-                              <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center justify-between mb-1.5">
                                 <span className={`text-[10px] font-black tracking-wide ${filterConfidence === "high" ? "text-emerald-100" : "text-slate-400"}`}>
                                   میانگین صحت استخراج (OCR)
                                 </span>
                                 <div className={`p-1.5 rounded-lg ${filterConfidence === "high" ? "bg-emerald-500" : isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
-                                  <TrendingUp className={`h-4 w-4 ${filterConfidence === "high" ? "text-white" : "text-blue-500"}`} />
+                                  <TrendingUp className={`h-3.5 w-3.5 ${filterConfidence === "high" ? "text-white" : "text-blue-500"}`} />
                                 </div>
                               </div>
                               
-                              <div className="flex items-baseline gap-1 my-2">
-                                <span className="text-3xl font-black font-mono tracking-tight">
+                              <div className="flex items-baseline gap-1 my-1.5">
+                                <span className="text-2xl font-black font-mono tracking-tight">
                                   {avgScore.toLocaleString("fa-IR")}
                                 </span>
-                                <span className="text-sm font-bold">%</span>
+                                <span className="text-xs font-bold">%</span>
                               </div>
 
-                              <div className="mt-2 w-full">
-                                <div className={`w-full rounded-full h-2 overflow-hidden ${
+                              <div className="mt-1.5 w-full">
+                                <div className={`w-full rounded-full h-1.5 overflow-hidden ${
                                   filterConfidence === "high" ? "bg-emerald-700" : isDarkMode ? "bg-slate-800" : "bg-slate-100"
                                 }`}>
                                   <div 
@@ -3800,8 +3848,8 @@ export default function App() {
                                     style={{ width: `${avgScore}%` }} 
                                   />
                                 </div>
-                                <div className="flex justify-between items-center mt-2.5">
-                                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
+                                <div className="flex justify-between items-center mt-2">
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
                                     filterConfidence === "high" ? "bg-emerald-500 text-white" : ratingBg
                                   }`}>
                                     {ratingLabel}
@@ -3815,8 +3863,8 @@ export default function App() {
 
                             {/* Card 2: Accounting balance status */}
                             <motion.div
-                              whileHover={{ y: -3, scale: 1.01 }}
-                              className={`border p-4 rounded-2xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
+                              whileHover={{ y: -2, scale: 1.01 }}
+                              className={`border p-3.5 rounded-xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
                                 isBalanced 
                                   ? isDarkMode 
                                     ? "bg-[#0b0f19] border-emerald-950/80 hover:border-emerald-900" 
@@ -3826,56 +3874,57 @@ export default function App() {
                                     : "bg-rose-50/20 border-rose-200/70"
                               }`}
                             >
-                              <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center justify-between mb-1.5">
                                 <span className="text-[10px] font-black tracking-wide text-slate-400">
                                   تراز حسابداری (دو طرفه)
                                 </span>
                                 <div className="relative flex items-center justify-center">
-                                  <div className={`absolute h-3 w-3 rounded-full opacity-40 animate-ping ${
+                                  <div className={`absolute h-2.5 w-2.5 rounded-full opacity-40 animate-ping ${
                                     isBalanced ? "bg-emerald-500" : "bg-rose-500"
                                   }`} />
-                                  <div className={`h-2.5 w-2.5 rounded-full relative ${
+                                  <div className={`h-2 w-2 rounded-full relative ${
                                     isBalanced ? "bg-emerald-500" : "bg-rose-500"
                                   }`} />
                                 </div>
                               </div>
 
-                              <div className="flex flex-col gap-1.5 my-2">
-                                <div className="flex items-center justify-between text-[11px] font-medium text-slate-500">
+                              <div className="flex flex-col gap-1.5 my-1.5">
+                                <div className="flex items-center justify-between text-[10px] font-medium text-slate-500">
                                   <span>جمع بدهکار:</span>
                                   <span className="font-extrabold font-mono text-slate-600 dark:text-slate-300" dir="ltr">
-                                    {sumDebit.toLocaleString("fa-IR")} <span className="text-[9px] font-normal">ریال</span>
+                                    {sumDebit.toLocaleString("fa-IR")} <span className="text-[8px] font-normal">ریال</span>
                                   </span>
                                 </div>
-                                <div className="flex items-center justify-between text-[11px] font-medium text-slate-500">
+                                <div className="flex items-center justify-between text-[10px] font-medium text-slate-500">
                                   <span>جمع بستانکار:</span>
                                   <span className="font-extrabold font-mono text-slate-600 dark:text-slate-300" dir="ltr">
-                                    {sumCredit.toLocaleString("fa-IR")} <span className="text-[9px] font-normal">ریال</span>
+                                    {sumCredit.toLocaleString("fa-IR")} <span className="text-[8px] font-normal">ریال</span>
                                   </span>
                                 </div>
                               </div>
 
-                              <div className={`mt-2 p-2 rounded-xl border flex items-center gap-2 ${
+                              <div className={`mt-1.5 p-1.5 rounded-lg border flex items-center gap-1.5 ${
                                 isBalanced 
                                   ? isDarkMode ? "bg-emerald-950/15 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-800" 
                                   : isDarkMode ? "bg-rose-950/15 border-rose-900/30 text-rose-400" : "bg-rose-50 border-rose-100 text-rose-800"
                               }`}>
                                 {isBalanced ? (
                                   <>
-                                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                                    <div className="text-[9px] leading-relaxed">
-                                      <span className="font-black block">موازنه تراز است</span>
-                                      <span className="opacity-80">هیچ مغایرتی در ارقام دیده نشد</span>
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                                    <div className="text-[9px] leading-tight flex-1 flex flex-col justify-center">
+                                      <span className="font-black">موازنه برقرار است</span>
                                     </div>
                                   </>
                                 ) : (
                                   <>
-                                    <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 animate-pulse" />
-                                    <div className="text-[9px] leading-relaxed">
-                                      <span className="font-black block text-rose-600 dark:text-rose-400">اختلاف در تراز مالی</span>
-                                      <span className="font-bold font-mono block mt-0.5 text-right text-[10px]" dir="ltr">
-                                        {(Math.abs(sumDebit - sumCredit)).toLocaleString("fa-IR")} ریال
-                                      </span>
+                                    <AlertTriangle className="h-3.5 w-3.5 text-rose-500 shrink-0 animate-pulse" />
+                                    <div className="text-[9px] leading-tight flex-1 flex flex-col justify-center">
+                                      <div className="flex justify-between">
+                                        <span className="font-black text-rose-600 dark:text-rose-400">اختلاف تراز</span>
+                                        <span className="font-bold font-mono text-[9px]" dir="ltr">
+                                          {(Math.abs(sumDebit - sumCredit)).toLocaleString("fa-IR")}
+                                        </span>
+                                      </div>
                                     </div>
                                   </>
                                 )}
@@ -3884,22 +3933,22 @@ export default function App() {
 
                             {/* Card 3: Quality Breakdown / distribution */}
                             <motion.div
-                              whileHover={{ y: -3, scale: 1.01 }}
-                              className={`border p-4 rounded-2xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
+                              whileHover={{ y: -2, scale: 1.01 }}
+                              className={`border p-3.5 rounded-xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
                                 isDarkMode ? "bg-[#0b0f19] border-slate-850" : "bg-white border-slate-200/90"
                               }`}
                             >
-                              <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center justify-between mb-1.5">
                                 <span className="text-[10px] font-black tracking-wide text-slate-400">
                                   توزیع کیفیت استخراج داده‌ها
                                 </span>
                                 <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
-                                  <Coins className="h-4 w-4 text-amber-500" />
+                                  <Coins className="h-3.5 w-3.5 text-amber-500" />
                                 </div>
                               </div>
 
-                              <div className="my-2">
-                                <div className={`flex h-2.5 w-full rounded-full overflow-hidden ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+                              <div className="my-1.5">
+                                <div className={`flex h-2 w-full rounded-full overflow-hidden ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
                                   <div 
                                     className="bg-emerald-500 transition-all duration-500 hover:opacity-90" 
                                     style={{ width: `${count > 0 ? (excellentConfidenceCount / count) * 100 : 0}%` }} 
@@ -3922,7 +3971,7 @@ export default function App() {
                                 <button
                                   type="button"
                                   onClick={() => setFilterConfidence(filterConfidence === "high" ? "all" : "high")}
-                                  className={`flex flex-col items-center p-1.5 rounded-xl transition-all duration-200 ${
+                                  className={`flex flex-col items-center p-1 rounded-lg transition-all duration-200 ${
                                     filterConfidence === "high" 
                                       ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 font-black scale-105" 
                                       : "text-emerald-500 hover:bg-emerald-500/5 border border-transparent"
@@ -3930,13 +3979,13 @@ export default function App() {
                                   title="فیلتر تراکنش‌های با کیفیت عالی"
                                 >
                                   <span className="opacity-70 text-[8px] font-sans">عالی</span>
-                                  <span className="text-sm font-extrabold mt-0.5">{excellentConfidenceCount.toLocaleString("fa-IR")}</span>
+                                  <span className="text-xs font-extrabold mt-0.5">{excellentConfidenceCount.toLocaleString("fa-IR")}</span>
                                 </button>
                                 
                                 <button
                                   type="button"
                                   onClick={() => setFilterConfidence(filterConfidence === "medium" ? "all" : "medium")}
-                                  className={`flex flex-col items-center p-1.5 rounded-xl transition-all duration-200 ${
+                                  className={`flex flex-col items-center p-1 rounded-lg transition-all duration-200 ${
                                     filterConfidence === "medium" 
                                       ? "bg-amber-500/15 border border-amber-500/30 text-amber-500 font-black scale-105" 
                                       : "text-amber-500 hover:bg-amber-500/5 border border-transparent"
@@ -3944,13 +3993,13 @@ export default function App() {
                                   title="فیلتر تراکنش‌های متوسط"
                                 >
                                   <span className="opacity-70 text-[8px] font-sans">متوسط</span>
-                                  <span className="text-sm font-extrabold mt-0.5">{mediumConfidenceCount.toLocaleString("fa-IR")}</span>
+                                  <span className="text-xs font-extrabold mt-0.5">{mediumConfidenceCount.toLocaleString("fa-IR")}</span>
                                 </button>
 
                                 <button
                                   type="button"
                                   onClick={() => setFilterConfidence(filterConfidence === "low" ? "all" : "low")}
-                                  className={`flex flex-col items-center p-1.5 rounded-xl transition-all duration-200 ${
+                                  className={`flex flex-col items-center p-1 rounded-lg transition-all duration-200 ${
                                     filterConfidence === "low" 
                                       ? "bg-rose-500/15 border border-rose-500/30 text-rose-500 font-black scale-105" 
                                       : "text-rose-500 hover:bg-rose-500/5 border border-transparent"
@@ -3958,24 +4007,24 @@ export default function App() {
                                   title="فیلتر تراکنش‌های ضعیف"
                                 >
                                   <span className="opacity-70 text-[8px] font-sans font-medium">ضعیف</span>
-                                  <span className="text-sm font-extrabold mt-0.5">{lowConfidenceCount.toLocaleString("fa-IR")}</span>
+                                  <span className="text-xs font-extrabold mt-0.5">{lowConfidenceCount.toLocaleString("fa-IR")}</span>
                                 </button>
                               </div>
                             </motion.div>
 
                             {/* Card 4: Quick Actions & Reset filters */}
                             <motion.div
-                              whileHover={{ y: -3, scale: 1.01 }}
-                              className={`border p-4 rounded-2xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
+                              whileHover={{ y: -2, scale: 1.01 }}
+                              className={`border p-3.5 rounded-xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
                                 isDarkMode ? "bg-[#0b0f19] border-slate-850" : "bg-white border-slate-200/90"
                               }`}
                             >
-                              <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center justify-between mb-1.5">
                                 <span className="text-[10px] font-black tracking-wide text-slate-400">
-                                  ابزار بازبینی سریع فیلترها
+                                  ابزار بازبینی سریع
                                 </span>
                                 <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
-                                  <Scale className="h-4 w-4 text-purple-500" />
+                                  <Scale className="h-3.5 w-3.5 text-purple-500" />
                                 </div>
                               </div>
 
@@ -3984,29 +4033,29 @@ export default function App() {
                                   <button
                                     type="button"
                                     onClick={() => setFilterConfidence(filterConfidence === "low" ? "all" : "low")}
-                                    className={`w-full text-right p-1.5 px-2.5 rounded-xl border flex items-center justify-between text-[10px] font-bold transition-all ${
+                                    className={`w-full text-right p-1 px-2 rounded-lg border flex items-center justify-between text-[10px] font-bold transition-all ${
                                       filterConfidence === "low"
-                                        ? "bg-rose-500 border-rose-650 text-white shadow-md shadow-rose-500/10"
-                                        : "bg-rose-500/10 border-rose-500/20 text-rose-500 hover:bg-rose-500/25"
+                                        ? "bg-rose-500 border-rose-600 text-white shadow-sm shadow-rose-500/10"
+                                        : "bg-rose-500/10 border-rose-500/20 text-rose-500 hover:bg-rose-500/20"
                                     }`}
                                   >
                                     <div className="flex items-center gap-1.5">
                                       <AlertTriangle className="h-3.5 w-3.5 animate-pulse" />
-                                      <span>نمایش {lowConfidenceCount.toLocaleString("fa-IR")} ردیف مشکوک</span>
+                                      <span>نمایش {lowConfidenceCount.toLocaleString("fa-IR")} مورد</span>
                                     </div>
-                                    <span className="bg-rose-500 text-white text-[9px] font-mono px-1.5 py-0.5 rounded-md">بررسی</span>
+                                    <span className="bg-rose-500 text-white text-[8px] px-1.5 py-0.5 rounded-md">بررسی</span>
                                   </button>
                                 ) : (
-                                  <div className="w-full text-right p-1.5 px-2.5 rounded-xl border border-emerald-500/15 bg-emerald-500/5 text-emerald-500 text-[10px] font-bold flex items-center gap-1.5 select-none">
-                                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
-                                    <span>هیچ ردیف مشکوکی یافت نشد</span>
+                                  <div className="w-full text-right p-1 px-2 rounded-lg border border-emerald-500/15 bg-emerald-500/5 text-emerald-500 text-[10px] font-bold flex items-center gap-1.5 select-none">
+                                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+                                    <span>بدون ردیف مشکوک</span>
                                   </div>
                                 )}
 
                                 {countEdited > 0 && (
-                                  <div className="p-1.5 px-2.5 rounded-xl border border-amber-500/15 bg-amber-500/5 text-amber-500 text-[10px] font-bold flex items-center gap-1.5">
-                                    <FileEdit className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
-                                    <span>{countEdited.toLocaleString("fa-IR")} ردیف اصلاح شده دستی</span>
+                                  <div className="p-1 px-2 rounded-lg border border-amber-500/15 bg-amber-500/5 text-amber-500 text-[10px] font-bold flex items-center gap-1.5">
+                                    <FileEdit className="h-3.5 w-3.5 text-amber-500" />
+                                    <span>{countEdited.toLocaleString("fa-IR")} ردیف ویرایش شده</span>
                                   </div>
                                 )}
                               </div>
@@ -4014,15 +4063,15 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={() => setFilterConfidence("all")}
-                                className={`w-full py-2 text-center text-xs font-black rounded-xl transition-all duration-200 border flex items-center justify-center gap-1.5 ${
+                                className={`w-full py-1.5 text-center text-[10px] font-black rounded-lg transition-all duration-200 border flex items-center justify-center gap-1.5 ${
                                   filterConfidence === "all"
-                                    ? "bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/10"
+                                    ? "bg-blue-600 border-blue-600 text-white shadow-sm"
                                     : isDarkMode 
                                       ? "bg-slate-800 hover:bg-slate-750 border-slate-700 text-slate-300" 
                                       : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
                                 }`}
                               >
-                                <span>کل تراکنش‌ها ({count.toLocaleString("fa-IR")} ردیف)</span>
+                                <span>کل تراکنش‌ها ({count.toLocaleString("fa-IR")})</span>
                                 {filterConfidence !== "all" && (
                                   <span className="text-[8px] bg-blue-500/10 text-blue-500 dark:bg-white/10 dark:text-blue-300 px-1 py-0.5 rounded-md">لغو فیلتر</span>
                                 )}
@@ -4032,84 +4081,84 @@ export default function App() {
                           </div>
 
                           {/* Smart Extraction Quality & Validation Dashboard */}
-                          <div className={`p-5 rounded-2xl border transition-all duration-300 ${
+                          <div className={`p-4 rounded-xl border transition-all duration-300 ${
                             isDarkMode ? "bg-[#111827]/40 border-slate-800" : "bg-slate-50/50 border-slate-200"
                           }`}>
                             {/* Tab Headers */}
-                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3 mb-4 font-sans">
+                            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-2.5 mb-3 font-sans">
                               <div className="flex items-center gap-2">
                                 <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
-                                  <ShieldAlert className="h-4 w-4" />
+                                  <ShieldAlert className="h-3.5 w-3.5" />
                                 </div>
-                                <span className={`text-xs font-black ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>داشبورد هوشمند تحلیل و اصلاح کیفیت استخراج</span>
+                                <span className={`text-[11px] font-black ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>داشبورد هوشمند کیفی</span>
                               </div>
-                              <div className="flex bg-slate-200/55 dark:bg-slate-900/60 p-1 rounded-xl">
+                              <div className="flex bg-slate-200/55 dark:bg-slate-900/60 p-1 rounded-lg gap-1">
                                 <button
                                   type="button"
                                   onClick={() => setActiveValidationSubTab('threshold')}
-                                  className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${
+                                  className={`px-3 py-1 text-[9px] font-bold rounded-md transition-all ${
                                     activeValidationSubTab === 'threshold'
                                       ? (isDarkMode ? "bg-blue-600 text-white" : "bg-white text-blue-600 shadow-sm")
                                       : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                                   }`}
                                 >
-                                  شبیه‌ساز آستانه دقت ({minConfidenceThreshold}٪)
+                                  شبیه‌ساز آستانه ({minConfidenceThreshold}٪)
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setActiveValidationSubTab('risk')}
-                                  className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${
+                                  className={`px-3 py-1 text-[9px] font-bold rounded-md transition-all ${
                                     activeValidationSubTab === 'risk'
                                       ? (isDarkMode ? "bg-blue-600 text-white" : "bg-white text-blue-600 shadow-sm")
                                       : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                                   }`}
                                 >
-                                  آنالیز هوشمند مخاطرات
+                                  مخاطرات
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setActiveValidationSubTab('fields')}
-                                  className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${
+                                  className={`px-3 py-1 text-[9px] font-bold rounded-md transition-all ${
                                     activeValidationSubTab === 'fields'
                                       ? (isDarkMode ? "bg-blue-600 text-white" : "bg-white text-blue-600 shadow-sm")
                                       : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                                   }`}
                                 >
-                                  تکمیل فیلدهای کلیدی
+                                  سلامت فیلدها
                                 </button>
                               </div>
                             </div>
 
                             {/* Tab Contents */}
                             {activeValidationSubTab === 'threshold' && (
-                              <div className="space-y-4 animate-in fade-in duration-300 font-sans text-right" dir="rtl">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                  <div className="space-y-1.5 flex-1 text-right">
+                              <div className="space-y-3 animate-in fade-in duration-300 font-sans text-right" dir="rtl">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                  <div className="space-y-1 flex-1 text-right">
                                     <h5 className={`text-xs font-bold ${isDarkMode ? "text-slate-100" : "text-slate-850"}`}>
-                                      تنظیم حداقل ضریب اطمینان قابل قبول (حد فیلتر هوشمند)
+                                      تنظیم حداقل ضریب اطمینان قابل قبول
                                     </h5>
                                     <p className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                                      با جابجایی این اسلایدر، تنها تراکنش‌هایی که دقت استخراج آنها از مقدار مشخص شده بالاتر است در جدول نشان داده می‌شوند. اقلام پایین‌تر موقتاً جهت بازبینی متمرکز فیلتر خواهند شد.
+                                      با جابجایی این اسلایدر، تراکنش‌هایی با دقت پایین‌تر از حد تعیین شده به طور موقت پنهان می‌شوند.
                                     </p>
                                   </div>
-                                  <div className="flex items-center gap-3 shrink-0 self-start md:self-auto">
-                                    <span className="text-xs font-bold font-mono text-slate-500 bg-slate-100 dark:bg-slate-900/60 p-2 rounded-xl border border-slate-200 dark:border-slate-800 min-w-[55px] text-center">
+                                  <div className="flex items-center gap-2 shrink-0 self-start md:self-auto">
+                                    <span className="text-[10px] font-bold font-mono text-slate-500 bg-slate-100 dark:bg-slate-900/60 py-1.5 px-3 rounded-lg border border-slate-200 dark:border-slate-800 text-center">
                                       {minConfidenceThreshold.toLocaleString("fa-IR")}٪
                                     </span>
                                     {minConfidenceThreshold > 0 && (
                                       <button
                                         type="button"
                                         onClick={() => setMinConfidenceThreshold(0)}
-                                        className="text-[10px] font-bold text-red-500 hover:underline"
+                                        className="text-[9px] font-bold text-red-500 hover:underline"
                                       >
-                                        حذف فیلتر آستانه
+                                        حذف فیلتر
                                       </button>
                                     )}
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-4">
-                                  <span className="text-[10px] text-slate-400 font-bold shrink-0">۰٪</span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-[9px] text-slate-400 font-bold shrink-0">۰٪</span>
                                   <input
                                     type="range"
                                     min="0"
@@ -4119,7 +4168,7 @@ export default function App() {
                                     onChange={(e) => setMinConfidenceThreshold(Number(e.target.value))}
                                     className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-600"
                                   />
-                                  <span className="text-[10px] text-slate-400 font-bold shrink-0">۱۰۰٪</span>
+                                  <span className="text-[9px] text-slate-400 font-bold shrink-0">۱۰۰٪</span>
                                 </div>
 
                                 {/* Stats of Threshold */}
@@ -4129,20 +4178,20 @@ export default function App() {
                                   const passPercent = Math.round((passedCount / transactions.length) * 100);
 
                                   return (
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                      <div className={`p-3 rounded-xl border text-right flex flex-col gap-1 justify-center ${
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                      <div className={`p-2.5 rounded-xl border text-right flex flex-col gap-1 justify-center ${
                                         isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-200"
                                       }`}>
-                                        <span className="text-[9px] text-slate-400 font-bold">تعداد اقلام تایید شده نهایی (دقت بالای حد):</span>
-                                        <span className="text-sm font-black text-emerald-500 font-mono">
+                                        <span className="text-[9px] text-slate-400 font-bold">تعداد اقلام تایید شده نهایی:</span>
+                                        <span className="text-xs font-black text-emerald-500 font-mono">
                                           {passedCount.toLocaleString("fa-IR")} ردیف ({passPercent.toLocaleString("fa-IR")}٪ کل)
                                         </span>
                                       </div>
-                                      <div className={`p-3 rounded-xl border text-right flex flex-col gap-1 justify-center ${
+                                      <div className={`p-2.5 rounded-xl border text-right flex flex-col gap-1 justify-center ${
                                         isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-white border-slate-200"
                                       }`}>
                                         <span className="text-[9px] text-slate-400 font-bold">تعداد اقلام مشکوک یا نیازمند توجه:</span>
-                                        <span className="text-sm font-black text-amber-500 font-mono">
+                                        <span className="text-xs font-black text-amber-500 font-mono">
                                           {failedCount.toLocaleString("fa-IR")} ردیف ({(100 - passPercent).toLocaleString("fa-IR")}٪ کل)
                                         </span>
                                       </div>
@@ -4164,14 +4213,14 @@ export default function App() {
                                             logEvent("تایید دسته‌جمعی تراکنش‌ها", `کاربر کلیه تراکنش‌های با ضریب اطمینان بالاتر از ${minConfidenceThreshold}٪ را تایید نهایی کرد.`);
                                             setNotification({ text: `کلیه اقلام بالای ${minConfidenceThreshold}٪ با موفقیت تایید نهایی و در سطح دقت ۱۰۰٪ ذخیره شدند.`, type: 'success' });
                                           }}
-                                          className={`w-full md:w-auto px-4 py-2.5 rounded-xl text-[10.5px] font-black transition-all duration-300 flex items-center justify-center gap-1.5 shadow-sm ${
+                                          className={`w-full md:w-auto px-3 py-2 rounded-xl text-[10px] font-black transition-all duration-300 flex items-center justify-center gap-1.5 shadow-sm ${
                                             passedCount > 0
                                               ? "bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow"
                                               : "bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-650 cursor-not-allowed"
                                           }`}
                                         >
-                                          <ShieldCheck className="h-4 w-4" />
-                                          <span>تایید دسته‌جمعی و ارتقا به صحت کامل (۱۰۰٪)</span>
+                                          <ShieldCheck className="h-3.5 w-3.5" />
+                                          <span>تایید دسته‌جمعی و ارتقا به ۱۰۰٪</span>
                                         </button>
                                       </div>
                                     </div>
@@ -4181,31 +4230,31 @@ export default function App() {
                             )}
 
                             {activeValidationSubTab === 'risk' && (
-                              <div className="space-y-3 animate-in fade-in duration-300 font-sans text-right" dir="rtl">
-                                <h5 className={`text-xs font-bold ${isDarkMode ? "text-slate-100" : "text-slate-850"}`}>
-                                  تحلیل خودکار عدم توازن‌ها و ناهماهنگی در اسناد
+                              <div className="space-y-2.5 animate-in fade-in duration-300 font-sans text-right" dir="rtl">
+                                <h5 className={`text-[11px] font-bold ${isDarkMode ? "text-slate-100" : "text-slate-850"}`}>
+                                  تحلیل خودکار ناهماهنگی در اسناد
                                 </h5>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                   {/* Issue 1: Balance checks */}
-                                  <div className={`p-3 rounded-xl border flex items-start gap-3 ${
+                                  <div className={`p-2.5 rounded-xl border flex items-start gap-2.5 ${
                                     isBalanced 
                                       ? (isDarkMode ? "bg-emerald-950/10 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-800")
                                       : (isDarkMode ? "bg-rose-950/10 border-rose-900/30 text-rose-400" : "bg-rose-50 border-rose-100 text-rose-800")
                                   }`}>
                                     {isBalanced ? (
-                                      <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
                                     ) : (
-                                      <AlertTriangle className="h-5 w-5 text-rose-500 shrink-0 mt-0.5 animate-pulse" />
+                                      <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5 animate-pulse" />
                                     )}
-                                    <div className="text-[10px] leading-relaxed flex-1">
-                                      <span className="font-bold block mb-0.5 text-xs">موازنه دو طرفه حسابداری</span>
+                                    <div className="text-[9px] leading-tight flex-1">
+                                      <span className="font-bold block mb-0.5 text-[10px]">موازنه دو طرفه حسابداری</span>
                                       {isBalanced ? (
-                                        <span>انطباق کامل ریاضی! مابین اقلام بدهکار و بستانکار تراز ۱۰۰٪ برقرار است.</span>
+                                        <span>انطباق کامل ریاضی! تراز ۱۰۰٪ برقرار است.</span>
                                       ) : (
                                         <span>
-                                          هشدار! مابین مجموع بدهکار و بستانکار اختلاف فاحش وجود دارد. به میزان 
-                                          <span className="font-bold font-mono mx-1">{(Math.abs(sumDebit - sumCredit)).toLocaleString("fa-IR")} ریال</span> 
-                                          کسری تراز ثبت شده است. پیشنهاد می‌شود سطرهای دارای مغایرت را اصلاح کنید.
+                                          هشدار! اختلاف مجموع بدهکار و بستانکار
+                                          <span className="font-bold font-mono mx-1">{(Math.abs(sumDebit - sumCredit)).toLocaleString("fa-IR")}</span> 
+                                          ریال می‌باشد.
                                         </span>
                                       )}
                                     </div>
@@ -4216,7 +4265,6 @@ export default function App() {
                                     const badDates = transactions.filter(t => {
                                       const dt = t.تاریخ || "";
                                       if (!dt || dt === "-") return true;
-                                      // Simple regex checking for solar Hijri yyyy/mm/dd
                                       const regex = /^\d{4}\/\d{2}\/\d{2}$/;
                                       return !regex.test(dt);
                                     });
@@ -4224,23 +4272,23 @@ export default function App() {
                                     const countBadDates = badDates.length;
 
                                     return (
-                                      <div className={`p-3 rounded-xl border flex items-start gap-3 ${
+                                      <div className={`p-2.5 rounded-xl border flex items-start gap-2.5 ${
                                         countBadDates === 0 
                                           ? (isDarkMode ? "bg-emerald-950/10 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-800")
                                           : (isDarkMode ? "bg-amber-950/10 border-amber-900/30 text-amber-400" : "bg-amber-50 border-amber-100 text-amber-800")
                                       }`}>
                                         {countBadDates === 0 ? (
-                                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                                          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
                                         ) : (
-                                          <Calendar className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                                          <Calendar className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                                         )}
-                                        <div className="text-[10px] leading-relaxed flex-1">
-                                          <span className="font-bold block mb-0.5 text-xs">صحت ساختاری فرمت تاریخ اسناد (Hijri)</span>
+                                        <div className="text-[9px] leading-tight flex-1">
+                                          <span className="font-bold block mb-0.5 text-[10px]">صحت ساختاری تاریخ اسناد</span>
                                           {countBadDates === 0 ? (
-                                            <span>تمامی تاریخ‌ها بر اساس استاندارد خورشیدی (سال/ماه/روز) معتبر هستند.</span>
+                                            <span>تمامی تاریخ‌ها بر اساس استاندارد خورشیدی معتبر هستند.</span>
                                           ) : (
                                             <span>
-                                              تعداد <span className="font-bold font-mono text-xs">{countBadDates.toLocaleString("fa-IR")} ردیف</span> فرمت تاریخ نامتعارف یا خالی دارند. تاریخ‌های نامعتبر می‌توانند باعث اخلال در گزارش‌های فصلی مالیاتی شوند.
+                                              تعداد <span className="font-bold font-mono text-[10px]">{countBadDates.toLocaleString("fa-IR")} ردیف</span> فرمت تاریخ نامتعارف دارند.
                                             </span>
                                           )}
                                         </div>
@@ -4252,23 +4300,23 @@ export default function App() {
                                   {(() => {
                                     const emptyParties = transactions.filter(t => !t.نام_طرف_حساب || t.نام_طرف_حساب === "-").length;
                                     return (
-                                      <div className={`p-3 rounded-xl border flex items-start gap-3 ${
+                                      <div className={`p-2.5 rounded-xl border flex items-start gap-2.5 ${
                                         emptyParties === 0 
                                           ? (isDarkMode ? "bg-emerald-950/10 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-800")
                                           : (isDarkMode ? "bg-amber-950/10 border-amber-900/30 text-amber-400" : "bg-amber-50 border-amber-100 text-amber-800")
                                       }`}>
                                         {emptyParties === 0 ? (
-                                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                                          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
                                         ) : (
-                                          <UserX className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                                          <UserX className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                                         )}
-                                        <div className="text-[10px] leading-relaxed flex-1">
-                                          <span className="font-bold block mb-0.5 text-xs">ثبت سرفصل (طرف حساب مالی)</span>
+                                        <div className="text-[9px] leading-tight flex-1">
+                                          <span className="font-bold block mb-0.5 text-[10px]">ثبت سرفصل (طرف حساب مالی)</span>
                                           {emptyParties === 0 ? (
-                                            <span>تمام تراکنش‌ها دارای سرفصل حسابداری و طرف‌حساب معین و مشخص هستند.</span>
+                                            <span>تمام تراکنش‌ها دارای سرفصل و طرف‌حساب مشخص هستند.</span>
                                           ) : (
                                             <span>
-                                              در <span className="font-bold font-mono text-xs">{emptyParties.toLocaleString("fa-IR")} ردیف</span> نام طرف حساب مشخص نشده است. سرفصل نامشخص موجب مسدود شدن همگام‌سازی با سامانه‌های ERP معین مالیاتی می‌گردد.
+                                              در <span className="font-bold font-mono text-[10px]">{emptyParties.toLocaleString("fa-IR")} ردیف</span> نام طرف حساب مشخص نشده است.
                                             </span>
                                           )}
                                         </div>
@@ -4280,23 +4328,23 @@ export default function App() {
                                   {(() => {
                                     const lowConf = transactions.filter(t => (t.ضریب_اطمینان ?? 100) < 70).length;
                                     return (
-                                      <div className={`p-3 rounded-xl border flex items-start gap-3 ${
+                                      <div className={`p-2.5 rounded-xl border flex items-start gap-2.5 ${
                                         lowConf === 0 
                                           ? (isDarkMode ? "bg-emerald-950/10 border-emerald-900/30 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-800")
                                           : (isDarkMode ? "bg-rose-950/10 border-rose-900/30 text-rose-450" : "bg-rose-50 border-rose-100 text-rose-800")
                                       }`}>
                                         {lowConf === 0 ? (
-                                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                                          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
                                         ) : (
-                                          <ShieldAlert className="h-5 w-5 text-rose-500 shrink-0 mt-0.5 animate-pulse" />
+                                          <ShieldAlert className="h-4 w-4 text-rose-500 shrink-0 mt-0.5 animate-pulse" />
                                         )}
-                                        <div className="text-[10px] leading-relaxed flex-1">
-                                          <span className="font-bold block mb-0.5 text-xs">ریسک کیفیت OCR قلم نوری هوش مصنوعی</span>
+                                        <div className="text-[9px] leading-tight flex-1">
+                                          <span className="font-bold block mb-0.5 text-[10px]">ریسک کیفیت OCR قلم نوری</span>
                                           {lowConf === 0 ? (
-                                            <span>عالی! هیچ سطر با ضریب اطمینان پایینی (کمتر از ۷۰٪) در این سند شناسایی نشد.</span>
+                                            <span>هیچ سطری با ضریب اطمینان کمتر از ۷۰٪ شناسایی نشد.</span>
                                           ) : (
                                             <span>
-                                              توجه: <span className="font-bold font-mono text-xs">{lowConf.toLocaleString("fa-IR")} ردیف</span> به دلیل خوانایی کم سند تصویر مبدا دارای ضریب اطمینان پایینی هستند. این موارد مخدوش ارزیابی شده و نیاز به تایید دارند.
+                                              توجه: <span className="font-bold font-mono text-[10px]">{lowConf.toLocaleString("fa-IR")} ردیف</span> مخدوش ارزیابی شده و نیاز به تایید دارند.
                                             </span>
                                           )}
                                         </div>
@@ -4308,14 +4356,11 @@ export default function App() {
                             )}
 
                             {activeValidationSubTab === 'fields' && (
-                              <div className="space-y-4 animate-in fade-in duration-300 font-sans text-right" dir="rtl">
-                                <div className="space-y-1.5">
-                                  <h5 className={`text-xs font-bold ${isDarkMode ? "text-slate-100" : "text-slate-850"}`}>
-                                    تحلیل جامع درصد سلامت و تکمیل فیلدهای کلیدی استخراج شده
+                              <div className="space-y-3 animate-in fade-in duration-300 font-sans text-right" dir="rtl">
+                                <div className="space-y-1">
+                                  <h5 className={`text-[11px] font-bold ${isDarkMode ? "text-slate-100" : "text-slate-850"}`}>
+                                    درصد تکمیلی فیلدهای اطلاعاتی تراکنش‌ها
                                   </h5>
-                                  <p className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                                    نمودار درصد تکمیلی فیلدهای اطلاعاتی تراکنش‌ها جهت اطمینان از سلامت کلی داده‌ها برای ثبت رسمی در دفاتر قانونی.
-                                  </p>
                                 </div>
 
                                 {(() => {
@@ -4327,31 +4372,31 @@ export default function App() {
 
                                   const fieldsList = [
                                     { name: "تاریخ شمسی اسناد مالی", count: dateFilled, icon: Calendar, color: "bg-blue-500" },
-                                    { name: "نام طرف حساب یا سرفصل مالیاتی", count: partyFilled, icon: User, color: "bg-emerald-500" },
-                                    { name: "مبلغ مالی (بدهکار یا بستانکار)", count: amountFilled, icon: Coins, color: "bg-amber-500" },
+                                    { name: "نام طرف حساب یا سرفصل", count: partyFilled, icon: User, color: "bg-emerald-500" },
+                                    { name: "مبلغ مالی (بدهکار/بستانکار)", count: amountFilled, icon: Coins, color: "bg-amber-500" },
                                     { name: "شماره سند / ارجاع", count: docFilled, icon: Tag, color: "bg-purple-500" },
                                   ];
 
                                   return (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                       {fieldsList.map((f, i) => {
                                         const pct = totalRows > 0 ? Math.round((f.count / totalRows) * 100) : 0;
                                         return (
-                                          <div key={i} className={`p-3 rounded-xl border text-right flex flex-col gap-2 ${
+                                          <div key={i} className={`p-2.5 rounded-xl border text-right flex flex-col gap-1.5 ${
                                             isDarkMode ? "bg-slate-900/30 border-slate-850" : "bg-white border-slate-150"
                                           }`}>
-                                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-700 dark:text-slate-300">
                                               <div className="flex items-center gap-1.5">
-                                                <f.icon className="h-3.5 w-3.5 opacity-70" />
+                                                <f.icon className="h-3 w-3 opacity-70" />
                                                 <span>{f.name}</span>
                                               </div>
-                                              <span className="font-mono text-xs">{pct.toLocaleString("fa-IR")}٪</span>
+                                              <span className="font-mono text-[10px]">{pct.toLocaleString("fa-IR")}٪</span>
                                             </div>
-                                            <div className="w-full bg-slate-250 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                                            <div className="w-full bg-slate-250 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
                                               <div className={`h-full transition-all duration-500 ${f.color}`} style={{ width: `${pct}%` }} />
                                             </div>
-                                            <span className="text-[9px] text-slate-400 font-medium">
-                                              {f.count.toLocaleString("fa-IR")} مورد موفق از {totalRows.toLocaleString("fa-IR")} کل ردیف‌ها
+                                            <span className="text-[8px] text-slate-400 font-medium">
+                                              {f.count.toLocaleString("fa-IR")} مورد موفق از {totalRows.toLocaleString("fa-IR")} ردیف
                                             </span>
                                           </div>
                                         );
@@ -4377,15 +4422,15 @@ export default function App() {
                           {/* Left layout with Quick search and metrics */}
                           <div className="flex items-center gap-2 flex-1 min-w-[280px]">
                             <div className="relative flex-1">
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                                <Search className="h-4 w-4" />
+                              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+                                <Search className="h-3.5 w-3.5" />
                               </span>
                               <input
                                 type="text"
                                 value={filterQuery}
                                 onChange={(e) => setFilterQuery(e.target.value)}
-                                placeholder="جستجوی سریع در شرح، شماره سند، تاریخ یا توضیحات..."
-                                className={`w-full text-xs pr-9 pl-3 py-2 rounded-xl border outline-none font-sans transition-all duration-300 ${
+                                placeholder="جستجوی سریع شرح، شماره سند..."
+                                className={`w-full text-[11px] font-bold pr-8 pl-3 py-1.5 rounded-lg border outline-none transition-all duration-300 ${
                                   isDarkMode
                                     ? "bg-[#0B0F19] border-slate-800 text-slate-100 placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                     : "bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
@@ -4394,7 +4439,7 @@ export default function App() {
                               {filterQuery && (
                                 <button
                                   onClick={() => setFilterQuery("")}
-                                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
                                   title="پاکسازی جستجو"
                                 >
                                   <X className="h-3 w-3" />
@@ -4405,9 +4450,9 @@ export default function App() {
                             {/* Advanced Filter Toggle Button */}
                             <button
                               onClick={() => setShowFilters(!showFilters)}
-                              className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all border shrink-0 ${
+                              className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg flex items-center gap-1.5 transition-all border shrink-0 ${
                                 showFilters || filterParty || filterMinAmount || filterMaxAmount
-                                  ? "bg-blue-600 border-blue-600 text-white hover:bg-blue-550 shadow-sm"
+                                  ? "bg-blue-600 border-blue-600 text-white shadow-sm"
                                   : isDarkMode
                                   ? "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300"
                                   : "bg-white hover:bg-slate-50 border-slate-200 text-slate-600"
@@ -4416,7 +4461,7 @@ export default function App() {
                               <SlidersHorizontal className="h-3.5 w-3.5" />
                               <span>فیلترهای پیشرفته</span>
                               {(filterParty || filterMinAmount || filterMaxAmount) && (
-                                <span className="bg-red-500 text-white text-[8px] h-4 min-w-4 px-1 rounded-full flex items-center justify-center font-bold">
+                                <span className="bg-red-500 text-white text-[8px] h-3.5 min-w-3.5 px-1 rounded-full flex items-center justify-center font-bold">
                                   !
                                 </span>
                               )}
@@ -4425,7 +4470,7 @@ export default function App() {
                             {/* Add New Row Manual Button */}
                             <button
                               onClick={handleAddNewRow}
-                              className={`px-3.5 py-2 text-xs font-black rounded-xl flex items-center gap-1.5 transition-all border shrink-0 ${
+                              className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all border shrink-0 ${
                                 isDarkMode
                                   ? "bg-emerald-555/15 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
                                   : "bg-emerald-50 hover:bg-emerald-100 border-emerald-150 text-emerald-700"
@@ -4433,19 +4478,19 @@ export default function App() {
                               title="افزودن سطر محاسباتی یا سند تراکنش دستی خام"
                             >
                               <PlusCircle className="h-3.5 w-3.5 text-emerald-500" />
-                              <span>افزودن ردیف دستی (جدید)</span>
+                              <span>افزودن ردیف دستی</span>
                             </button>
                           </div>
 
                           {/* Right layout indicating results found */}
-                          <div className="flex items-center gap-2 text-xs">
+                          <div className="flex items-center gap-1.5 text-[10px]">
                             <span className="text-slate-400 font-medium">ردیف‌های منطبق:</span>
                             <span className="font-bold text-blue-600 font-mono">
                               {filteredTransactions.length.toLocaleString("fa-IR")}
                             </span>
-                            <span className="text-slate-300 text-[10px]">از</span>
+                            <span className="text-slate-300">از</span>
                             <span className="font-semibold text-slate-500 font-mono">
-                              {transactions.length.toLocaleString("fa-IR")} تراکنش
+                              {transactions.length.toLocaleString("fa-IR")}
                             </span>
 
                             {(filterParty || filterQuery || filterMinAmount || filterMaxAmount || filterConfidence !== "all") && (
@@ -4457,9 +4502,9 @@ export default function App() {
                                   setFilterMaxAmount("");
                                   setFilterConfidence("all");
                                 }}
-                                className="mr-2 text-[10px] text-red-500 hover:text-red-650 hover:underline flex items-center gap-1 font-bold"
+                                className="mr-2 text-[9px] text-red-500 hover:text-red-650 hover:underline flex items-center gap-1 font-bold"
                               >
-                                <X className="h-3 w-3" />
+                                <X className="h-2.5 w-2.5" />
                                 <span>حذف فیلترها</span>
                               </button>
                             )}
@@ -4472,7 +4517,7 @@ export default function App() {
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: "auto" }}
                             transition={{ duration: 0.25 }}
-                            className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2.5 mt-1 border-t border-dashed border-slate-200 dark:border-slate-800"
+                            className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-2 mt-1 border-t border-dashed border-slate-200 dark:border-slate-800"
                           >
                             {/* Counterparty / Party name Filter */}
                             <div className="flex flex-col gap-1">
@@ -4486,7 +4531,7 @@ export default function App() {
                                   value={filterParty}
                                   onChange={(e) => setFilterParty(e.target.value)}
                                   placeholder="مانند: بانک ملت، شرکت الف، خدمات..."
-                                  className={`w-full text-xs pr-3 pl-8 py-1.5 rounded-lg border outline-none font-sans ${
+                                  className={`w-full text-xs pr-2.5 pl-7 py-1.5 rounded-lg border outline-none font-sans ${
                                     isDarkMode
                                       ? "bg-[#0B0F19] border-slate-800 text-slate-100 placeholder-slate-600"
                                       : "bg-white border-slate-200 text-slate-800 placeholder-slate-400"
@@ -4495,7 +4540,7 @@ export default function App() {
                                 {filterParty && (
                                   <button
                                     onClick={() => setFilterParty("")}
-                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                    className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
                                     title="پاکسازی"
                                   >
                                     <X className="h-3 w-3" />
@@ -6382,10 +6427,10 @@ export default function App() {
                                        onClick={() => {
                                           setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, apiUsage: 0} : usr));
                                           logEvent("ریست توکن کاربر", `آمار مصرف توکن کاربر ${u.name} صفر شد.`);
-                                          setNotification({text: `آمار مصرف توکن کاربر ${u.name} بازنشانی شد.`, type: 'success'});
+                                          showNotification(`آمار مصرف توکن کاربر ${u.name} بازنشانی شد.`, 'success');
                                        }}
                                        className={`px-2 py-1 rounded border text-[9px] font-bold transition-colors ${
-                                          isDarkMode ? "border-slate-600 text-slate-300 hover:bg-slate-700" : "border-slate-300 text-slate-600 hover:bg-slate-200"
+                                          isDarkMode ? "border-slate-600 text-slate-300 hover:bg-slate-750" : "border-slate-300 text-slate-600 hover:bg-slate-200"
                                        }`}
                                    >
                                        بازنشانی آمار
@@ -6400,9 +6445,10 @@ export default function App() {
               </div>
 
             </div>
-          </div>
-        </div>
-      )}
+           </div>
+         </div>
+       )}
+
       {/* File Manager Modal */}
       {isFileManagerOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6">
@@ -6411,18 +6457,18 @@ export default function App() {
             onClick={() => setIsFileManagerOpen(false)}
           ></div>
           
-          <div className={`relative w-full max-w-4xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up transform transition-all ${
-            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border border-slate-200 text-slate-800"
+          <div className={`relative w-full max-w-6xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up transform transition-all ${
+            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border-slate-200 text-slate-800"
           }`} dir="rtl">
             <div className={`p-5 border-b flex items-center justify-between shrink-0 ${isDarkMode ? "bg-slate-800/80 border-slate-700" : "bg-slate-50/80 border-slate-100"}`}>
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-xl ${isDarkMode ? "bg-slate-800 text-indigo-400" : "bg-white shadow-sm text-indigo-600"}`}>
-                  <HardDrive className="h-5 w-5" />
+                <div className={`p-2.5 rounded-xl ${isDarkMode ? "bg-indigo-650/20 text-indigo-400" : "bg-indigo-50 text-indigo-600"}`}>
+                  <HardDrive className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm">فضای ابری و مدیریت اسناد</h3>
+                  <h3 className="font-bold text-base">پیشخوان مدیریت فایل و فضا ابری هوشمند</h3>
                   <p className={`text-[11px] mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    فضای شما: <span className="font-bold text-emerald-500">{(5 + (currentUser?.extraStorage || 0)).toLocaleString("fa-IR")} گیگابایت</span> {(currentUser?.extraStorage || 0) > 0 && `(۵ گیگ رایگان + ${currentUser.extraStorage} گیگ اضافه)`}
+                    فضای اختصاصی اختصاص یافته: <span className="font-bold text-emerald-500">{(5 + (currentUser?.extraStorage || 0)).toLocaleString("fa-IR")} گیگابایت</span> {(currentUser?.extraStorage || 0) > 0 && `(۵ گیگ پایه + ${currentUser.extraStorage} گیگ اهدایی ادمین)`}
                   </p>
                 </div>
               </div>
@@ -6434,11 +6480,11 @@ export default function App() {
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-5">
+            <div className="flex-1 overflow-y-auto p-6">
               {(() => {
                 const extraBytes = (currentUser?.extraStorage || 0) * 1024 * 1024 * 1024;
                 const MAX_STORAGE = 5 * 1024 * 1024 * 1024 + extraBytes; // 5GB + extra storage
-                const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file.size || 0), 0);
+                const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file?.size || 0), 0);
                 const percentUsed = Math.min(100, (usedStorage / MAX_STORAGE) * 100);
                 
                 const formatBytes = (bytes: number, decimals = 2) => {
@@ -6450,222 +6496,727 @@ export default function App() {
                   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
                 };
 
+                const totalTokens = previousScans.reduce((acc, scan) => acc + (scan.file?.tokensUsed || 0), 0);
+                const totalTransactionsCount = previousScans.reduce((acc, scan) => acc + (scan.transactions?.length || 0), 0);
+                
+                let sumConfidence = 0;
+                let confCount = 0;
+                previousScans.forEach(scan => {
+                  if (scan.transactions && scan.transactions.length > 0) {
+                    scan.transactions.forEach((t: any) => {
+                      if (typeof t.ضریب_اطمینان === "number") {
+                        sumConfidence += t.ضریب_اطمینان;
+                        confCount++;
+                      }
+                    });
+                  }
+                });
+                const avgConfidence = confCount > 0 ? Math.round(sumConfidence / confCount) : 98;
+
+                const renamePreviousScan = (scanId: string, oldName: string) => {
+                  const newName = prompt("نام جدید سند را وارد کنید:", oldName);
+                  if (newName && newName.trim()) {
+                    const trimmed = newName.trim();
+                    if (trimmed === oldName) return;
+                    setPreviousScans(prev => prev.map(s => s.id === scanId ? { ...s, file: { ...s.file, name: trimmed } } : s));
+                    if (activeFile && activeFile.id === scanId) {
+                      setActiveFile((prev: any) => prev ? { ...prev, name: trimmed } : null);
+                    }
+                    logEvent("تغییر نام سند", `کاربر نام سند را از «${oldName}» به «${trimmed}» تغییر داد.`);
+                    showNotification("نام سند با موفقیت تغییر یافت.", "success");
+                  }
+                };
+
+                const getFolderFileCount = (folderName: string) => {
+                  return previousScans.filter(s => {
+                    if (folderName === "all") return true;
+                    if (folderName === "uncategorized") return !s.folder;
+                    return s.folder === folderName;
+                  }).length;
+                };
+
+                const renameFolder = (oldName: string) => {
+                  const newName = prompt(`نام جدید برای پوشه «${oldName}» را وارد کنید:`, oldName);
+                  if (newName && newName.trim()) {
+                    const trimmed = newName.trim();
+                    if (trimmed === oldName) return;
+                    if (userDefinedFolders.includes(trimmed)) {
+                      showNotification("پوشه‌ای با این نام از قبل وجود دارد.", "error");
+                      return;
+                    }
+                    setUserDefinedFolders(prev => prev.map(f => f === oldName ? trimmed : f));
+                    setPreviousScans(prev => prev.map(s => s.folder === oldName ? { ...s, folder: trimmed } : s));
+                    if (selectedFolderFilter === oldName) {
+                      setSelectedFolderFilter(trimmed);
+                    }
+                    logEvent("ویرایش پوشه", `کاربر نام پوشه «${oldName}» را به «${trimmed}» تغییر داد.`);
+                    showNotification(`پوشه با موفقیت به «${trimmed}» تغییر نام یافت.`, "success");
+                  }
+                };
+
+                const handleBulkDelete = () => {
+                  if (window.confirm(`آیا از حذف دسته‌جمعی ${selectedScanIds.length} سند اطمینان دارید؟ این عمل غیر قابل بازگشت است.`)) {
+                    setPreviousScans(prev => prev.filter(s => !selectedScanIds.includes(s.id)));
+                    if (activeFile && selectedScanIds.includes(activeFile.id)) {
+                      clearCurrentFile();
+                    }
+                    logEvent("حذف دسته‌جمعی اسناد", `کاربر تعداد ${selectedScanIds.length} سند را به صورت گروهی حذف کرد.`);
+                    showNotification("اسناد انتخاب‌شده با موفقیت حذف گردیدند.", "success");
+                    setSelectedScanIds([]);
+                  }
+                };
+
+                const handleBulkMove = (folder: string | undefined) => {
+                  setPreviousScans(prev => prev.map(s => selectedScanIds.includes(s.id) ? { ...s, folder: folder } : s));
+                  logEvent("انتقال گروهی اسناد", `کاربر تعداد ${selectedScanIds.length} سند را به پوشه «${folder || "دسته‌بندی نشده"}» انتقال داد.`);
+                  showNotification(`اسناد انتخاب‌شده با موفقیت به پوشه «${folder || "دسته‌بندی نشده"}» منتقل شدند.`, "success");
+                  setSelectedScanIds([]);
+                };
+
+                const handleBulkDownload = () => {
+                  let count = 0;
+                  previousScans.forEach(scan => {
+                    if (selectedScanIds.includes(scan.id) && scan.file?.preview) {
+                      setTimeout(() => {
+                        const link = document.createElement("a");
+                        link.href = scan.file.preview;
+                        link.download = scan.file.name;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }, count * 400); // Stagger downloads to prevent browser blocking
+                      count++;
+                    }
+                  });
+                  showNotification(`دانلود گروهی برای ${selectedScanIds.length} سند با موفقیت آغاز شد.`, "success");
+                  setSelectedScanIds([]);
+                };
+
+                const downloadBase64File = (scan: PreviousScan) => {
+                  if (!scan.file?.preview) {
+                    showNotification("پیش‌نمایش یا محتوای فایل معتبر نیست.", "error");
+                    return;
+                  }
+                  try {
+                    const link = document.createElement("a");
+                    link.href = scan.file.preview;
+                    link.download = scan.file.name;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    showNotification(`فایل «${scan.file.name}» با موفقیت دانلود شد.`, "success");
+                    logEvent("دانلود فایل از مدیریت فایل", `کاربر فایل ${scan.file.name} را دانلود کرد.`);
+                  } catch (err) {
+                    showNotification("خطا در بارگیری و دانلود فایل.", "error");
+                  }
+                };
+
                 return (
                   <div className="space-y-6">
-                    <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                    
+                    {/* Analytics Dashboard Cards */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Card 1 */}
+                      <div className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+                        isDarkMode ? "bg-slate-800/40 border-slate-800" : "bg-slate-50 border-slate-100"
+                      }`}>
+                        <div className="space-y-1 text-right">
+                          <span className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کل فایل‌های ذخیره شده</span>
+                          <h4 className="text-lg font-black text-indigo-500">{previousScans.length.toLocaleString("fa-IR")} <span className="text-xs font-normal">سند</span></h4>
+                        </div>
+                        <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-indigo-950/40 text-indigo-400" : "bg-indigo-100/60 text-indigo-600"}`}>
+                          <FileText className="w-5 h-5" />
+                        </div>
+                      </div>
+
+                      {/* Card 2 */}
+                      <div className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+                        isDarkMode ? "bg-slate-800/40 border-slate-800" : "bg-slate-50 border-slate-100"
+                      }`}>
+                        <div className="space-y-1 text-right">
+                          <span className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>توکن‌های مصرفی استخراج</span>
+                          <h4 className="text-lg font-black text-emerald-500">{totalTokens.toLocaleString("fa-IR")} <span className="text-xs font-normal">توکن</span></h4>
+                        </div>
+                        <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-emerald-950/40 text-emerald-400" : "bg-emerald-100/60 text-emerald-600"}`}>
+                          <Cpu className="w-5 h-5" />
+                        </div>
+                      </div>
+
+                      {/* Card 3 */}
+                      <div className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+                        isDarkMode ? "bg-slate-800/40 border-slate-800" : "bg-slate-50 border-slate-100"
+                      }`}>
+                        <div className="space-y-1 text-right">
+                          <span className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>صحت استخراج هوش مصنوعی</span>
+                          <h4 className="text-lg font-black text-amber-500">{avgConfidence.toLocaleString("fa-IR")}٪ <span className="text-xs font-normal">دقت</span></h4>
+                        </div>
+                        <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-amber-950/40 text-amber-400" : "bg-amber-100/60 text-amber-600"}`}>
+                          <CheckCircle2 className="w-5 h-5" />
+                        </div>
+                      </div>
+
+                      {/* Card 4 */}
+                      <div className={`p-4 rounded-xl border flex items-center justify-between transition-all ${
+                        isDarkMode ? "bg-slate-800/40 border-slate-800" : "bg-slate-50 border-slate-100"
+                      }`}>
+                        <div className="space-y-1 text-right">
+                          <span className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تراکنش‌های ثبت شده</span>
+                          <h4 className="text-lg font-black text-pink-500">{totalTransactionsCount.toLocaleString("fa-IR")} <span className="text-xs font-normal">ردیف</span></h4>
+                        </div>
+                        <div className={`p-2.5 rounded-lg ${isDarkMode ? "bg-pink-950/40 text-pink-400" : "bg-pink-100/60 text-pink-600"}`}>
+                          <Sheet className="w-5 h-5" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Storage progress details */}
+                    <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-800" : "bg-slate-50/50 border-slate-200"}`}>
                       <div className="flex items-center justify-between mb-2">
-                        <span className={`text-xs font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>وضعیت حافظه</span>
+                        <span className={`text-xs font-bold flex items-center gap-2 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                          <HardDrive className="w-4 h-4 text-indigo-500" />
+                          وضعیت مصرف حافظه ابری کاربر
+                        </span>
                         <span className="text-xs font-bold text-indigo-500" dir="ltr">
                           {formatBytes(usedStorage)} / {(5 + (currentUser?.extraStorage || 0)).toLocaleString("fa-IR")} GB
                         </span>
                       </div>
-                      <div className={`w-full h-2.5 rounded-full overflow-hidden ${isDarkMode ? "bg-slate-700" : "bg-slate-200"}`}>
-                        <div className={`h-full rounded-full transition-all duration-500 ${percentUsed > 90 ? "bg-rose-500" : percentUsed > 75 ? "bg-amber-500" : "bg-indigo-500"}`} style={{width: `${percentUsed}%`}}></div>
+                      <div className={`w-full h-3 rounded-full overflow-hidden p-0.5 ${isDarkMode ? "bg-slate-800" : "bg-slate-200"}`}>
+                        <div className={`h-full rounded-full transition-all duration-500 bg-gradient-to-l ${
+                          percentUsed > 90 
+                            ? "from-rose-500 to-red-600" 
+                            : percentUsed > 75 
+                              ? "from-amber-400 to-amber-500" 
+                              : "from-indigo-500 to-violet-600"
+                        }`} style={{width: `${percentUsed}%`}}></div>
                       </div>
-                      <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center justify-between mt-2.5">
                         <p className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                          {percentUsed.toFixed(2)}% استفاده شده
+                          سهم مصرف شده: <span className="font-bold">{percentUsed.toFixed(2)}%</span> از کل ظرفیت فعال
                         </p>
                         {(currentUser?.extraStorage || 0) > 0 && (
-                          <p className="text-[9px] font-bold text-emerald-500">
-                            شامل {currentUser.extraStorage.toLocaleString("fa-IR")} گیگابایت فضای اختصاصی ادمین
-                          </p>
+                          <span className="text-[9px] font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded">
+                            فضای اختصاصی ارتقا یافته توسط ادمین فعال است (+{currentUser.extraStorage.toLocaleString("fa-IR")} گیگ اضافه)
+                          </span>
                         )}
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-150 dark:border-slate-800">
-                         <h4 className="font-bold text-xs flex items-center gap-2">
-                            <Folder className="w-4 h-4 text-indigo-500" />
-                            لیست فایل‌های ذخیره شده
-                         </h4>
-                         
-                         {/* Add New Folder Button */}
-                         <button
-                           onClick={() => {
-                             const name = prompt("نام پوشه جدید را وارد کنید:");
-                             if (name && name.trim()) {
-                               const trimmed = name.trim();
-                               if (userDefinedFolders.includes(trimmed)) {
-                                 showNotification("پوشه‌ای با این نام از قبل وجود دارد.", "error");
-                               } else {
-                                 setUserDefinedFolders(prev => [...prev, trimmed]);
-                                 logEvent("ایجاد پوشه جدید", `کاربر پوشه جدید با نام «${trimmed}» ایجاد کرد.`);
-                                 showNotification(`پوشه «${trimmed}» با موفقیت ایجاد شد.`, "success");
-                               }
-                             }
-                           }}
-                           className={`px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-colors border ${
-                             isDarkMode 
-                               ? "bg-slate-850 border-slate-700 text-slate-300 hover:bg-slate-850" 
-                               : "bg-indigo-50 border-indigo-100 text-indigo-600 hover:bg-indigo-100/80"
-                           }`}
-                         >
-                           <PlusCircle className="w-3.5 h-3.5" />
-                           <span>ایجاد پوشه جدید</span>
-                         </button>
-                       </div>
+                    {/* Two-Column Workspace Layout */}
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                      
+                      {/* Sidebar column (Folders) */}
+                      <div className="lg:col-span-1">
+                        <div className={`p-4 rounded-xl border flex flex-col h-full justify-between ${
+                          isDarkMode ? "bg-slate-800/40 border-slate-800" : "bg-slate-50/70 border-slate-200"
+                        }`}>
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                              <span className="text-xs font-bold flex items-center gap-1.5">
+                                <Folder className="w-4 h-4 text-indigo-400" />
+                                پوشه‌های اختصاصی
+                              </span>
+                              
+                              {/* Create Folder */}
+                              <button
+                                onClick={() => {
+                                  const name = prompt("نام پوشه جدید را وارد کنید:");
+                                  if (name && name.trim()) {
+                                    const trimmed = name.trim();
+                                    if (userDefinedFolders.includes(trimmed)) {
+                                      showNotification("پوشه‌ای با این نام از قبل وجود دارد.", "error");
+                                    } else {
+                                      setUserDefinedFolders(prev => [...prev, trimmed]);
+                                      logEvent("ایجاد پوشه جدید", `کاربر پوشه جدید با نام «${trimmed}» ایجاد کرد.`);
+                                      showNotification(`پوشه «${trimmed}» با موفقیت ایجاد شد.`, "success");
+                                    }
+                                  }
+                                }}
+                                className={`p-1 rounded-lg transition-colors border ${
+                                  isDarkMode 
+                                    ? "bg-slate-900 border-slate-750 text-slate-300 hover:bg-slate-800" 
+                                    : "bg-white border-slate-250 text-indigo-600 hover:bg-indigo-50"
+                                }`}
+                                title="ایجاد پوشه جدید"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
 
-                       {/* Folders Pills/Tabs Filter List */}
-                       <div className="flex flex-wrap items-center gap-2 py-1.5" dir="rtl">
-                         <span className={`text-[10px] font-bold ml-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>فیلتر پوشه:</span>
-                         
-                         {/* 'All' filter */}
-                         <button
-                           onClick={() => setSelectedFolderFilter("all")}
-                           className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all ${
-                             selectedFolderFilter === "all"
-                               ? "bg-indigo-600 text-white shadow-sm"
-                               : isDarkMode
-                                 ? "bg-slate-800 text-slate-300 hover:bg-slate-750"
-                                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                           }`}
-                         >
-                           همه اسناد
-                         </button>
+                            {/* Folders List inside Sidebar */}
+                            <div className="space-y-1.5">
+                              {/* All scans */}
+                              <button
+                                onClick={() => setSelectedFolderFilter("all")}
+                                className={`w-full px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
+                                  selectedFolderFilter === "all"
+                                    ? "bg-indigo-600 text-white shadow-sm"
+                                    : isDarkMode
+                                      ? "bg-slate-900/60 text-slate-300 hover:bg-slate-900"
+                                      : "bg-white text-slate-600 hover:bg-slate-100"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <HardDrive className="w-3.5 h-3.5 opacity-80" />
+                                  <span>همه اسناد</span>
+                                </div>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
+                                  selectedFolderFilter === "all" ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-500"
+                                }`}>
+                                  {getFolderFileCount("all")}
+                                </span>
+                              </button>
 
-                         {/* 'Uncategorized' filter */}
-                         <button
-                           onClick={() => setSelectedFolderFilter("uncategorized")}
-                           className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all ${
-                             selectedFolderFilter === "uncategorized"
-                               ? "bg-indigo-600 text-white shadow-sm"
-                               : isDarkMode
-                                 ? "bg-slate-800 text-slate-300 hover:bg-slate-750"
-                                 : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                           }`}
-                         >
-                           دسته‌بندی نشده
-                         </button>
+                              {/* Uncategorized */}
+                              <button
+                                onClick={() => setSelectedFolderFilter("uncategorized")}
+                                className={`w-full px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
+                                  selectedFolderFilter === "uncategorized"
+                                    ? "bg-indigo-600 text-white shadow-sm"
+                                    : isDarkMode
+                                      ? "bg-slate-900/60 text-slate-300 hover:bg-slate-900"
+                                      : "bg-white text-slate-600 hover:bg-slate-100"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <FileText className="w-3.5 h-3.5 opacity-80" />
+                                  <span>دسته‌بندی نشده</span>
+                                </div>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
+                                  selectedFolderFilter === "uncategorized" ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-500"
+                                }`}>
+                                  {getFolderFileCount("uncategorized")}
+                                </span>
+                              </button>
 
-                         {/* User Defined Folders */}
-                         {userDefinedFolders.map(folder => {
-                           const isSelected = selectedFolderFilter === folder;
-                           return (
-                             <div key={folder} className="flex items-center gap-1">
-                               <button
-                                 onClick={() => setSelectedFolderFilter(folder)}
-                                 className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all flex items-center gap-1 ${
-                                   isSelected
-                                     ? "bg-indigo-600 text-white shadow-sm"
-                                     : isDarkMode
-                                       ? "bg-slate-800 text-slate-300 hover:bg-slate-750"
-                                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                 }`}
-                               >
-                                 <Folder className="w-3 h-3 text-current opacity-70" />
-                                 <span>{folder}</span>
-                               </button>
+                              {/* Separator */}
+                              <div className="h-px bg-slate-200 dark:bg-slate-800 my-2"></div>
 
-                               {/* Delete Folder button */}
-                               <button
-                                 onClick={() => {
-                                   if (window.confirm(`آیا مطمئن هستید که می‌خواهید پوشه «${folder}» را حذف کنید؟ اسناد این پوشه حذف نمی‌شوند و فقط به حالت بدون پوشه برمی‌گردند.`)) {
-                                     setUserDefinedFolders(prev => prev.filter(f => f !== folder));
-                                     setPreviousScans(prev => prev.map(s => s.folder === folder ? { ...s, folder: undefined } : s));
-                                     if (selectedFolderFilter === folder) {
-                                       setSelectedFolderFilter("all");
-                                     }
-                                     logEvent("حذف پوشه", `کاربر پوشه «${folder}» را حذف کرد.`);
-                                     showNotification(`پوشه «${folder}» حذف شد.`, "info");
-                                   }
-                                 }}
-                                 className={`p-1 rounded-full transition-colors ${
-                                   isDarkMode ? "hover:bg-slate-800 text-slate-500 hover:text-rose-400" : "hover:bg-slate-200 text-slate-400 hover:text-rose-600"
-                                 }`}
-                                 title="حذف پوشه"
-                               >
-                                 <X className="w-3 h-3" />
-                               </button>
-                             </div>
-                           );
-                         })}
-                       </div>
-                       {fileManagerFilteredScans.length === 0 ? (
-                          <div className={`py-12 flex flex-col items-center justify-center border border-dashed rounded-xl ${isDarkMode ? "border-slate-800 text-slate-500" : "border-slate-200 text-slate-400"}`}>
-                             <Folder className="w-12 h-12 mb-3 opacity-30" />
-                             <span className="text-sm font-bold">
-                               {previousScans.length === 0 
-                                 ? "هیچ فایلی ذخیره نشده است." 
-                                 : `هیچ سندی در پوشه «${selectedFolderFilter === "uncategorized" ? "دسته‌بندی نشده" : selectedFolderFilter}» وجود ندارد.`}
-                             </span>
-                          </div>
-                       ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {fileManagerFilteredScans.map((scan) => (
-                               <div key={scan.id} className={`p-4 rounded-xl border flex flex-col justify-between transition-all hover:shadow-md ${isDarkMode ? "bg-slate-800/50 border-slate-700 hover:border-slate-600" : "bg-white border-slate-200 hover:border-slate-300"}`}>
-                                 <div className="flex items-start gap-3 mb-4">
-                                    <div className="w-10 h-10 shrink-0 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
-                                       {scan.file.preview ? (
-                                         <img src={scan.file.preview} alt="" className="w-full h-full object-cover" />
-                                       ) : (
-                                         <FileText className="w-5 h-5 text-slate-400" />
-                                       )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                       <h5 className="font-bold text-xs truncate" title={scan.file.name}>{scan.file.name}</h5>
-                                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
-                                          <span className="text-[10px] text-slate-500" dir="ltr">{formatBytes(scan.file.size)}</span>
-                                          <span className="text-[10px] text-slate-400">•</span>
-                                          <span className="text-[10px] text-slate-500">{new Date(scan.timestamp).toLocaleDateString("fa-IR")}</span>
-                                       </div>
-                                       
-                                       {/* Folder Selector Dropdown */}
-                                       <div className="flex items-center gap-1.5 mt-2.5">
-                                         <span className={`text-[9px] font-bold shrink-0 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>پوشه:</span>
-                                         <div className="relative flex-1">
-                                           <select
-                                             value={scan.folder || ""}
-                                             onChange={(e) => {
-                                               const val = e.target.value;
-                                               setPreviousScans(prev => prev.map(s => s.id === scan.id ? { ...s, folder: val || undefined } : s));
-                                               showNotification(`سند «${scan.file.name}» به پوشه «${val || "دسته‌بندی نشده"}» انتقال یافت.`, "success");
-                                             }}
-                                             className={`w-full text-[10px] font-bold py-1 pr-1.5 pl-6 rounded-lg border outline-none appearance-none transition-all cursor-pointer ${
-                                               isDarkMode 
-                                                 ? "bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500 hover:bg-slate-950 focus:border-indigo-500" 
-                                                 : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:border-indigo-500 focus:border-indigo-500"
-                                             }`}
-                                           >
-                                             <option value="">دسته‌بندی نشده</option>
-                                             {userDefinedFolders.map(folder => (
-                                               <option key={folder} value={folder}>{folder}</option>
-                                             ))}
-                                           </select>
-                                           <Folder className="w-3 h-3 absolute left-1.5 top-1/2 -translate-y-1/2 text-indigo-450 pointer-events-none" />
-                                         </div>
-                                       </div>
-                                    </div>
-                                 </div>
-                                 <div className="flex items-center gap-2 mt-auto pt-3 border-t border-slate-100 dark:border-slate-700">
+                              {/* User Defined Folders */}
+                              {userDefinedFolders.map(folder => {
+                                const isSelected = selectedFolderFilter === folder;
+                                return (
+                                  <div key={folder} className="group relative flex items-center justify-between rounded-lg transition-all hover:bg-slate-200/50 dark:hover:bg-slate-900/50">
                                     <button
-                                       onClick={() => {
-                                          selectPreviousScan(scan);
-                                          setIsFileManagerOpen(false);
-                                       }}
-                                       className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-colors ${isDarkMode ? "bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30" : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"}`}
+                                      onClick={() => setSelectedFolderFilter(folder)}
+                                      className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
+                                        isSelected
+                                          ? "bg-indigo-600 text-white shadow-sm"
+                                          : isDarkMode
+                                            ? "text-slate-300"
+                                            : "text-slate-600"
+                                      }`}
                                     >
-                                       باز کردن سند
+                                      <div className="flex items-center gap-2 max-w-[120px] truncate text-right">
+                                        <Folder className={`w-3.5 h-3.5 ${isSelected ? "text-white" : "text-indigo-400"}`} />
+                                        <span className="truncate">{folder}</span>
+                                      </div>
+                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
+                                        isSelected ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-500"
+                                      }`}>
+                                        {getFolderFileCount(folder)}
+                                      </span>
                                     </button>
-                                    <button
-                                       onClick={() => {
-                                          if (window.confirm("آیا از حذف این سند اطمینان دارید؟")) {
-                                             setPreviousScans(prev => prev.filter(s => s.id !== scan.id));
-                                             if (activeFile?.id === scan.id) clearCurrentFile();
-                                             showNotification("سند با موفقیت حذف شد.", "success");
+
+                                    {/* Action items on hover/always */}
+                                    <div className="absolute left-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      {/* Rename folder button */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          renameFolder(folder);
+                                        }}
+                                        className={`p-1 rounded transition-colors ${
+                                          isSelected ? "text-indigo-100 hover:bg-white/20" : "text-slate-400 hover:text-indigo-500"
+                                        }`}
+                                        title="ویرایش پوشه"
+                                      >
+                                        <FileEdit className="w-3 h-3" />
+                                      </button>
+
+                                      {/* Delete Folder button */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (window.confirm(`آیا مطمئن هستید که می‌خواهید پوشه «${folder}» را حذف کنید؟ اسناد این پوشه حذف نمی‌شوند و فقط به حالت بدون پوشه برمی‌گردند.`)) {
+                                            setUserDefinedFolders(prev => prev.filter(f => f !== folder));
+                                            setPreviousScans(prev => prev.map(s => s.folder === folder ? { ...s, folder: undefined } : s));
+                                            if (selectedFolderFilter === folder) {
+                                              setSelectedFolderFilter("all");
+                                            }
+                                            logEvent("حذف پوشه", `کاربر پوشه «${folder}» را حذف کرد.`);
+                                            showNotification(`پوشه «${folder}» حذف شد.`, "info");
                                           }
-                                       }}
-                                       className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" : "bg-rose-50 text-rose-600 hover:bg-rose-100"}`}
-                                       title="حذف سند"
-                                    >
-                                       <Trash2 className="w-4 h-4" />
-                                    </button>
-                                 </div>
-                               </div>
-                            ))}
+                                        }}
+                                        className={`p-1 rounded transition-colors ${
+                                          isDarkMode ? "hover:bg-slate-800 text-slate-500 hover:text-rose-400" : "hover:bg-slate-200 text-slate-400 hover:text-rose-600"
+                                        }`}
+                                        title="حذف پوشه"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                       )}
+
+                          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
+                            <span className={`text-[10px] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>سامانه یکپارچه حسابداری ERP</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right column (Files Grid & controls) */}
+                      <div className="lg:col-span-3 space-y-4">
+                        
+                        {/* Control Bar */}
+                        <div className={`p-4 rounded-xl border flex flex-col sm:flex-row items-center justify-between gap-3 ${
+                          isDarkMode ? "bg-slate-800/20 border-slate-800" : "bg-slate-50/50 border-slate-200"
+                        }`}>
+                          {/* Search box */}
+                          <div className="relative w-full sm:w-72">
+                            <input
+                              type="text"
+                              value={fileManagerSearchQuery}
+                              onChange={(e) => setFileManagerSearchQuery(e.target.value)}
+                              placeholder="جستجو در اسناد، نوع، تحلیل..."
+                              className={`w-full py-1.5 pr-8 pl-8 text-xs rounded-lg border outline-none transition-all text-right ${
+                                isDarkMode 
+                                  ? "bg-slate-900 border-slate-700 text-slate-200 placeholder-slate-500 focus:border-indigo-500" 
+                                  : "bg-white border-slate-200 text-slate-850 placeholder-slate-400 focus:border-indigo-500"
+                              }`}
+                            />
+                            <Search className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                            {fileManagerSearchQuery && (
+                              <button 
+                                onClick={() => setFileManagerSearchQuery("")}
+                                className="absolute left-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700"
+                              >
+                                <X className="w-3 h-3 text-slate-400" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Filters and Sorting selectors */}
+                          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                            {/* Type filter */}
+                            <div className="flex items-center gap-1 rounded-lg border p-1 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                              <button
+                                onClick={() => setFileManagerTypeFilter("all")}
+                                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${
+                                  fileManagerTypeFilter === "all"
+                                    ? "bg-indigo-600 text-white"
+                                    : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                }`}
+                              >
+                                همه
+                              </button>
+                              <button
+                                onClick={() => setFileManagerTypeFilter("image")}
+                                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${
+                                  fileManagerTypeFilter === "image"
+                                    ? "bg-indigo-600 text-white"
+                                    : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                }`}
+                              >
+                                تصویر
+                              </button>
+                              <button
+                                onClick={() => setFileManagerTypeFilter("pdf")}
+                                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-colors ${
+                                  fileManagerTypeFilter === "pdf"
+                                    ? "bg-indigo-600 text-white"
+                                    : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                }`}
+                              >
+                                PDF
+                              </button>
+                            </div>
+
+                            {/* Sort Selector */}
+                            <div className="relative">
+                              <select
+                                value={fileManagerSortBy}
+                                onChange={(e) => setFileManagerSortBy(e.target.value)}
+                                className={`text-[10px] font-bold py-1.5 pr-2.5 pl-6 rounded-lg border outline-none appearance-none transition-all cursor-pointer text-right ${
+                                  isDarkMode 
+                                    ? "bg-slate-900 border-slate-700 text-slate-300 hover:border-indigo-500" 
+                                    : "bg-white border-slate-200 text-slate-600 hover:border-indigo-500"
+                                }`}
+                              >
+                                <option value="newest">جدیدترین اسناد</option>
+                                <option value="oldest">قدیمی‌ترین اسناد</option>
+                                <option value="largest">بزرگترین حجم</option>
+                                <option value="smallest">کمترین حجم</option>
+                                <option value="alphabetical">الفبایی (نام سند)</option>
+                              </select>
+                              <ArrowUpDown className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                            </div>
+
+                            {/* Select All checkbox button */}
+                            <button
+                              onClick={() => {
+                                if (selectedScanIds.length === fileManagerFilteredScans.length) {
+                                  setSelectedScanIds([]);
+                                } else {
+                                  setSelectedScanIds(fileManagerFilteredScans.map(s => s.id));
+                                }
+                              }}
+                              className={`p-1.5 rounded-lg transition-colors border ${
+                                selectedScanIds.length === fileManagerFilteredScans.length && fileManagerFilteredScans.length > 0
+                                  ? "bg-indigo-600 border-indigo-600 text-white"
+                                  : isDarkMode 
+                                    ? "bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800" 
+                                    : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                              }`}
+                              title={selectedScanIds.length === fileManagerFilteredScans.length ? "لغو انتخاب همه" : "انتخاب همه اسناد"}
+                            >
+                              <CheckSquare className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Bulk Actions Sticky Panel */}
+                        {selectedScanIds.length > 0 && (
+                          <div className="p-3.5 rounded-xl border border-indigo-500/30 bg-indigo-50/70 dark:bg-indigo-950/20 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in shadow-sm">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                              <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                                تعداد <span className="font-extrabold">{selectedScanIds.length.toLocaleString("fa-IR")}</span> سند انتخاب شده است.
+                              </span>
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                              {/* Move Folder Group action */}
+                              <div className="relative">
+                                <select
+                                  onChange={(e) => {
+                                    if (e.target.value !== "choose") {
+                                      handleBulkMove(e.target.value === "none" ? undefined : e.target.value);
+                                      e.target.value = "choose";
+                                    }
+                                  }}
+                                  className={`text-[10px] font-bold py-1.5 pr-2 pl-6 rounded-lg border outline-none appearance-none transition-all cursor-pointer bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 border-indigo-200 hover:border-indigo-500`}
+                                >
+                                  <option value="choose">انتقال گروهی به پوشه...</option>
+                                  <option value="none">بدون پوشه (دسته‌بندی نشده)</option>
+                                  {userDefinedFolders.map(f => (
+                                    <option key={f} value={f}>{f}</option>
+                                  ))}
+                                </select>
+                                <Folder className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-indigo-500 pointer-events-none" />
+                              </div>
+
+                              {/* Download Selected */}
+                              <button
+                                onClick={handleBulkDownload}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1 transition-all"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>دانلود گروهی</span>
+                              </button>
+
+                              {/* Delete Selected */}
+                              <button
+                                onClick={handleBulkDelete}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-rose-500 hover:bg-rose-600 text-white flex items-center gap-1 transition-all"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>حذف گروهی</span>
+                              </button>
+
+                              {/* Cancel Selection */}
+                              <button
+                                onClick={() => setSelectedScanIds([])}
+                                className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
+                                  isDarkMode ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                                }`}
+                              >
+                                انصراف
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Documents Grid */}
+                        {fileManagerFilteredScans.length === 0 ? (
+                          <div className={`py-16 flex flex-col items-center justify-center border border-dashed rounded-xl ${isDarkMode ? "border-slate-800 text-slate-500" : "border-slate-200 text-slate-400"}`}>
+                            <Folder className="w-14 h-14 mb-3 opacity-20" />
+                            <span className="text-sm font-extrabold mb-1">هیچ سندی پیدا نشد.</span>
+                            <span className="text-xs text-slate-400 text-center px-4">
+                              {previousScans.length === 0 
+                                ? "شما هنوز هیچ سندی را بارگذاری نکرده‌اید. یک تصویر یا فاکتور آپلود کنید." 
+                                : "هیچ فایلی با این مشخصات فیلتر، پوشه یا واژه جستجو مطابقت ندارد."}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {fileManagerFilteredScans.map((scan) => {
+                              const isSelected = selectedScanIds.includes(scan.id);
+                              const isPdf = scan.file?.name?.toLowerCase().endsWith(".pdf") || scan.file?.preview?.startsWith("data:application/pdf");
+                              return (
+                                <div 
+                                  key={scan.id} 
+                                  className={`group/card p-4 rounded-xl border flex flex-col justify-between transition-all relative hover:shadow-md ${
+                                    isSelected
+                                      ? "border-indigo-500 ring-1 ring-indigo-500/30 bg-indigo-50/5 dark:bg-indigo-950/5"
+                                      : isDarkMode 
+                                        ? "bg-slate-800/40 border-slate-750 hover:border-slate-650" 
+                                        : "bg-white border-slate-200 hover:border-slate-300"
+                                  }`}
+                                >
+                                  {/* Select Checkbox on Hover */}
+                                  <button
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setSelectedScanIds(prev => prev.filter(id => id !== scan.id));
+                                      } else {
+                                        setSelectedScanIds(prev => [...prev, scan.id]);
+                                      }
+                                    }}
+                                    className={`absolute top-3 left-3 z-10 p-1 rounded-lg transition-all ${
+                                      isSelected 
+                                        ? "bg-indigo-600 text-white scale-100" 
+                                        : "bg-slate-100 dark:bg-slate-950 text-slate-400 scale-90 opacity-60 group-hover/card:opacity-100 group-hover/card:scale-100 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                                    }`}
+                                  >
+                                    {isSelected ? (
+                                      <CheckSquare className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <Square className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+
+                                  <div className="flex items-start gap-3 mb-3">
+                                    {/* Thumbnail */}
+                                    <div className="w-11 h-11 shrink-0 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-center relative shadow-inner">
+                                      {isPdf ? (
+                                        <div className="w-full h-full bg-rose-50 dark:bg-rose-950/20 flex flex-col items-center justify-center">
+                                          <FileText className="w-5 h-5 text-rose-500" />
+                                          <span className="text-[7px] font-black text-rose-600 uppercase mt-0.5">PDF</span>
+                                        </div>
+                                      ) : scan.file?.preview ? (
+                                        <img src={scan.file.preview} alt="" className="w-full h-full object-cover transition-transform duration-300 group-hover/card:scale-110" referrerPolicy="no-referrer" />
+                                      ) : (
+                                        <FileText className="w-5 h-5 text-indigo-400" />
+                                      )}
+                                    </div>
+                                    
+                                    {/* Details */}
+                                    <div className="flex-1 min-w-0 pr-0.5 text-right">
+                                      <div className="flex items-center gap-1">
+                                        <h5 className="font-extrabold text-xs truncate flex-1" title={scan.file?.name}>
+                                          {scan.file?.name}
+                                        </h5>
+                                        {/* Rename button */}
+                                        <button
+                                          onClick={() => renamePreviousScan(scan.id, scan.file?.name || "")}
+                                          className="p-1 rounded opacity-0 group-hover/card:opacity-100 text-slate-400 hover:text-indigo-500 transition-opacity"
+                                          title="تغییر نام فاکتور"
+                                        >
+                                          <FileEdit className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                      
+                                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-1 text-[10px] text-slate-500" dir="rtl">
+                                        <span dir="ltr" className="font-semibold">{formatBytes(scan.file?.size || 0)}</span>
+                                        <span className="opacity-40">•</span>
+                                        <span>{new Date(scan.timestamp).toLocaleDateString("fa-IR")}</span>
+                                      </div>
+                                      
+                                      {/* Folder quick move inside card */}
+                                      <div className="flex items-center gap-1.5 mt-2.5">
+                                        <span className={`text-[9px] font-bold shrink-0 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>انتقال پوشه:</span>
+                                        <div className="relative flex-1">
+                                          <select
+                                            value={scan.folder || ""}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              setPreviousScans(prev => prev.map(s => s.id === scan.id ? { ...s, folder: val || undefined } : s));
+                                              showNotification(`سند «${scan.file?.name}» به پوشه «${val || "دسته‌بندی نشده"}» انتقال یافت.`, "success");
+                                              logEvent("انتقال پوشه سند", `کاربر پوشه سند «${scan.file?.name}» را به «${val || "دسته‌بندی نشده"}» تغییر داد.`);
+                                            }}
+                                            className={`w-full text-[9px] font-bold py-0.5 pr-1.5 pl-5 rounded-md border outline-none appearance-none transition-all cursor-pointer text-right ${
+                                              isDarkMode 
+                                                ? "bg-slate-900 border-slate-750 text-slate-300 hover:border-indigo-500 focus:border-indigo-500" 
+                                                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:border-indigo-500 focus:border-indigo-500"
+                                            }`}
+                                          >
+                                            <option value="">دسته‌بندی نشده</option>
+                                            {userDefinedFolders.map(folder => (
+                                              <option key={folder} value={folder}>{folder}</option>
+                                            ))}
+                                          </select>
+                                          <Folder className="w-2.5 h-2.5 absolute left-1.5 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Meta Data stats inside card */}
+                                  <div className={`p-2 rounded-lg mb-3 flex items-center justify-between text-[9px] font-bold ${
+                                    isDarkMode ? "bg-slate-900/40 text-slate-400" : "bg-slate-50 text-slate-500"
+                                  }`}>
+                                    <span>تراکنش‌های فاکتور: <span className="text-indigo-500 font-extrabold">{scan.transactions?.length.toLocaleString("fa-IR") || 0} ردیف</span></span>
+                                    {scan.file?.tokensUsed && (
+                                      <span>توکن‌ها: <span className="text-emerald-500 font-extrabold">{scan.file.tokensUsed.toLocaleString("fa-IR")}</span></span>
+                                    )}
+                                  </div>
+
+                                  {/* Card Action Buttons */}
+                                  <div className="flex items-center gap-1.5 pt-2.5 border-t border-slate-100 dark:border-slate-850 mt-auto">
+                                    <button
+                                      onClick={() => {
+                                        selectPreviousScan(scan);
+                                        setIsFileManagerOpen(false);
+                                      }}
+                                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm ${
+                                        isDarkMode 
+                                          ? "bg-indigo-600/20 text-indigo-400 hover:bg-indigo-650/30" 
+                                          : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                      }`}
+                                    >
+                                      باز کردن فاکتور
+                                    </button>
+                                    
+                                    {/* Download individual */}
+                                    <button
+                                      onClick={() => downloadBase64File(scan)}
+                                      className={`p-1.5 rounded-lg transition-colors border ${
+                                        isDarkMode 
+                                          ? "border-slate-700 hover:bg-slate-750 text-slate-300" 
+                                          : "border-slate-200 hover:bg-slate-100 text-slate-600"
+                                      }`}
+                                      title="دانلود فایل فاکتور"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </button>
+
+                                    {/* Delete individual */}
+                                    <button
+                                      onClick={() => {
+                                        if (window.confirm(`آیا مطمئن هستید که می‌خواهید سند «${scan.file?.name}» را حذف کنید؟`)) {
+                                          setPreviousScans(prev => prev.filter(s => s.id !== scan.id));
+                                          if (activeFile?.id === scan.id) clearCurrentFile();
+                                          logEvent("حذف فاکتور", `کاربر فاکتور «${scan.file?.name}» را حذف نمود.`);
+                                          showNotification("سند با موفقیت حذف شد.", "success");
+                                        }
+                                      }}
+                                      className={`p-1.5 rounded-lg transition-all ${
+                                        isDarkMode ? "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" : "bg-rose-50 text-rose-600 hover:bg-rose-100"
+                                      }`}
+                                      title="حذف فاکتور"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
