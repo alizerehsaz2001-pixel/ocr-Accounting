@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShieldCheck, Shield, FileEdit, Check, ArrowUpDown, Calendar, AlertTriangle } from "lucide-react";
 import { TransactionItem, DynamicColumn } from "../types";
@@ -24,6 +24,56 @@ export default function DynamicTable({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<TransactionItem | null>(null);
+  const [highlightedRowIds, setHighlightedRowIds] = useState<Record<string, "new" | "edited">>({});
+  const prevTransactionsRef = useRef<TransactionItem[]>(transactions);
+
+  useEffect(() => {
+    const prevTransactions = prevTransactionsRef.current;
+    if (prevTransactions !== transactions) {
+      const newHighlights: Record<string, "new" | "edited"> = {};
+      let changed = false;
+
+      if (prevTransactions.length > 0) {
+        transactions.forEach(curr => {
+          const prev = prevTransactions.find(p => p.id === curr.id);
+          if (!prev) {
+            newHighlights[curr.id] = "new";
+            changed = true;
+          } else {
+            // Compare key values to see if any edited
+            const keys = Array.from(new Set([...Object.keys(curr), ...Object.keys(prev)]));
+            const isDifferent = keys.some(k => {
+              if (k === "ضریب_اطمینان") {
+                return (curr[k] ?? 100) !== (prev[k] ?? 100);
+              }
+              return curr[k] !== prev[k];
+            });
+            if (isDifferent) {
+              newHighlights[curr.id] = "edited";
+              changed = true;
+            }
+          }
+        });
+      }
+
+      if (changed) {
+        setHighlightedRowIds(prev => ({ ...prev, ...newHighlights }));
+        const timeoutId = setTimeout(() => {
+          setHighlightedRowIds(prev => {
+            const next = { ...prev };
+            Object.keys(newHighlights).forEach(id => {
+              delete next[id];
+            });
+            return next;
+          });
+        }, 2500); // Highlight lasts for 2.5 seconds
+        
+        prevTransactionsRef.current = transactions;
+        return () => clearTimeout(timeoutId);
+      }
+    }
+    prevTransactionsRef.current = transactions;
+  }, [transactions]);
 
   const handleSort = (colKey: string) => {
     if (sortColumn === colKey) {
@@ -108,18 +158,30 @@ export default function DynamicTable({
             const isCurrentlyEditing = editingIndex === originalIndex;
             const score = tr.ضریب_اطمینان ?? 100;
             
+            const isHighlighted = highlightedRowIds[tr.id];
+            
             return (
               <motion.tr
                 key={tr.id || index}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className={`transition-all duration-300 ease-out group hover:relative hover:z-10 hover:-translate-y-0.5 hover:scale-[1.006] ${
-                  isCurrentlyEditing
-                    ? (isDarkMode ? "bg-slate-800 border-y-4 border-slate-700 shadow-xl" : "bg-slate-50 border-y-4 border-slate-200 shadow-xl")
-                    : isDarkMode
-                      ? "bg-transparent hover:bg-slate-800/90 hover:shadow-xl hover:shadow-black/35"
-                      : "bg-transparent hover:bg-white hover:shadow-xl hover:shadow-slate-200/50"
+                className={`group hover:relative hover:z-10 hover:-translate-y-0.5 hover:scale-[1.006] ${
+                  isHighlighted
+                    ? isHighlighted === "new"
+                      ? isDarkMode
+                        ? "bg-emerald-500/15 text-emerald-200 border-r-4 border-r-emerald-500 transition-none"
+                        : "bg-emerald-50 text-emerald-900 border-r-4 border-r-emerald-500 transition-none"
+                      : isDarkMode
+                        ? "bg-blue-500/15 text-blue-200 border-r-4 border-r-blue-500 transition-none"
+                        : "bg-blue-50 text-blue-900 border-r-4 border-r-blue-500 transition-none"
+                    : isCurrentlyEditing
+                      ? isDarkMode
+                        ? "bg-slate-800 border-y-4 border-slate-700 shadow-xl transition-all duration-300"
+                        : "bg-slate-50 border-y-4 border-slate-200 shadow-xl transition-all duration-300"
+                      : isDarkMode
+                        ? "bg-transparent hover:bg-slate-800/90 hover:shadow-xl hover:shadow-black/35 transition-all duration-1000 ease-out"
+                        : "bg-transparent hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-1000 ease-out"
                 }`}
               >
                 {isCurrentlyEditing && editingData ? (
