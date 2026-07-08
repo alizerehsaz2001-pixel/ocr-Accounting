@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldCheck, Shield, FileEdit, Check, ArrowUpDown, Calendar, AlertTriangle } from "lucide-react";
+import { ShieldCheck, Shield, FileEdit, Check, ArrowUpDown, Calendar, AlertTriangle, CheckSquare, Square } from "lucide-react";
 import { TransactionItem, DynamicColumn } from "../types";
 
 interface DynamicTableProps {
@@ -10,6 +10,9 @@ interface DynamicTableProps {
   onUpdateTransactions: (updated: TransactionItem[]) => void;
   onLogEvent: (action: string, details: string) => void;
   onShowNotification: (msg: string, type: "success"|"error"|"info"|"warning") => void;
+  selectedRowIds?: string[];
+  onToggleRowSelection?: (id: string) => void;
+  onToggleSelectAll?: () => void;
 }
 
 export default function DynamicTable({
@@ -18,7 +21,10 @@ export default function DynamicTable({
   isDarkMode,
   onUpdateTransactions,
   onLogEvent,
-  onShowNotification
+  onShowNotification,
+  selectedRowIds = [],
+  onToggleRowSelection,
+  onToggleSelectAll
 }: DynamicTableProps) {
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -123,10 +129,24 @@ export default function DynamicTable({
       : "bg-white border-slate-300 text-slate-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
   }`;
 
+  const hasSelectionSupport = !!onToggleRowSelection;
+  const allSelected = sortedTransactions.length > 0 && selectedRowIds.length === sortedTransactions.length;
+  const isIndeterminate = selectedRowIds.length > 0 && selectedRowIds.length < sortedTransactions.length;
+
+  const totalDebit = sortedTransactions.reduce((sum, tr) => sum + (Number(tr.مبلغ_بدهکار) || 0), 0);
+  const totalCredit = sortedTransactions.reduce((sum, tr) => sum + (Number(tr.مبلغ_بستانکار) || 0), 0);
+
   return (
     <table className="w-full text-right border-collapse text-xs">
       <thead className={`text-[10px] uppercase font-black sticky top-0 z-30 transition-colors duration-300 ${isDarkMode ? "text-slate-350" : "text-slate-500"}`}>
         <tr>
+          {hasSelectionSupport && (
+            <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none w-10`}>
+              <button onClick={onToggleSelectAll} className="outline-none">
+                {allSelected ? <CheckSquare className="w-4 h-4 text-blue-500" /> : isIndeterminate ? <CheckSquare className="w-4 h-4 text-slate-400 opacity-60" /> : <Square className="w-4 h-4 opacity-40 hover:opacity-100" />}
+              </button>
+            </th>
+          )}
           <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none`}>
             #
           </th>
@@ -157,7 +177,7 @@ export default function DynamicTable({
             const originalIndex = transactions.findIndex(t => t.id === tr.id);
             const isCurrentlyEditing = editingIndex === originalIndex;
             const score = tr.ضریب_اطمینان ?? 100;
-            
+            const isSelected = selectedRowIds.includes(tr.id);
             const isHighlighted = highlightedRowIds[tr.id];
             
             return (
@@ -166,7 +186,7 @@ export default function DynamicTable({
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className={`group hover:relative hover:z-10 hover:-translate-y-0.5 hover:scale-[1.006] ${
+                className={`group hover:relative hover:z-10 hover:-translate-y-0.5 hover:scale-[1.006] ${isSelected ? (isDarkMode ? "bg-blue-900/20" : "bg-blue-50/50") : ""} ${
                   isHighlighted
                     ? isHighlighted === "new"
                       ? isDarkMode
@@ -180,12 +200,12 @@ export default function DynamicTable({
                         ? "bg-slate-800 border-y-4 border-slate-700 shadow-xl transition-all duration-300"
                         : "bg-slate-50 border-y-4 border-slate-200 shadow-xl transition-all duration-300"
                       : isDarkMode
-                        ? "bg-transparent hover:bg-slate-800/90 hover:shadow-xl hover:shadow-black/35 transition-all duration-1000 ease-out"
-                        : "bg-transparent hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-1000 ease-out"
+                        ? "hover:bg-slate-800/90 hover:shadow-xl hover:shadow-black/35 transition-all duration-1000 ease-out"
+                        : "hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-1000 ease-out"
                 }`}
               >
                 {isCurrentlyEditing && editingData ? (
-                  <td colSpan={columns.length + 3} className="p-0">
+                  <td colSpan={columns.length + (hasSelectionSupport ? 4 : 3)} className="p-0">
                      <div className={`mx-4 my-5 p-6 rounded-2xl border-2 shadow-sm ${isDarkMode ? "bg-slate-900 border-blue-500/30" : "bg-white border-blue-200"}`}>
                          <div className="flex justify-between items-center mb-6 gap-4 border-b pb-4 border-slate-100 dark:border-slate-800">
                             <div className="flex items-center gap-4">
@@ -227,7 +247,14 @@ export default function DynamicTable({
                   </td>
                 ) : (
                   <>
-                    <td className="px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75 first:rounded-r-xl font-bold">
+                    {hasSelectionSupport && (
+                      <td className="px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75 font-bold cursor-pointer" onClick={(e) => { e.stopPropagation(); onToggleRowSelection(tr.id); }}>
+                        <button className="outline-none" onClick={(e) => { e.stopPropagation(); onToggleRowSelection(tr.id); }}>
+                          {isSelected ? <CheckSquare className="w-4 h-4 text-blue-500" /> : <Square className="w-4 h-4 opacity-30 hover:opacity-100" />}
+                        </button>
+                      </td>
+                    )}
+                    <td className={`px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75 font-bold ${hasSelectionSupport ? "" : "first:rounded-r-xl"}`}>
                       {index + 1}
                     </td>
                     <td className="px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75">
@@ -240,13 +267,22 @@ export default function DynamicTable({
                         <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">{score}٪</span>
                       </div>
                     </td>
-                    {columns.map(col => (
-                      <td key={col.کلید} className="px-3 py-3.5 border-b border-l border-slate-200/60 dark:border-slate-800/75 max-w-[200px] truncate text-slate-700 dark:text-slate-300 text-[11.5px] font-semibold">
-                         {col.نوع_داده === 'number' && tr[col.کلید] ? Number(tr[col.کلید]).toLocaleString("fa-IR") : (tr[col.کلید] || "-")}
-                      </td>
-                    ))}
+                    {columns.map(col => {
+                      const val = tr[col.کلید];
+                      const isNumber = col.نوع_داده === 'number';
+                      const isAmount = col.کلید.includes("مبلغ") || col.کلید.includes("amount");
+                      return (
+                        <td key={col.کلید} className={`px-3 py-3.5 border-b border-l border-slate-200/60 dark:border-slate-800/75 max-w-[200px] truncate text-slate-700 dark:text-slate-300 text-[11.5px] font-semibold ${isNumber ? "font-mono" : ""}`}>
+                           {isNumber && val ? (
+                             <span className={isAmount ? (Number(val) > 0 ? (col.کلید.includes("بدهکار") ? (isDarkMode ? "text-emerald-400" : "text-emerald-600") : (isDarkMode ? "text-rose-400" : "text-rose-600")) : "") : ""}>
+                               {Number(val).toLocaleString("fa-IR")}
+                             </span>
+                           ) : (val || "-")}
+                        </td>
+                      );
+                    })}
                     <td className="px-3 py-3.5 text-center border-b border-slate-200/60 dark:border-slate-800/75 last:rounded-l-xl">
-                       <button onClick={() => { setEditingIndex(originalIndex); setEditingData(tr); }} className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-bold text-[11px] flex items-center justify-center gap-1 mx-auto bg-blue-50 dark:bg-blue-500/10 px-2 py-1 rounded-lg">
+                       <button onClick={(e) => { e.stopPropagation(); setEditingIndex(originalIndex); setEditingData(tr); }} className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-bold text-[11px] flex items-center justify-center gap-1 mx-auto bg-blue-50 dark:bg-blue-500/10 px-2 py-1 rounded-lg">
                           <FileEdit className="w-3.5 h-3.5"/> ویرایش
                        </button>
                     </td>
@@ -257,6 +293,24 @@ export default function DynamicTable({
           })}
         </AnimatePresence>
       </tbody>
+      <tfoot className={`sticky bottom-0 z-20 shadow-[0_-1px_2px_rgba(0,0,0,0.03)] backdrop-blur-md ${isDarkMode ? "bg-slate-900/95" : "bg-slate-50/95"}`}>
+        <tr>
+          <td colSpan={hasSelectionSupport ? 3 : 2} className={`px-3 py-3 text-left font-black border-t border-l ${isDarkMode ? "border-slate-700 text-slate-300" : "border-slate-200 text-slate-600"}`}>
+            جمع کل صفحه:
+          </td>
+          {columns.map(col => {
+            let footerContent: React.ReactNode = "";
+            if (col.کلید === "مبلغ_بدهکار") footerContent = <span className={`font-mono ${isDarkMode ? "text-emerald-400" : "text-emerald-600"}`}>{totalDebit.toLocaleString("fa-IR")}</span>;
+            else if (col.کلید === "مبلغ_بستانکار") footerContent = <span className={`font-mono ${isDarkMode ? "text-rose-400" : "text-rose-600"}`}>{totalCredit.toLocaleString("fa-IR")}</span>;
+            return (
+              <td key={col.کلید} className={`px-3 py-3 font-bold border-t border-l ${isDarkMode ? "border-slate-700" : "border-slate-200"}`}>
+                {footerContent}
+              </td>
+            );
+          })}
+          <td className={`px-3 py-3 border-t ${isDarkMode ? "border-slate-700" : "border-slate-200"}`}></td>
+        </tr>
+      </tfoot>
     </table>
   );
 }

@@ -79,6 +79,9 @@ import {
   CheckSquare,
   Square,
   Plus,
+  Maximize,
+  Printer,
+  Undo2, Calculator, LayoutGrid, List
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -127,6 +130,7 @@ export default function App() {
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
+  const [undoStack, setUndoStack] = useState<TransactionItem[][]>([]);
   const [transactions, setTransactions] = useState<TransactionItem[]>(() => {
     const savedAutoRaw = localStorage.getItem("autosaved_raw_json");
     if (savedAutoRaw) {
@@ -219,6 +223,7 @@ export default function App() {
   const [selectedFolderFilter, setSelectedFolderFilter] = useState<string>("all");
   const [fileManagerSearchQuery, setFileManagerSearchQuery] = useState<string>("");
   const [fileManagerSortBy, setFileManagerSortBy] = useState<string>("newest");
+  const [fileManagerViewMode, setFileManagerViewMode] = useState<"grid" | "list">("grid");
   const [fileManagerTypeFilter, setFileManagerTypeFilter] = useState<string>("all");
   const [selectedScanIds, setSelectedScanIds] = useState<string[]>([]);
 
@@ -807,6 +812,51 @@ export default function App() {
 
   const [sortColumn, setSortColumn] = useState<keyof TransactionItem | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+
+  const handleToggleRowSelection = (id: string) => {
+    setSelectedRowIds(prev => 
+      prev.includes(id) ? prev.filter(rId => rId !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedRowIds.length === filteredTransactions.length && filteredTransactions.length > 0) {
+      setSelectedRowIds([]);
+    } else {
+      setSelectedRowIds(filteredTransactions.map(t => t.id));
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedRowIds.length === 0) return;
+    if (!window.confirm(`آیا از حذف ${selectedRowIds.length} ردیف انتخاب شده اطمینان دارید؟`)) return;
+    
+    setUndoStack(prev => [...prev, transactions]);
+    const updated = transactions.filter(t => !selectedRowIds.includes(t.id));
+    setTransactions(updated);
+    setSelectedRowIds([]);
+    try { setRawJsonText(JSON.stringify(updated, null, 2)); } catch(e) {}
+    showNotification(`${selectedRowIds.length} ردیف با موفقیت حذف شد.`, "success");
+  };
+
+  const handleFormatAmounts = () => {
+    setUndoStack(prev => [...prev, transactions]);
+    const updated = transactions.map(t => {
+      const fixed = { ...t };
+      if (fixed.مبلغ_بدهکار && typeof fixed.مبلغ_بدهکار === 'string') {
+        fixed.مبلغ_بدهکار = Number(fixed.مبلغ_بدهکار.replace(/,/g, ''));
+      }
+      if (fixed.مبلغ_بستانکار && typeof fixed.مبلغ_بستانکار === 'string') {
+        fixed.مبلغ_بستانکار = Number(fixed.مبلغ_بستانکار.replace(/,/g, ''));
+      }
+      return fixed;
+    });
+    setTransactions(updated);
+    try { setRawJsonText(JSON.stringify(updated, null, 2)); } catch(e) {}
+    showNotification("مبالغ ردیف‌ها با موفقیت استانداردسازی شد.", "success");
+  };
+
 
   const handleSort = (column: keyof TransactionItem) => {
     if (sortColumn === column) {
@@ -899,6 +949,24 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("current_user", JSON.stringify(currentUser));
   }, [currentUser]);
+
+  const [userPreferences, setUserPreferences] = useState(() => {
+    try {
+      const saved = localStorage.getItem("user_preferences");
+      return saved ? JSON.parse(saved) : {
+        geminiApiKey: "",
+        defaultCurrency: "IRT",
+        dateFormat: "Jalali",
+        autoBackup: true
+      };
+    } catch (e) {
+      return { geminiApiKey: "", defaultCurrency: "IRT", dateFormat: "Jalali", autoBackup: true };
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("user_preferences", JSON.stringify(userPreferences));
+  }, [userPreferences]);
 
   // Keep currentUser synced with users list when admin changes fields (like extraStorage)
   useEffect(() => {
@@ -1781,6 +1849,62 @@ export default function App() {
 
     logEvent("افزودن ردیف دستی", `کاربر یک ردیف جدید به صورت دستی به جدول اضافه کرد.`);
     showNotification("ردیف جدید ایجاد و حالت ویرایش برای تکمیل مقادیر آن فعال شد.", "success");
+  };
+
+  const handleDuplicateLastRow = () => {
+    if (transactions.length === 0) {
+      showNotification("جدول خالی است.", "error");
+      return;
+    }
+    const lastTr = transactions[transactions.length - 1];
+    const newTr = { ...lastTr, id: `manual-${Date.now()}` };
+    const updated = [...transactions, newTr];
+    setTransactions(updated);
+    try {
+      setRawJsonText(JSON.stringify(updated, null, 2));
+    } catch (e) {}
+    showNotification("ردیف آخر با موفقیت کپی شد.", "success");
+  };
+
+  const handleClearTable = () => {
+    if (transactions.length === 0) return;
+    if (!window.confirm("آیا از پاکسازی کل اطلاعات جدول اطمینان دارید؟")) return;
+    setUndoStack(prev => [...prev, transactions]);
+    setTransactions([]);
+    try {
+      setRawJsonText("[]");
+    } catch (e) {}
+    showNotification("اطلاعات جدول پاکسازی شد. قابلیت بازگردانی فعال است.", "info");
+  };
+
+  const handleUndoClear = () => {
+    if (undoStack.length === 0) {
+      showNotification("موردی برای بازگردانی وجود ندارد.", "error");
+      return;
+    }
+    const lastState = undoStack[undoStack.length - 1];
+    setTransactions(lastState);
+    setUndoStack(prev => prev.slice(0, -1));
+    try {
+      setRawJsonText(JSON.stringify(lastState, null, 2));
+    } catch (e) {}
+    showNotification("اطلاعات حذف شده بازیابی شد.", "success");
+  };
+
+  const handlePrintTable = () => {
+    window.print();
+  };
+
+  const handleToggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {
+        showNotification("امکان نمایش تمام‌صفحه مقدور نیست.", "error");
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
   };
 
   const handleDeleteRow = (index: number) => {
@@ -3817,7 +3941,7 @@ export default function App() {
                             <motion.div
                               whileHover={{ y: -2, scale: 1.01 }}
                               onClick={() => setFilterConfidence(filterConfidence === "high" ? "all" : "high")}
-                              className={`border p-3.5 rounded-xl shadow-sm flex flex-col justify-between cursor-pointer transition-all duration-300 ${
+                              className={`border p-3.5 rounded-xl shadow-sm ${fileManagerViewMode === "list" ? "flex flex-col sm:flex-row sm:items-center justify-between gap-4" : "flex flex-col justify-between"} cursor-pointer transition-all duration-300 ${
                                 filterConfidence === "high"
                                   ? "bg-emerald-600 border-emerald-500 text-white shadow-emerald-500/10"
                                   : isDarkMode 
@@ -3869,7 +3993,7 @@ export default function App() {
                             {/* Card 2: Accounting balance status */}
                             <motion.div
                               whileHover={{ y: -2, scale: 1.01 }}
-                              className={`border p-3.5 rounded-xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
+                              className={`border p-3.5 rounded-xl shadow-sm ${fileManagerViewMode === "list" ? "flex flex-col sm:flex-row sm:items-center justify-between gap-4" : "flex flex-col justify-between"} transition-all duration-300 ${
                                 isBalanced 
                                   ? isDarkMode 
                                     ? "bg-[#0b0f19] border-emerald-950/80 hover:border-emerald-900" 
@@ -3939,7 +4063,7 @@ export default function App() {
                             {/* Card 3: Quality Breakdown / distribution */}
                             <motion.div
                               whileHover={{ y: -2, scale: 1.01 }}
-                              className={`border p-3.5 rounded-xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
+                              className={`border p-3.5 rounded-xl shadow-sm ${fileManagerViewMode === "list" ? "flex flex-col sm:flex-row sm:items-center justify-between gap-4" : "flex flex-col justify-between"} transition-all duration-300 ${
                                 isDarkMode ? "bg-[#0b0f19] border-slate-850" : "bg-white border-slate-200/90"
                               }`}
                             >
@@ -4020,7 +4144,7 @@ export default function App() {
                             {/* Card 4: Quick Actions & Reset filters */}
                             <motion.div
                               whileHover={{ y: -2, scale: 1.01 }}
-                              className={`border p-3.5 rounded-xl shadow-sm flex flex-col justify-between transition-all duration-300 ${
+                              className={`border p-3.5 rounded-xl shadow-sm ${fileManagerViewMode === "list" ? "flex flex-col sm:flex-row sm:items-center justify-between gap-4" : "flex flex-col justify-between"} transition-all duration-300 ${
                                 isDarkMode ? "bg-[#0b0f19] border-slate-850" : "bg-white border-slate-200/90"
                               }`}
                             >
@@ -4472,6 +4596,80 @@ export default function App() {
                               )}
                             </button>
 
+                            {/* 5 New Operation Buttons */}
+                            {selectedRowIds.length > 0 ? (
+                              <button
+                                onClick={handleBatchDelete}
+                                className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all border shrink-0 ${
+                                  isDarkMode ? "bg-rose-500/20 hover:bg-rose-500/30 border-rose-500/50 text-rose-300" : "bg-rose-100 hover:bg-rose-200 border-rose-300 text-rose-700"
+                                }`}
+                                title="حذف ردیف‌های انتخاب شده"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span>حذف {selectedRowIds.length} مورد</span>
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={handleDuplicateLastRow}
+                                  className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all border shrink-0 ${
+                                    isDarkMode ? "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300" : "bg-white hover:bg-slate-50 border-slate-200 text-slate-600"
+                                  }`}
+                                  title="تکثیر آخرین ردیف"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={handleClearTable}
+                                  className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all border shrink-0 ${
+                                    isDarkMode ? "bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/30 text-rose-400" : "bg-rose-50 hover:bg-rose-100 border-rose-200 text-rose-600"
+                                  }`}
+                                  title="پاکسازی جدول"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={handleFormatAmounts}
+                                  className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all border shrink-0 ${
+                                    isDarkMode ? "bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/30 text-blue-400" : "bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-600"
+                                  }`}
+                                  title="استانداردسازی و فرمت مبالغ"
+                                >
+                                  <Coins className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={handleUndoClear}
+                              disabled={undoStack.length === 0}
+                              className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all border shrink-0 ${
+                                undoStack.length === 0 
+                                  ? (isDarkMode ? "bg-slate-800/50 border-slate-800 text-slate-600 opacity-50 cursor-not-allowed" : "bg-slate-50 border-slate-200 text-slate-400 opacity-50 cursor-not-allowed")
+                                  : (isDarkMode ? "bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-400" : "bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-600")
+                              }`}
+                              title="بازگردانی عملیات"
+                            >
+                              <Undo2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={handlePrintTable}
+                              className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all border shrink-0 ${
+                                isDarkMode ? "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300" : "bg-white hover:bg-slate-50 border-slate-200 text-slate-600"
+                              }`}
+                              title="چاپ / خروجی PDF"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={handleToggleFullscreen}
+                              className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all border shrink-0 ${
+                                isDarkMode ? "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300" : "bg-white hover:bg-slate-50 border-slate-200 text-slate-600"
+                              }`}
+                              title="نمایش تمام‌صفحه"
+                            >
+                              <Maximize className="h-3.5 w-3.5" />
+                            </button>
+
                             {/* Add New Row Manual Button */}
                             <button
                               onClick={handleAddNewRow}
@@ -4632,6 +4830,9 @@ export default function App() {
                              }} 
                              onLogEvent={logEvent}
                              onShowNotification={showNotification}
+                             selectedRowIds={selectedRowIds}
+                             onToggleRowSelection={handleToggleRowSelection}
+                             onToggleSelectAll={handleToggleSelectAll}
                           />
                       </div>
 
@@ -4860,219 +5061,89 @@ export default function App() {
                               )}
                             </div>
 
-                            {/* Anomalies and Financial Statistics Widget */}
-                            <div className={`p-4 rounded-2xl border flex flex-col gap-3 transition-colors ${
-                              isDarkMode ? "bg-slate-900/65 border-slate-800/90 shadow-lg" : "bg-[#f8fafc] border-slate-200/80 shadow-sm"
+                            {/* Key Extraction Stats Widget - Minimalist */}
+                            <div className={`p-3 rounded-xl border transition-colors ${
+                              isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-slate-50/50 border-slate-100"
                             }`}>
-                              <div className="flex items-center gap-2 pb-2.5 border-b border-slate-200/60 dark:border-slate-800/60">
-                                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                                <span className={`text-[11px] font-extrabold font-sans tracking-wide ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>آمارهای کلیدی طبقه‌بندی استخراج</span>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                  <span className={`text-[10px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>آمارهای کلیدی استخراج</span>
+                                </div>
+                                <span className={`text-[9px] ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
+                                  {Array.from(new Set(filteredTransactions.map(t => t.نوع_ارز).filter(Boolean))).join("، ") || "ریال"}
+                                </span>
                               </div>
                               
-                              <div className="flex flex-col gap-2 relative text-[10px] font-sans">
-                                {/* Row 1: Highest account value */}
-                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
-                                  isDarkMode 
-                                    ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-emerald-500/30" 
-                                    : "bg-white border-slate-100 hover:border-emerald-200 hover:shadow-sm"
-                                }`}>
-                                  <div className="flex items-center gap-2">
-                                    <div className={`p-1.5 rounded-lg shrink-0 ${
-                                      isDarkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"
-                                    }`}>
-                                      <TrendingUp className="h-3.5 w-3.5" />
-                                    </div>
-                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>بالاترین رقم حساب:</span>
-                                  </div>
-                                  <span className={`font-bold font-mono text-xs ${isDarkMode ? "text-emerald-400" : "text-emerald-600"}`} dir="ltr">
-                                    {Math.max(0, ...filteredTransactions.map(t => Math.max(Number(t.مبلغ_بدهکار) || 0, Number(t.مبلغ_بستانکار) || 0))).toLocaleString("fa-IR")}
-                                  </span>
-                                </div>
-
-                                {/* Row 2: Average amount */}
-                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
-                                  isDarkMode 
-                                    ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-blue-500/30" 
-                                    : "bg-white border-slate-100 hover:border-blue-200 hover:shadow-sm"
-                                }`}>
-                                  <div className="flex items-center gap-2">
-                                    <div className={`p-1.5 rounded-lg shrink-0 ${
-                                      isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600"
-                                    }`}>
-                                      <Wallet className="h-3.5 w-3.5" />
-                                    </div>
-                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>میانگین مبالغ ثبت شده:</span>
-                                  </div>
-                                  <span className={`font-bold font-mono text-xs ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} dir="ltr">
-                                    {(totalSum / ((filteredTransactions.filter(t => (Number(t.مبلغ_بدهکار) || 0) > 0 || (Number(t.مبلغ_بستانکار) || 0) > 0).length) || 1)).toLocaleString("fa-IR", {maximumFractionDigits: 0})}
-                                  </span>
-                                </div>
-
-                                {/* Row 3: Unique scanned docs */}
-                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
-                                  isDarkMode 
-                                    ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-violet-500/30" 
-                                    : "bg-white border-slate-100 hover:border-violet-200 hover:shadow-sm"
-                                }`}>
-                                  <div className="flex items-center gap-2">
-                                    <div className={`p-1.5 rounded-lg shrink-0 ${
-                                      isDarkMode ? "bg-violet-500/10 text-violet-400" : "bg-violet-50 text-violet-600"
-                                    }`}>
-                                      <FileText className="h-3.5 w-3.5" />
-                                    </div>
-                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>اسناد یکتا شناسایی شده:</span>
-                                  </div>
-                                  <span className={`font-extrabold font-mono text-xs ${isDarkMode ? "text-violet-400" : "text-violet-600"}`} dir="ltr">
-                                    {new Set(filteredTransactions.filter(t => t.شماره_سند && t.شماره_سند.trim() !== "").map(t => t.شماره_سند)).size.toLocaleString("fa-IR")}
-                                  </span>
-                                </div>
-
-                                {/* Row 4: Missing dates */}
-                                {(() => {
-                                  const missingDatesCount = filteredTransactions.filter(t => !t.تاریخ || t.تاریخ.trim() === "").length;
-                                  const hasMissingDates = missingDatesCount > 0;
-                                  return (
-                                    <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
-                                      hasMissingDates
-                                        ? isDarkMode ? "bg-amber-950/20 border-amber-800/40 hover:border-amber-500/50" : "bg-amber-50/50 border-amber-100 hover:border-amber-200"
-                                        : isDarkMode ? "bg-slate-950/40 border-slate-800/50" : "bg-white border-slate-100"
-                                    }`}>
-                                      <div className="flex items-center gap-2">
-                                        <div className={`p-1.5 rounded-lg shrink-0 ${
-                                          hasMissingDates
-                                            ? isDarkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-700 font-bold"
-                                            : isDarkMode ? "bg-slate-800 text-slate-500" : "bg-slate-100 text-slate-400"
-                                        }`}>
-                                          <Calendar className="h-3.5 w-3.5" />
-                                        </div>
-                                        <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>تراکنش‌های فاقد تاریخ:</span>
-                                      </div>
-                                      <span className={`font-extrabold font-mono text-xs ${hasMissingDates ? "text-amber-500 animate-pulse" : isDarkMode ? "text-slate-500" : "text-slate-400"}`} dir="ltr">
-                                        {missingDatesCount.toLocaleString("fa-IR")}
-                                      </span>
-                                    </div>
-                                  );
-                                })()}
-
-                                {/* Row 5: Missing descriptions */}
-                                {(() => {
-                                  const missingDescCount = filteredTransactions.filter(t => !t.شرح || t.شرح.trim() === "").length;
-                                  const hasMissingDesc = missingDescCount > 0;
-                                  return (
-                                    <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
-                                      hasMissingDesc
-                                        ? isDarkMode ? "bg-rose-950/20 border-rose-800/40 hover:border-rose-500/50" : "bg-rose-50/50 border-rose-100 hover:border-rose-200"
-                                        : isDarkMode ? "bg-slate-950/40 border-slate-800/50" : "bg-white border-slate-100"
-                                    }`}>
-                                      <div className="flex items-center gap-2">
-                                        <div className={`p-1.5 rounded-lg shrink-0 ${
-                                          hasMissingDesc
-                                            ? isDarkMode ? "bg-rose-500/20 text-rose-400" : "bg-rose-100 text-rose-700 font-bold"
-                                            : isDarkMode ? "bg-slate-800 text-slate-500" : "bg-slate-100 text-slate-400"
-                                        }`}>
-                                          <AlertTriangle className="h-3.5 w-3.5" />
-                                        </div>
-                                        <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>تراکنش‌های فاقد شرح:</span>
-                                      </div>
-                                      <span className={`font-extrabold font-mono text-xs ${hasMissingDesc ? "text-rose-500 animate-pulse font-extrabold" : isDarkMode ? "text-slate-500" : "text-slate-400"}`} dir="ltr">
-                                        {missingDescCount.toLocaleString("fa-IR")}
-                                      </span>
-                                    </div>
-                                  );
-                                })()}
-
-                                {/* Row 6: Total Debit Turnover */}
-                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
-                                  isDarkMode ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-emerald-500/20" : "bg-white border-slate-100 hover:border-emerald-250 hover:shadow-xs"
-                                }`}>
-                                  <div className="flex items-center gap-2">
-                                    <div className={`p-1.5 rounded-lg shrink-0 ${
-                                      isDarkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"
-                                    }`}>
-                                      <PlusCircle className="h-3.5 w-3.5" />
-                                    </div>
-                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>مجموع کل بدهکار (منابع کاربری):</span>
-                                  </div>
-                                  <span className={`font-extrabold font-mono text-xs ${isDarkMode ? "text-emerald-400" : "text-emerald-700"}`} dir="ltr">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                {/* Debit Turnover */}
+                                <div className={`p-2.5 rounded-lg border flex flex-col justify-center ${isDarkMode ? "bg-slate-800/40 border-slate-700/50" : "bg-white border-slate-200/50"}`}>
+                                  <div className="text-[9px] text-slate-500 mb-1 flex items-center gap-1"><PlusCircle className="w-3 h-3 text-emerald-500" /> کل بدهکار</div>
+                                  <div className={`text-xs font-mono font-bold truncate ${isDarkMode ? "text-emerald-400" : "text-emerald-700"}`} title={filteredTransactions.reduce((acc, t) => acc + (Number(t.مبلغ_بدهکار) || 0), 0).toLocaleString("fa-IR")}>
                                     {filteredTransactions.reduce((acc, t) => acc + (Number(t.مبلغ_بدهکار) || 0), 0).toLocaleString("fa-IR")}
-                                  </span>
-                                </div>
-
-                                {/* Row 7: Total Credit Turnover */}
-                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
-                                  isDarkMode ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-rose-500/20" : "bg-white border-slate-100 hover:border-rose-250 hover:shadow-xs"
-                                }`}>
-                                  <div className="flex items-center gap-2">
-                                    <div className={`p-1.5 rounded-lg shrink-0 ${
-                                      isDarkMode ? "bg-rose-500/10 text-rose-400" : "bg-rose-50 text-rose-600"
-                                    }`}>
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </div>
-                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>مجموع کل بستانکار (مصارف کاربری):</span>
                                   </div>
-                                  <span className={`font-extrabold font-mono text-xs ${isDarkMode ? "text-rose-400" : "text-rose-700"}`} dir="ltr">
+                                </div>
+                                {/* Credit Turnover */}
+                                <div className={`p-2.5 rounded-lg border flex flex-col justify-center ${isDarkMode ? "bg-slate-800/40 border-slate-700/50" : "bg-white border-slate-200/50"}`}>
+                                  <div className="text-[9px] text-slate-500 mb-1 flex items-center gap-1"><TrendingUp className="w-3 h-3 text-rose-500" /> کل بستانکار</div>
+                                  <div className={`text-xs font-mono font-bold truncate ${isDarkMode ? "text-rose-400" : "text-rose-700"}`} title={filteredTransactions.reduce((acc, t) => acc + (Number(t.مبلغ_بستانکار) || 0), 0).toLocaleString("fa-IR")}>
                                     {filteredTransactions.reduce((acc, t) => acc + (Number(t.مبلغ_بستانکار) || 0), 0).toLocaleString("fa-IR")}
-                                  </span>
-                                </div>
-
-                                {/* Row 8: Currency Analysis */}
-                                <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
-                                  isDarkMode ? "bg-slate-950/40 border-slate-800/50 hover:bg-slate-950/80 hover:border-indigo-500/20" : "bg-white border-slate-100 hover:border-indigo-250 hover:shadow-xs"
-                                }`}>
-                                  <div className="flex items-center gap-2">
-                                    <div className={`p-1.5 rounded-lg shrink-0 ${
-                                      isDarkMode ? "bg-indigo-500/10 text-indigo-400" : "bg-indigo-50 text-indigo-600"
-                                    }`}>
-                                      <Coins className="h-3.5 w-3.5" />
-                                    </div>
-                                    <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>ارزهای شناسایی‌شده در فاکتور:</span>
                                   </div>
-                                  <span className={`font-semibold text-[10px] ${isDarkMode ? "text-indigo-300" : "text-indigo-850"}`}>
-                                    {Array.from(new Set(filteredTransactions.map(t => t.نوع_ارز).filter(Boolean))).join("، ") || "ریال"}
-                                  </span>
                                 </div>
-
-                                {/* Row 9: Smart Risk Assessment */}
-                                {(() => {
-                                  const missingDatesCount = filteredTransactions.filter(t => !t.تاریخ || t.تاریخ.trim() === "").length;
-                                  const missingDescCount = filteredTransactions.filter(t => !t.شرح || t.شرح.trim() === "").length;
-                                  const totalMissing = missingDatesCount + missingDescCount;
-                                  
-                                  const lowConfCount = filteredTransactions.filter(tr => (tr.ضریب_اطمینان ?? 100) < 70).length;
-                                  const sDebit = filteredTransactions.reduce((acc, current) => acc + (current.مبلغ_بدهکار ?? 0), 0);
-                                  const sCredit = filteredTransactions.reduce((acc, current) => acc + (current.مبلغ_بستانکار ?? 0), 0);
-                                  const balanceOK = filteredTransactions.length > 0 && sDebit === sCredit;
-
-                                  let riskLabel = "بسیار کم (سند پایدار)";
-                                  let riskBadgeColor = isDarkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-emerald-50 text-emerald-700 border-emerald-200";
-                                  
-                                  if (!balanceOK || lowConfCount > 2) {
-                                    riskLabel = "بالا (عدم انطباق موازنه یا دقت)";
-                                    riskBadgeColor = isDarkMode ? "bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse" : "bg-rose-50 text-rose-700 border-rose-200 animate-pulse";
-                                  } else if (lowConfCount > 0 || totalMissing > 0) {
-                                    riskLabel = "متوسط (نیازمند بررسی و تکمیل)";
-                                    riskBadgeColor = isDarkMode ? "bg-amber-500/10 text-amber-400 border-amber-500/30" : "bg-amber-50 text-amber-700 border-amber-200";
-                                  }
-
-                                  return (
-                                    <div className={`flex justify-between items-center p-2 rounded-xl border transition-all ${
-                                      isDarkMode ? "bg-slate-950/40 border-slate-800/50" : "bg-white border-slate-100"
-                                    }`}>
-                                      <div className="flex items-center gap-2">
-                                        <div className={`p-1.5 rounded-lg shrink-0 ${
-                                          isDarkMode ? "bg-[#3b82f6]/10 text-[#3b82f6]" : "bg-blue-50 text-blue-600"
-                                        }`}>
-                                          <ShieldCheck className="h-3.5 w-3.5" />
-                                        </div>
-                                        <span className={`font-bold ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>سطح ریسک مغایرت دفتر جاری:</span>
-                                      </div>
-                                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${riskBadgeColor}`}>
-                                        {riskLabel}
-                                      </span>
-                                    </div>
-                                  );
-                                })()}
+                                {/* Avg Amount */}
+                                <div className={`p-2.5 rounded-lg border flex flex-col justify-center ${isDarkMode ? "bg-slate-800/40 border-slate-700/50" : "bg-white border-slate-200/50"}`}>
+                                  <div className="text-[9px] text-slate-500 mb-1 flex items-center gap-1"><Wallet className="w-3 h-3 text-blue-500" /> میانگین مبالغ</div>
+                                  <div className={`text-xs font-mono font-bold truncate ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} title={(totalSum / ((filteredTransactions.filter(t => (Number(t.مبلغ_بدهکار) || 0) > 0 || (Number(t.مبلغ_بستانکار) || 0) > 0).length) || 1)).toLocaleString("fa-IR", {maximumFractionDigits: 0})}>
+                                    {(totalSum / ((filteredTransactions.filter(t => (Number(t.مبلغ_بدهکار) || 0) > 0 || (Number(t.مبلغ_بستانکار) || 0) > 0).length) || 1)).toLocaleString("fa-IR", {maximumFractionDigits: 0})}
+                                  </div>
+                                </div>
+                                {/* Unique Docs */}
+                                <div className={`p-2.5 rounded-lg border flex flex-col justify-center ${isDarkMode ? "bg-slate-800/40 border-slate-700/50" : "bg-white border-slate-200/50"}`}>
+                                  <div className="text-[9px] text-slate-500 mb-1 flex items-center gap-1"><FileText className="w-3 h-3 text-violet-500" /> اسناد یکتا</div>
+                                  <div className={`text-xs font-mono font-bold truncate ${isDarkMode ? "text-violet-400" : "text-violet-600"}`} title={new Set(filteredTransactions.filter(t => t.شماره_سند && t.شماره_سند.trim() !== "").map(t => t.شماره_سند)).size.toLocaleString("fa-IR")}>
+                                    {new Set(filteredTransactions.filter(t => t.شماره_سند && t.شماره_سند.trim() !== "").map(t => t.شماره_سند)).size.toLocaleString("fa-IR")}
+                                  </div>
+                                </div>
                               </div>
+                              
+                              {/* Risk Assessment & Warnings */}
+                              {(() => {
+                                const missingDatesCount = filteredTransactions.filter(t => !t.تاریخ || t.تاریخ.trim() === "").length;
+                                const missingDescCount = filteredTransactions.filter(t => !t.شرح || t.شرح.trim() === "").length;
+                                const lowConfCount = filteredTransactions.filter(tr => (tr.ضریب_اطمینان ?? 100) < 70).length;
+                                const sDebit = filteredTransactions.reduce((acc, current) => acc + (current.مبلغ_بدهکار ?? 0), 0);
+                                const sCredit = filteredTransactions.reduce((acc, current) => acc + (current.مبلغ_بستانکار ?? 0), 0);
+                                const balanceOK = filteredTransactions.length > 0 && sDebit === sCredit;
+
+                                let riskBadgeColor = isDarkMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" : "bg-emerald-50 text-emerald-700 border-emerald-200";
+                                let riskText = "سند پایدار";
+                                
+                                if (!balanceOK || lowConfCount > 2) {
+                                  riskBadgeColor = isDarkMode ? "bg-rose-500/10 text-rose-400 border-rose-500/30" : "bg-rose-50 text-rose-700 border-rose-200";
+                                  riskText = "مغایرت/ریسک بالا";
+                                } else if (lowConfCount > 0 || missingDatesCount > 0 || missingDescCount > 0) {
+                                  riskBadgeColor = isDarkMode ? "bg-amber-500/10 text-amber-400 border-amber-500/30" : "bg-amber-50 text-amber-700 border-amber-200";
+                                  riskText = "نیاز به تکمیل";
+                                }
+
+                                return (
+                                  <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-200/50 dark:border-slate-700/50">
+                                    <div className={`px-2.5 py-1.5 text-[9px] font-bold rounded-md border flex items-center gap-1.5 ${riskBadgeColor}`}>
+                                      <ShieldCheck className="w-3.5 h-3.5" /> وضعیت سند: {riskText}
+                                    </div>
+                                    {missingDatesCount > 0 && (
+                                      <div className={`px-2.5 py-1.5 text-[9px] font-bold rounded-md border flex items-center gap-1.5 ${isDarkMode ? "bg-amber-900/30 text-amber-400 border-amber-800" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                                        <Calendar className="w-3.5 h-3.5" /> {missingDatesCount} فاقد تاریخ
+                                      </div>
+                                    )}
+                                    {missingDescCount > 0 && (
+                                      <div className={`px-2.5 py-1.5 text-[9px] font-bold rounded-md border flex items-center gap-1.5 ${isDarkMode ? "bg-rose-900/30 text-rose-400 border-rose-800" : "bg-rose-50 text-rose-700 border-rose-200"}`}>
+                                        <AlertTriangle className="w-3.5 h-3.5" /> {missingDescCount} فاقد شرح
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
 
                             {/* Accounting Quick Hints Info */}
@@ -5695,6 +5766,65 @@ export default function App() {
                          {currentUser?.role === "admin" ? "مدیر کل سیستم" : "همکار حسابدار"}
                        </span>
                      </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* API Setup */}
+              <section className="flex flex-col gap-3">
+                 <h4 className="text-xs font-bold flex items-center gap-2">
+                  <Key className="h-4 w-4" />
+                  اتصال مدل زبانی هوش مصنوعی (Gemini API)
+                </h4>
+                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-xs">کلید دسترسی (API Key) شخصی</span>
+                    <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      در صورت وارد کردن کلید، درخواست‌ها از سهمیه خودتان مصرف خواهد شد.
+                    </span>
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="AIzaSy..."
+                    value={userPreferences.geminiApiKey}
+                    onChange={(e) => setUserPreferences(prev => ({...prev, geminiApiKey: e.target.value}))}
+                    className={`mt-1 text-sm py-2.5 px-3 font-mono rounded-lg border focus:ring-2 focus:outline-none transition-all ${isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200 focus:border-blue-500 focus:ring-blue-500/20" : "bg-white border-slate-300 text-slate-800 focus:border-blue-500 focus:ring-blue-500/20"}`}
+                  />
+                </div>
+              </section>
+
+              {/* Accounting Setup */}
+              <section className="flex flex-col gap-3">
+                 <h4 className="text-xs font-bold flex items-center gap-2">
+                  <Calculator className="h-4 w-4" />
+                  تنظیمات پایه‌ای حسابداری
+                </h4>
+                <div className={`p-4 rounded-xl border flex flex-col gap-4 ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs">واحد پول پیش‌فرض سیستم</span>
+                    <div className="flex gap-1 bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
+                      <button 
+                        onClick={() => setUserPreferences(prev => ({...prev, defaultCurrency: "IRR"}))}
+                        className={`text-[10px] font-bold px-3 py-1.5 rounded transition-all ${userPreferences.defaultCurrency === "IRR" ? "bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"}`}
+                      >ریال</button>
+                      <button 
+                        onClick={() => setUserPreferences(prev => ({...prev, defaultCurrency: "IRT"}))}
+                        className={`text-[10px] font-bold px-3 py-1.5 rounded transition-all ${userPreferences.defaultCurrency === "IRT" ? "bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"}`}
+                      >تومان</button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs">قالب پیش‌فرض تاریخ</span>
+                    <div className="flex gap-1 bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
+                      <button 
+                        onClick={() => setUserPreferences(prev => ({...prev, dateFormat: "Jalali"}))}
+                        className={`text-[10px] font-bold px-3 py-1.5 rounded transition-all ${userPreferences.dateFormat === "Jalali" ? "bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"}`}
+                      >شمسی</button>
+                      <button 
+                        onClick={() => setUserPreferences(prev => ({...prev, dateFormat: "Gregorian"}))}
+                        className={`text-[10px] font-bold px-3 py-1.5 rounded transition-all ${userPreferences.dateFormat === "Gregorian" ? "bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"}`}
+                      >میلادی</button>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -6978,6 +7108,24 @@ export default function App() {
                               title={selectedScanIds.length === fileManagerFilteredScans.length ? "لغو انتخاب همه" : "انتخاب همه اسناد"}
                             >
                               <CheckSquare className="w-3.5 h-3.5" />
+                            {/* View Mode Toggle */}
+                            <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-0.5">
+                              <button
+                                onClick={() => setFileManagerViewMode("grid")}
+                                className={`p-1.5 rounded-md transition-colors ${fileManagerViewMode === "grid" ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
+                                title="نمایش شبکه‌ای"
+                              >
+                                <LayoutGrid className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setFileManagerViewMode("list")}
+                                className={`p-1.5 rounded-md transition-colors ${fileManagerViewMode === "list" ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
+                                title="نمایش لیستی"
+                              >
+                                <List className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
                             </button>
                           </div>
                         </div>
@@ -7027,6 +7175,47 @@ export default function App() {
                                 onClick={handleBulkDelete}
                                 className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-rose-500 hover:bg-rose-600 text-white flex items-center gap-1 transition-all"
                               >
+                              {/* Export Excel Selected */}
+                              <button
+                                onClick={() => {
+                                  let worksheetData: any[] = [];
+                                  let colWidths: any[] = [];
+                                  previousScans.forEach(scan => {
+                                    if (selectedScanIds.includes(scan.id) && scan.transactions) {
+                                      scan.transactions.forEach((t: any, idx: number) => {
+                                        worksheetData.push({
+                                          "فاکتور": scan.file?.name || "نامشخص",
+                                          "ردیف": idx + 1,
+                                          "تاریخ": t.تاریخ,
+                                          "شماره_سند": t.شماره_سند,
+                                          "نام_طرف_حساب": t.نام_طرف_حساب,
+                                          "مبلغ_بدهکار": t.مبلغ_بدهکار || 0,
+                                          "مبلغ_بستانکار": t.مبلغ_بستانکار || 0,
+                                          "شرح": t.شرح
+                                        });
+                                      });
+                                    }
+                                  });
+                                  if (worksheetData.length === 0) {
+                                    setNotification({ text: "تراکنشی برای خروجی اکسل یافت نشد.", type: "error" });
+                                    return;
+                                  }
+                                  colWidths = [{ wch: 25 }, { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 40 }];
+                                  const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+                                  worksheet["!cols"] = colWidths;
+                                  if (!worksheet["!views"]) worksheet["!views"] = [];
+                                  worksheet["!views"].push({ rightToLeft: true });
+                                  const workbook = XLSX.utils.book_new();
+                                  XLSX.utils.book_append_sheet(workbook, worksheet, "تراکنش‌های منتخب");
+                                  XLSX.writeFile(workbook, `Selected-Export-${new Date().toISOString().split("T")[0]}.xlsx`);
+                                  setNotification({ text: "فایل اکسل اسناد منتخب با موفقیت دانلود شد.", type: "success" });
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 transition-all"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>اکسل یکپارچه</span>
+                              </button>
+
                                 <Trash2 className="w-3.5 h-3.5" />
                                 <span>حذف گروهی</span>
                               </button>
@@ -7056,14 +7245,14 @@ export default function App() {
                             </span>
                           </div>
                         ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div className={`grid gap-4 ${fileManagerViewMode === "grid" ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"}`}>
                             {fileManagerFilteredScans.map((scan) => {
                               const isSelected = selectedScanIds.includes(scan.id);
                               const isPdf = scan.file?.name?.toLowerCase().endsWith(".pdf") || scan.file?.preview?.startsWith("data:application/pdf");
                               return (
                                 <div 
                                   key={scan.id} 
-                                  className={`group/card p-4 rounded-xl border flex flex-col justify-between transition-all relative hover:shadow-md ${
+                                  className={`group/card p-4 rounded-xl border ${fileManagerViewMode === "list" ? "flex flex-col sm:flex-row sm:items-center justify-between gap-4" : "flex flex-col justify-between"} transition-all relative hover:shadow-md ${
                                     isSelected
                                       ? "border-indigo-500 ring-1 ring-indigo-500/30 bg-indigo-50/5 dark:bg-indigo-950/5"
                                       : isDarkMode 
@@ -7159,6 +7348,7 @@ export default function App() {
                                     </div>
                                   </div>
 
+                                  <div className={fileManagerViewMode === "list" ? "flex flex-col sm:flex-row sm:items-center gap-4 w-full sm:w-auto mt-4 sm:mt-0 shrink-0" : ""}>
                                   {/* Meta Data stats inside card */}
                                   <div className={`p-2 rounded-lg mb-3 flex items-center justify-between text-[9px] font-bold ${
                                     isDarkMode ? "bg-slate-900/40 text-slate-400" : "bg-slate-50 text-slate-500"
@@ -7215,6 +7405,8 @@ export default function App() {
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </button>
+                                  </div>
+
                                   </div>
                                 </div>
                               );
@@ -7367,9 +7559,11 @@ export default function App() {
                     <span className={`text-[9px] font-bold text-right ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>سوالات راهنما:</span>
                     <div className="flex flex-wrap gap-1.5 justify-start">
                       {[
-                        { t: "تبدیل فایل اکسل چطور کار می‌کند؟", q: "تبدیل فایل اکسل چطور کار می‌کند؟" },
-                        { t: "موازنه دوطرفه چیست؟", q: "موازنه دوطرفه چیست و چگونه به مغایرت‌گیری کمک می‌کند؟" },
-                        { t: "درباره سرفصل‌های ERP توضیح دهید", q: "درباره سرفصل‌های ماژول‌های ERP در حال ساخت توضیح دهید" },
+                        { t: "🔍 بررسی مغایرت‌ها", q: "لطفا بررسی کن آیا این سند حسابداری از نظر مبلغ بدهکار و بستانکار کاملاً تراز است؟ اگر مغایرتی وجود دارد، دقیقاً در کدام ردیف‌هاست؟" },
+                        { t: "📊 طبقه‌بندی هزینه‌ها", q: "لطفاً تراکنش‌های فعلی را بر اساس نوع هزینه (مانند حقوق، تجهیزات، اداری و...) دسته‌بندی کن و جمع هر دسته را بگو." },
+                        { t: "⚠️ شناسایی موارد مشکوک", q: "آیا در بین ردیف‌های استخراج شده، موردی وجود دارد که ضریب اطمینان پایین یا مبلغ نامتعارفی داشته باشد؟" },
+                        { t: "💡 پیشنهاد کدینگ حساب", q: "با توجه به شرح تراکنش‌ها، پیشنهاد می‌کنی هر ردیف را در چه حساب معین یا تفصیلی ثبت کنم؟" },
+                        { t: "📑 خلاصه مدیریتی", q: "یک گزارش مدیریتی کوتاه از وضعیت این فاکتور/سند شامل جمع کل پرداختی‌ها و ماهیت اصلی هزینه‌ها ارائه بده." },
                       ].map((chip, idx) => (
                         <button
                           key={idx}
