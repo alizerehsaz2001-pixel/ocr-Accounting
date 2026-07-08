@@ -1743,15 +1743,20 @@ export default function App() {
 
   const handleAddNewRow = () => {
     const newId = `manual-${Date.now()}`;
+    
+    // Find the last successful transaction (confidence >= 70) to use as suggestion
+    const validTransactions = transactions.filter(t => (t.ضریب_اطمینان ?? 100) >= 70);
+    const lastTr = validTransactions.length > 0 ? validTransactions[validTransactions.length - 1] : null;
+
     const newTr: TransactionItem = {
       id: newId,
-      تاریخ: new Date().toLocaleDateString("fa-IR"),
+      تاریخ: lastTr?.تاریخ || new Date().toLocaleDateString("fa-IR"),
       شماره_سند: "",
-      نام_طرف_حساب: "",
-      شرح: "",
-      مبلغ_بدهکار: 0,
-      مبلغ_بستانکار: 0,
-      نوع_ارز: "ریال",
+      نام_طرف_حساب: lastTr?.نام_طرف_حساب || "",
+      شرح: lastTr?.شرح ? `${lastTr.شرح} (پيشنهادی)` : "",
+      مبلغ_بدهکار: lastTr?.مبلغ_بدهکار || 0,
+      مبلغ_بستانکار: lastTr?.مبلغ_بستانکار || 0,
+      نوع_ارز: lastTr?.نوع_ارز || "ریال",
       توضیحات: "",
       ضریب_اطمینان: 100,
       شناسه_ملی: "",
