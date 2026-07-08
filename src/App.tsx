@@ -7340,32 +7340,48 @@ export default function App() {
               </div>
 
               {/* Suggestions Panel */}
-              {chatMessages.length <= 2 && (
-                <div className={`px-4 py-2 shrink-0 border-t flex flex-col gap-1.5 ${
-                  isDarkMode ? "bg-slate-800/50 border-slate-750" : "bg-slate-50 border-slate-100"
-                }`}>
-                  <span className={`text-[9px] font-bold text-right ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>سوالات پیشنهادی کاربر:</span>
-                  <div className="flex flex-wrap gap-1.5 justify-start">
-                    {[
-                      { t: "تبدیل فایل اکسل چطور کار می‌کند؟", q: "تبدیل فایل اکسل چطور کار می‌کند؟" },
-                      { t: "موازنه دوطرفه چیست؟", q: "موازنه دوطرفه چیست و چگونه به مغایرت‌گیری کمک می‌کند؟" },
-                      { t: "درباره سرفصل‌های ERP توضیح دهید", q: "درباره سرفصل‌های ماژول‌های ERP در حال ساخت توضیح دهید" },
-                    ].map((chip, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleSendChatMessage(chip.q)}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] text-right transition-all border ${
-                          isDarkMode 
-                            ? "bg-slate-800/70 border-slate-700/60 text-slate-300 hover:bg-slate-750 hover:border-indigo-500/40 hover:text-indigo-300" 
-                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-indigo-500/30 hover:text-indigo-600 shadow-xs cursor-pointer"
-                        }`}
-                      >
-                        {chip.t}
-                      </button>
-                    ))}
+              <div className={`px-4 py-2 shrink-0 border-t flex flex-col gap-2.5 ${
+                isDarkMode ? "bg-slate-800/50 border-slate-750" : "bg-slate-50 border-slate-100"
+              }`}>
+                {/* Always-visible AI Suggestion Button */}
+                <button
+                  type="button"
+                  onClick={() => handleSendChatMessage("لطفا یک خلاصه کامل از وضعیت فعلی سند، مجموع مبالغ بدهکار و بستانکار، وضعیت موازنه (تراز) و تحلیل هرگونه مغایرت مالی در ردیف‌های تراکنش ارائه بده و راهکار پیشنهاد کن.")}
+                  className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold transition-all border shadow-sm ${
+                    isDarkMode
+                      ? "bg-indigo-500/15 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/25"
+                      : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>پیشنهاد پرامپت: تحلیل وضعیت سند و مغایرت‌ها</span>
+                </button>
+
+                {chatMessages.length <= 2 && (
+                  <div className="flex flex-col gap-1.5 mt-0.5">
+                    <span className={`text-[9px] font-bold text-right ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>سوالات راهنما:</span>
+                    <div className="flex flex-wrap gap-1.5 justify-start">
+                      {[
+                        { t: "تبدیل فایل اکسل چطور کار می‌کند؟", q: "تبدیل فایل اکسل چطور کار می‌کند؟" },
+                        { t: "موازنه دوطرفه چیست؟", q: "موازنه دوطرفه چیست و چگونه به مغایرت‌گیری کمک می‌کند؟" },
+                        { t: "درباره سرفصل‌های ERP توضیح دهید", q: "درباره سرفصل‌های ماژول‌های ERP در حال ساخت توضیح دهید" },
+                      ].map((chip, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleSendChatMessage(chip.q)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] text-right transition-all border ${
+                            isDarkMode 
+                              ? "bg-slate-800/70 border-slate-700/60 text-slate-300 hover:bg-slate-750 hover:border-indigo-500/40 hover:text-indigo-300" 
+                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-indigo-500/30 hover:text-indigo-600 shadow-xs cursor-pointer"
+                          }`}
+                        >
+                          {chip.t}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Chat Input Footer */}
               <form
