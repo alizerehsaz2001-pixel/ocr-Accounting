@@ -33,6 +33,86 @@ function getGeminiClient(): GoogleGenAI {
   return aiClient;
 }
 
+async function generateContentWithRetry(
+  ai: GoogleGenAI,
+  generateConfig: { model: string; contents: any; config?: any },
+  maxRetries = 3
+): Promise<any> {
+  const originalModel = generateConfig.model;
+  
+  // Construct the sequence of fallback models to try if the primary model fails or is overloaded
+  const candidateModels = [
+    originalModel,
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-pro-preview"
+  ];
+  
+  // Filter out duplicates and null/undefined values
+  const uniqueCandidates = Array.from(new Set(candidateModels.filter(Boolean)));
+  
+  let lastError: any = null;
+
+  for (const currentModel of uniqueCandidates) {
+    let attempt = 0;
+    let delay = 800; // Start with 800ms delay
+
+    console.info(`[Gemini API] Attempting generation with model: "${currentModel}"`);
+
+    while (attempt <= maxRetries) {
+      try {
+        const response = await ai.models.generateContent({
+          ...generateConfig,
+          model: currentModel,
+        });
+        if (currentModel !== originalModel) {
+          console.info(`[Gemini API] Generation succeeded using fallback model: "${currentModel}"`);
+        } else {
+          console.info(`[Gemini API] Generation succeeded using primary model: "${currentModel}"`);
+        }
+        return response;
+      } catch (apiError: any) {
+        lastError = apiError;
+        attempt++;
+        
+        const errorMessage = (apiError.message || "").toLowerCase();
+        const isTransient =
+          apiError.status === "RESOURCE_EXHAUSTED" ||
+          apiError.status === 429 ||
+          apiError.status === "UNAVAILABLE" ||
+          apiError.status === 503 ||
+          apiError.status === 500 ||
+          apiError.status === "INTERNAL" ||
+          errorMessage.includes("quota") ||
+          errorMessage.includes("limit") ||
+          errorMessage.includes("exhausted") ||
+          errorMessage.includes("demand") ||
+          errorMessage.includes("temporary") ||
+          errorMessage.includes("unavailable");
+
+        if (isTransient && attempt <= maxRetries) {
+          console.warn(
+            `[Gemini API] Transient error on "${currentModel}" (${apiError.status || "Error"}): ${errorMessage.substring(0, 80)}. ` +
+            `Retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 1.5; // Exponential backoff
+        } else {
+          // If not transient, or we ran out of retries for this model, break the inner loop and move to the next candidate model
+          console.warn(
+            `[Gemini API] Model "${currentModel}" failed with ${isTransient ? "transient errors (retries exhausted)" : "non-transient error"}. ` +
+            `Error: ${apiError.message || apiError}`
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  // If all candidate models failed, throw the last error
+  throw lastError || new Error("All Gemini API models failed during generation.");
+}
+
 // Persian/Farsi financial documents extraction endpoint
 app.post("/api/extract", async (req, res) => {
   try {
@@ -233,52 +313,7 @@ app.post("/api/extract", async (req, res) => {
       },
     };
 
-    try {
-      response = await ai.models.generateContent(generateConfig);
-    } catch (apiError: any) {
-      console.error(`Attempt failed with model ${selectedModel}:`, apiError.message || apiError);
-      const errorMessage = (apiError.message || "").toLowerCase();
-      if (
-        apiError.status === "RESOURCE_EXHAUSTED" || 
-        apiError.status === 429 || 
-        apiError.status === "UNAVAILABLE" ||
-        apiError.status === 503 ||
-        apiError.status === 500 ||
-        apiError.status === "INTERNAL" ||
-        errorMessage.includes("quota") ||
-        errorMessage.includes("limit") ||
-        errorMessage.includes("exhausted") ||
-        errorMessage.includes("demand") ||
-        errorMessage.includes("temporary") ||
-        errorMessage.includes("unavailable")
-      ) {
-         console.log("Retrying with fallback models...");
-         const fallbackModels = ["gemini-3.5-flash", "gemini-3.1-pro-preview"];
-         let fallbackSuccess = false;
-         let lastError = apiError;
-         
-         for (const model of fallbackModels) {
-           if (model === selectedModel) continue; // Skip if it was already the selected model
-           console.log(`Trying fallback model: ${model}...`);
-           generateConfig.model = model;
-           try {
-             response = await ai.models.generateContent(generateConfig);
-             fallbackSuccess = true;
-             console.log(`Fallback with ${model} succeeded.`);
-             break;
-           } catch (fallbackError: any) {
-             console.error(`Fallback retry with ${model} failed:`, fallbackError.message || fallbackError);
-             lastError = fallbackError;
-           }
-         }
-         
-         if (!fallbackSuccess) {
-           throw lastError;
-         }
-      } else {
-         throw apiError;
-      }
-    }
+    response = await generateContentWithRetry(ai, generateConfig);
 
     const outputText = response.text || "[]";
     let parsedData: any = {};
@@ -357,7 +392,7 @@ app.post("/api/chat-pre-extract", async (req, res) => {
 
     const selectedModel = model || "gemini-3.5-flash";
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry(ai, {
       model: selectedModel,
       contents: formattedMessages,
       config: {
@@ -422,7 +457,7 @@ app.post("/api/chat-verification", async (req, res) => {
 
     const selectedModel = model || "gemini-3.5-flash";
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry(ai, {
       model: selectedModel,
       contents: formattedMessages,
       config: {
@@ -478,7 +513,7 @@ app.post("/api/chat", async (req, res) => {
       parts: [{ text: msg.text }],
     }));
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry(ai, {
       model: "gemini-3.5-flash",
       contents: contents,
       config: {
