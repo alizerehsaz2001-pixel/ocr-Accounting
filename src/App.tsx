@@ -7108,6 +7108,8 @@ export default function App() {
                               title={selectedScanIds.length === fileManagerFilteredScans.length ? "لغو انتخاب همه" : "انتخاب همه اسناد"}
                             >
                               <CheckSquare className="w-3.5 h-3.5" />
+                            </button>
+
                             {/* View Mode Toggle */}
                             <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-0.5">
                               <button
@@ -7125,8 +7127,6 @@ export default function App() {
                                 <List className="w-3.5 h-3.5" />
                               </button>
                             </div>
-
-                            </button>
                           </div>
                         </div>
 
