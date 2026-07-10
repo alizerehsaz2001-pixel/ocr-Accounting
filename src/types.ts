@@ -44,6 +44,7 @@ export interface UploadedFile {
   results?: TransactionItem[];
   columns?: DynamicColumn[]; // Added for dynamic tables
   documentType?: string;
+  mimeType?: string;
   documentAnalysis?: string;
   tokensUsed?: number;
   tokenDetails?: {

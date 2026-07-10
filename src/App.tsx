@@ -110,6 +110,15 @@ const ERP_MODULES = [
   { id: 0, name: "آنالیز تصویر پیشرفته", icon: Sparkles, isLive: true },
 ];
 
+const formatBytesGlobal = (bytes: number, decimals = 2) => {
+  if (!+bytes) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+};
+
 export default function App() {
   // Main data states
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -226,6 +235,129 @@ export default function App() {
   const [fileManagerViewMode, setFileManagerViewMode] = useState<"grid" | "list">("grid");
   const [fileManagerTypeFilter, setFileManagerTypeFilter] = useState<string>("all");
   const [selectedScanIds, setSelectedScanIds] = useState<string[]>([]);
+
+  const [isAutoCategorizing, setIsAutoCategorizing] = useState(false);
+  const [activePreviewScan, setActivePreviewScan] = useState<PreviousScan | null>(null);
+  const [previewTab, setPreviewTab] = useState<"transactions" | "analysis" | "audit">("transactions");
+
+  const handleAiAutoCategorize = async () => {
+    if (previousScans.length === 0) {
+      showNotification("سندی برای دسته‌بندی وجود ندارد.", "error");
+      return;
+    }
+    setIsAutoCategorizing(true);
+    try {
+      const filesPayload = previousScans.map(scan => ({
+        id: scan.id,
+        name: scan.file.name
+      }));
+
+      const res = await fetch("/api/auto-categorize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ files: filesPayload })
+      });
+
+      if (!res.ok) {
+        throw new Error("خطا در پاسخ سرور");
+      }
+
+      const data = await res.json();
+      if (data.success && data.categories) {
+        const categoriesMap: { [key: string]: string } = data.categories;
+        
+        // Find new folders that are not in userDefinedFolders
+        const newFoldersSet = new Set<string>();
+        Object.values(categoriesMap).forEach(folderName => {
+          if (folderName && !userDefinedFolders.includes(folderName)) {
+            newFoldersSet.add(folderName);
+          }
+        });
+
+        if (newFoldersSet.size > 0) {
+          setUserDefinedFolders(prev => Array.from(new Set([...prev, ...newFoldersSet])));
+        }
+
+        // Update previous scans with categorized folders
+        setPreviousScans(prev => 
+          prev.map(scan => {
+            const suggestedFolder = categoriesMap[scan.id];
+            if (suggestedFolder) {
+              return { ...scan, folder: suggestedFolder };
+            }
+            return scan;
+          })
+        );
+
+        showNotification(`دسته‌بندی هوشمند با موفقیت انجام شد و پوشه‌های جدید ایجاد گردید.`, "success");
+        logEvent("دسته‌بندی هوشمند اسناد", `دسته‌بندی گروهی ${previousScans.length} سند با هوش مصنوعی انجام شد.`);
+      } else {
+        throw new Error(data.error || "خطا در پردازش دسته‌بندی");
+      }
+    } catch (err: any) {
+      console.error(err);
+      showNotification(err.message || "خطا در برقراری ارتباط با سرویس هوشمند دسته‌بندی.", "error");
+    } finally {
+      setIsAutoCategorizing(false);
+    }
+  };
+
+  const uploadFileDirectly = async (file: File) => {
+    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+      showNotification("تنها فایل‌های تصویر و PDF پشتیبانی می‌شوند.", "error");
+      return;
+    }
+    const extraStorageBytes = (currentUser?.extraStorage || 0) * 1024 * 1024 * 1024;
+    const MAX_STORAGE = 5 * 1024 * 1024 * 1024 + extraStorageBytes;
+    const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file.size || 0), 0);
+    if (usedStorage + file.size > MAX_STORAGE) {
+      showNotification("ظرفیت حافظه ابری شما تکمیل شده است. لطفاً فایل‌های اضافی را حذف کنید یا از مدیر درخواست فضای اضافه نمایید.", "error");
+      return;
+    }
+    try {
+      const base64 = await convertFileToBase64(file);
+      const targetMime = file.type === "application/pdf" ? "application/pdf" : "image/jpeg";
+      const fileId = "file_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+      const successFile = {
+        id: fileId,
+        name: file.name,
+        size: file.size,
+        preview: base64,
+        status: "idle" as const,
+        error: null,
+        results: [],
+      };
+
+      const newScan = {
+        id: "scan_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+        file: successFile,
+        transactions: [],
+        timestamp: Date.now(),
+        folder: selectedFolderFilter !== "all" && selectedFolderFilter !== "uncategorized" ? selectedFolderFilter : undefined
+      };
+
+      setPreviousScans(prev => [newScan, ...prev]);
+      logEvent("آپلود مستقیم در مدیریت فایل", `سند "${file.name}" با موفقیت در مخزن فایل‌ها آپلود شد.`);
+      showNotification(`سند "${file.name}" با موفقیت بارگذاری شد و آماده پردازش هوشمند است.`, "success");
+    } catch (error) {
+      console.error(error);
+      showNotification("خطا در پیش‌پردازش فایل", "error");
+    }
+  };
+
+  const handleProcessUnscannedFile = (scan: PreviousScan) => {
+    setIsFileManagerOpen(false);
+    setPendingFile({
+      base64: scan.file.preview,
+      name: scan.file.name,
+      mimeType: scan.file.mimeType || "image/jpeg",
+      size: scan.file.size
+    });
+    setCustomPrompt("");
+    showNotification(`سند "${scan.file.name}" آماده استخراج است. روی دکمه شروع استخراج کلیک کنید.`, "info");
+  };
 
   const [historySearchQuery, setHistorySearchQuery] = useState<string>("");
   const [historyDocType, setHistoryDocType] = useState<string>("all");
@@ -413,7 +545,9 @@ export default function App() {
   const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
   const [filterConfidence, setFilterConfidence] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [minConfidenceThreshold, setMinConfidenceThreshold] = useState<number>(0);
-  const [activeValidationSubTab, setActiveValidationSubTab] = useState<'risk' | 'threshold' | 'fields'>('risk');
+  const [activeValidationSubTab, setActiveValidationSubTab] = useState<'risk' | 'threshold' | 'fields' | 'auto-repair'>('risk');
+  const [isRepairing, setIsRepairing] = useState<boolean>(false);
+  const [repairStatusMsg, setRepairStatusMsg] = useState<string>("");
   const [showFilters, setShowFilters] = useState<boolean>(false);
 
   // Document Rename States
@@ -706,6 +840,7 @@ export default function App() {
     ecoPromptEnabled: boolean;
     maxRowsToExtract: "unlimited" | "5" | "10" | "20";
     skipSecondaryFields: boolean;
+    highAccuracyDualPass: boolean;
   }>(() => {
     try {
       const saved = localStorage.getItem("token_optimization_settings");
@@ -713,14 +848,16 @@ export default function App() {
         imageResolution: "balanced",
         ecoPromptEnabled: true,
         maxRowsToExtract: "unlimited",
-        skipSecondaryFields: false
+        skipSecondaryFields: false,
+        highAccuracyDualPass: true
       };
     } catch {
       return {
         imageResolution: "balanced",
         ecoPromptEnabled: true,
         maxRowsToExtract: "unlimited",
-        skipSecondaryFields: false
+        skipSecondaryFields: false,
+        highAccuracyDualPass: true
       };
     }
   });
@@ -1807,6 +1944,103 @@ export default function App() {
     setEditingRowData(null);
     logEvent("ذخیره ویرایش ردیف", `کاربر تغییرات ردیف شماره ${index + 1} را تایید و ذخیره کرد.`);
     showNotification("ردیف با موفقیت ویرایش شد.", "success");
+  };
+
+  const handleAuditRepairWithAI = async () => {
+    if (!transactions || transactions.length === 0) {
+      showNotification("جدول در حال حاضر خالی است.", "info");
+      return;
+    }
+    setIsRepairing(true);
+    setRepairStatusMsg("سیستم ممیزی در حال تحلیل داده‌ها است...");
+    logEvent("شروع ممیزی هوش مصنوعی", "کاربر درخواست ممیزی و خوداصلاحی ریاضی اسناد تراکنش را ثبت کرد.");
+
+    try {
+      let imageBase64 = null;
+      let mimeType = null;
+      
+      if (activeFile && activeFile.preview && activeFile.preview.startsWith("data:")) {
+        const parts = activeFile.preview.split(",");
+        imageBase64 = parts[1];
+        mimeType = parts[0].split(";")[0].split(":")[1];
+      }
+
+      setRepairStatusMsg("ارسال اطلاعات به ممیز ارشد مالیاتی جهت تصحیح ریاضی (Dual-Pass)...");
+      const response = await fetch("/api/audit-repair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: imageBase64,
+          mimeType: mimeType,
+          currentData: {
+            نوع_سند: activeFile ? activeFile.name : "سند دستی",
+            تحلیل_سند: "ممیزی دور دوم برای تصحیح مقادیر مالیاتی و مغایرت‌ها",
+            ستون_ها: Object.keys(transactions[0] || {}).map(k => ({
+              کلید: k,
+              عنوان: k === "ضریب_اطمینان" ? "ضریب اطمینان" : k,
+              نوع_داده: "string"
+            })),
+            ردیف_ها: transactions.map(row => ({
+              ضریب_اطمینان: row.ضریب_اطمینان || 100,
+              فیلد_ها: Object.entries(row).map(([key, val]) => ({
+                کلید: key,
+                مقدار: String(val)
+              }))
+            }))
+          },
+          model: selectedModel
+        })
+      });
+
+      const res = await response.json();
+      if (!response.ok || !res.success) {
+        throw new Error(res.error || "خطا در برقراری ارتباط با ممیز هوش مصنوعی.");
+      }
+
+      const audited = res.data;
+      if (audited && audited.ردیف_ها) {
+        const rowsArray = Array.isArray(audited.ردیف_ها) ? audited.ردیف_ها : [];
+        const parsedRows: TransactionItem[] = rowsArray.map((item: any, idx: number) => {
+          const row: any = {
+            id: `extracted-${Date.now()}-${idx}`,
+            ضریب_اطمینان: item.ضریب_اطمینان !== undefined && item.ضریب_اطمینان !== null ? Number(item.ضریب_اطمینان) : 100,
+          };
+          if (item.فیلد_ها && Array.isArray(item.فیلد_ها)) {
+            item.فیلد_ها.forEach((f: any) => {
+               if (f.کلید) row[f.کلید] = f.مقدار;
+            });
+          } else {
+            Object.keys(item).forEach(key => {
+              if (key !== 'ضریب_اطمینان') {
+                row[key] = item[key];
+              }
+            });
+          }
+          return row as TransactionItem;
+        });
+
+        if (parsedRows.length > 0) {
+          setTransactions(parsedRows);
+          try {
+            setRawJsonText(JSON.stringify(parsedRows, null, 2));
+          } catch (e) {
+            console.error(e);
+          }
+          showNotification("ممیزی هوش مصنوعی کامل شد! مقادیر مالیاتی و مغایرت‌ها اصلاح شدند.", "success");
+          logEvent("پایان ممیزی هوش مصنوعی", "ممیز هوشمند مغایرت‌های ریاضی را با موفقیت برطرف کرد.");
+        } else {
+          throw new Error("داده‌ای معتبر دریافت نشد.");
+        }
+      } else {
+        throw new Error("پاسخ ممیز خالی بود.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      showNotification(`خطا در ممیزی هوش مصنوعی: ${err.message}`, "error");
+    } finally {
+      setIsRepairing(false);
+      setRepairStatusMsg("");
+    }
   };
 
   const handleAddNewRow = () => {
@@ -4255,6 +4489,18 @@ export default function App() {
                                 >
                                   سلامت فیلدها
                                 </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveValidationSubTab('auto-repair')}
+                                  className={`px-3 py-1 text-[9px] font-bold rounded-md transition-all flex items-center gap-1 ${
+                                    activeValidationSubTab === 'auto-repair'
+                                      ? (isDarkMode ? "bg-amber-600 text-white" : "bg-amber-500/10 text-amber-700 shadow-sm border border-amber-500/20")
+                                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                                  }`}
+                                >
+                                  <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
+                                  <span>ممیزی و خوداصلاحی ریاضی</span>
+                                </button>
                               </div>
                             </div>
 
@@ -4530,6 +4776,233 @@ export default function App() {
                                           </div>
                                         );
                                       })}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
+
+                            {activeValidationSubTab === 'auto-repair' && (
+                              <div className="space-y-4 animate-in fade-in duration-300 font-sans text-right" dir="rtl">
+                                {(() => {
+                                  // Analyze math live
+                                  const issues: Array<{ id: string; rowIdx: number; desc: string; details: string; fixable: boolean; autoFix: () => void }> = [];
+                                  let totalDebit = 0;
+                                  let totalCredit = 0;
+                                  let hasDoubleEntry = false;
+
+                                  transactions.forEach((row, idx) => {
+                                    // Quantity * Unit Price check
+                                    let qtyKey = Object.keys(row).find(k => k.toLowerCase() === 'quantity' || k === 'تعداد' || k.toLowerCase() === 'qty');
+                                    let priceKey = Object.keys(row).find(k => k.toLowerCase() === 'unit_price' || k === 'فی' || k.toLowerCase() === 'fee' || k === 'قیمت_واحد');
+                                    let totalKey = Object.keys(row).find(k => k.toLowerCase() === 'total_price' || k === 'مبلغ_کل' || k === 'جمع' || k === 'مبلغ' || k.toLowerCase() === 'amount');
+                                    
+                                    if (qtyKey && priceKey && totalKey) {
+                                      const q = parseFloat(String(row[qtyKey] || '').replace(/[^\d.]/g, ''));
+                                      const p = parseFloat(String(row[priceKey] || '').replace(/[^\d.]/g, ''));
+                                      const t = parseFloat(String(row[totalKey] || '').replace(/[^\d.]/g, ''));
+                                      
+                                      if (!isNaN(q) && !isNaN(p) && !isNaN(t) && q > 0 && p > 0) {
+                                        const expected = q * p;
+                                        if (Math.abs(expected - t) > 10) {
+                                          issues.push({
+                                            id: `mul-${idx}`,
+                                            rowIdx: idx,
+                                            desc: `مغایرت ضرب حاصل سطر ${(idx + 1).toLocaleString('fa-IR')}`,
+                                            details: `مقدارتعداد (${q.toLocaleString('fa-IR')}) × فی (${p.toLocaleString('fa-IR')}) برابر با ${expected.toLocaleString('fa-IR')} ریال است اما مقدار استخراج‌شده ${t.toLocaleString('fa-IR')} ثبت شده.`,
+                                            fixable: true,
+                                            autoFix: () => {
+                                              const updated = [...transactions];
+                                              updated[idx] = { ...updated[idx], [totalKey]: expected };
+                                              setTransactions(updated);
+                                              try { setRawJsonText(JSON.stringify(updated, null, 2)); } catch(e){}
+                                              showNotification(`ردیف ${idx + 1} اصلاح شد.`, "success");
+                                            }
+                                          });
+                                        }
+                                      }
+                                    }
+
+                                    // Sum debit & credit
+                                    let debitKey = Object.keys(row).find(k => k === 'بدهکار' || k.toLowerCase() === 'debit' || k === 'مبلغ_بدهکار');
+                                    let creditKey = Object.keys(row).find(k => k === 'بستانکار' || k.toLowerCase() === 'credit' || k === 'مبلغ_بستانکار');
+                                    
+                                    if (debitKey || creditKey) {
+                                      hasDoubleEntry = true;
+                                      if (debitKey) {
+                                        const d = parseFloat(String(row[debitKey] || '').replace(/[^\d.]/g, ''));
+                                        if (!isNaN(d)) totalDebit += d;
+                                      }
+                                      if (creditKey) {
+                                        const c = parseFloat(String(row[creditKey] || '').replace(/[^\d.]/g, ''));
+                                        if (!isNaN(c)) totalCredit += c;
+                                      }
+                                    }
+                                  });
+
+                                  if (hasDoubleEntry && Math.abs(totalDebit - totalCredit) > 10) {
+                                    issues.push({
+                                      id: `balance-mismatch`,
+                                      rowIdx: -1,
+                                      desc: 'سند حسابداری فاقد موازنه دوطرفه',
+                                      details: `جمع بدهکار (${totalDebit.toLocaleString('fa-IR')}) با جمع بستانکار (${totalCredit.toLocaleString('fa-IR')}) اختلاف دارد (مغایرت: ${Math.abs(totalDebit - totalCredit).toLocaleString('fa-IR')}).`,
+                                      fixable: false,
+                                      autoFix: () => {}
+                                    });
+                                  }
+
+                                  return (
+                                    <div className="space-y-4">
+                                      {/* Top Status Cards */}
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div className={`p-3.5 rounded-xl border flex flex-col gap-1.5 text-right ${
+                                          issues.length === 0
+                                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                                            : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+                                        }`}>
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[11px] font-black">وضعیت یکپارچگی محاسباتی</span>
+                                            <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
+                                          </div>
+                                          <div className="text-sm font-black leading-none">
+                                            {issues.length === 0 ? "۱۰۰٪ تایید شده و متوازن" : `${issues.length.toLocaleString('fa-IR')} مغایرت یافت شد`}
+                                          </div>
+                                          <span className="text-[9.5px] opacity-80 leading-relaxed block mt-1">
+                                            {issues.length === 0 
+                                              ? "هیچ تداخل ریاضی یا عدم توازن در محاسبات فاکتور و اسناد دفتر روزنامه یافت نشد."
+                                              : "تداخلی در ضرب تعداد در فی یا تراز موازنه بدهکار و بستانکار ردیف‌ها شناسایی شده است."}
+                                          </span>
+                                        </div>
+
+                                        {hasDoubleEntry && (
+                                          <div className={`p-3.5 rounded-xl border bg-slate-900/40 border-slate-800 flex flex-col gap-1.5 text-right`}>
+                                            <div className="flex items-center justify-between text-[11px] font-black text-slate-400">
+                                              <span>تراز دفتر روزنامه و دفاتر مالی</span>
+                                              <span className={`w-2 h-2 rounded-full ${Math.abs(totalDebit - totalCredit) <= 10 ? "bg-emerald-500" : "bg-rose-500 animate-pulse"}`} />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                              <div>
+                                                <span className="block text-[10px] text-slate-400">جمع کل بدهکار:</span>
+                                                <span className="font-bold text-slate-200 font-mono">{totalDebit.toLocaleString('fa-IR')}</span>
+                                              </div>
+                                              <div>
+                                                <span className="block text-[10px] text-slate-400">جمع کل بستانکار:</span>
+                                                <span className="font-bold text-slate-200 font-mono">{totalCredit.toLocaleString('fa-IR')}</span>
+                                              </div>
+                                            </div>
+                                            {Math.abs(totalDebit - totalCredit) > 10 && (
+                                              <span className="text-[9px] text-rose-400">
+                                                مغایرت تراز: {Math.abs(totalDebit - totalCredit).toLocaleString('fa-IR')} ریال
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Issues List */}
+                                      {issues.length > 0 && (
+                                        <div className={`p-3.5 rounded-xl border ${isDarkMode ? "bg-slate-900/40 border-slate-850" : "bg-white border-slate-150"}`}>
+                                          <div className="flex items-center justify-between mb-2">
+                                            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">اقلام نیازمند اصلاح ریاضی و موازنه</span>
+                                            <button
+                                              onClick={() => {
+                                                const fixable = issues.filter(i => i.fixable);
+                                                if (fixable.length === 0) {
+                                                  showNotification("خطای ضربی قابل اصلاح خودکار یافت نشد. تراز باید دستی تصحیح شود.", "info");
+                                                  return;
+                                                }
+                                                const updated = [...transactions];
+                                                fixable.forEach(issue => {
+                                                  const row = updated[issue.rowIdx];
+                                                  let qtyKey = Object.keys(row).find(k => k.toLowerCase() === 'quantity' || k === 'تعداد' || k.toLowerCase() === 'qty');
+                                                  let priceKey = Object.keys(row).find(k => k.toLowerCase() === 'unit_price' || k === 'فی' || k.toLowerCase() === 'fee' || k === 'قیمت_واحد');
+                                                  let totalKey = Object.keys(row).find(k => k.toLowerCase() === 'total_price' || k === 'مبلغ_کل' || k === 'جمع' || k === 'مبلغ' || k.toLowerCase() === 'amount');
+                                                  if (qtyKey && priceKey && totalKey) {
+                                                    const q = parseFloat(String(row[qtyKey] || '').replace(/[^\d.]/g, ''));
+                                                    const p = parseFloat(String(row[priceKey] || '').replace(/[^\d.]/g, ''));
+                                                    if (!isNaN(q) && !isNaN(p)) {
+                                                      row[totalKey] = q * p;
+                                                    }
+                                                  }
+                                                });
+                                                setTransactions(updated);
+                                                try { setRawJsonText(JSON.stringify(updated, null, 2)); } catch(e){}
+                                                showNotification("تمام ردیف‌های ضرب با موفقیت بازنویسی و هم‌راستا شدند.", "success");
+                                              }}
+                                              className="px-2.5 py-1 text-[9px] font-black rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
+                                            >
+                                              اصلاح هوشمند فوری تمام سطرها
+                                            </button>
+                                          </div>
+                                          <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                                            {issues.map((iss) => (
+                                              <div key={iss.id} className="p-2.5 rounded-lg bg-rose-500/5 border border-rose-500/10 flex items-start justify-between gap-3 text-right">
+                                                <div className="space-y-1">
+                                                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                                    <span>{iss.desc}</span>
+                                                  </div>
+                                                  <p className="text-[9.5px] text-slate-500 dark:text-slate-400 leading-relaxed">{iss.details}</p>
+                                                </div>
+                                                {iss.fixable && (
+                                                  <button
+                                                    onClick={iss.autoFix}
+                                                    className="px-2 py-1 text-[8.5px] font-bold text-emerald-600 hover:text-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 rounded border border-emerald-500/20 shrink-0"
+                                                  >
+                                                    رفع مغایرت ضرب
+                                                  </button>
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Dual-Pass AI Auditor section */}
+                                      <div className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                                        isDarkMode ? "bg-slate-900/30 border-slate-800" : "bg-blue-50/20 border-blue-100"
+                                      }`}>
+                                        <div className="space-y-1 flex-1 text-right">
+                                          <div className="flex items-center gap-2">
+                                            <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                                            <span className="font-bold text-xs text-amber-600 dark:text-amber-400">ممیزی، تصحیح و تطابق ثانویه جامع با هوش مصنوعی</span>
+                                          </div>
+                                          <p className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                            بررسی عمیق مقادیر متنی و عددی جدول، ردیابی صفرهای مخدوش، تفکیک ارزش افزوده فاکتور، تبدیل مبالغ ریال/تومان بر حسب منطق حسابداری و انطباق کامل اسناد با اصل تصویر به صورت کاملا خودکار.
+                                          </p>
+                                        </div>
+                                        
+                                        <div className="shrink-0">
+                                          <button
+                                            onClick={handleAuditRepairWithAI}
+                                            disabled={isRepairing}
+                                            className={`px-4 py-2.5 text-[10px] font-black rounded-lg transition-all duration-300 flex items-center gap-1.5 ${
+                                              isRepairing 
+                                                ? "bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed" 
+                                                : "bg-gradient-to-l from-amber-500 to-amber-600 hover:shadow-lg text-white font-sans"
+                                            }`}
+                                          >
+                                            {isRepairing ? (
+                                              <>
+                                                <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                                                <span>در حال ممیزی اسناد...</span>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Sparkles className="w-3.5 h-3.5 text-white" />
+                                                <span>شروع ممیزی عمیق با ممیز CPA</span>
+                                              </>
+                                            )}
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {isRepairing && repairStatusMsg && (
+                                        <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-xl flex items-center gap-2 text-[10px] text-amber-600 dark:text-amber-400 animate-pulse justify-center">
+                                          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                                          <span>{repairStatusMsg}</span>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })()}
@@ -5947,6 +6420,26 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* 5. Dual-Pass High Accuracy Self-Correction */}
+                <div className={`p-4 flex items-center justify-between rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
+                  <div className="flex flex-col gap-1 flex-1 pl-2 text-right">
+                    <span className="font-bold text-xs text-right block text-amber-500">حالت ممیزی دو مرحله‌ای (Dual-Pass)</span>
+                    <span className={`text-[10px] block text-right leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      ارسال مجدد خروجی به ممیز CPA هوشمند جهت بازبینی ریاضی، تطابق با فایل اصلی و رفع کامل خطاهای چشمی OCR.
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => setTokenSettings(prev => ({ ...prev, highAccuracyDualPass: !prev.highAccuracyDualPass }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 mr-2 ${
+                      tokenSettings.highAccuracyDualPass ? "bg-amber-500" : "bg-slate-300"
+                    }`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      tokenSettings.highAccuracyDualPass ? "-translate-x-6" : "-translate-x-1"
+                    }`} />
+                  </button>
+                </div>
+
 
               </section>
             </div>
@@ -6994,6 +7487,22 @@ export default function App() {
                                 );
                               })}
                             </div>
+
+                            {/* AI Auto Categorize Button */}
+                            <button
+                              onClick={handleAiAutoCategorize}
+                              disabled={isAutoCategorizing}
+                              className={`w-full mt-3 px-3 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-sm border ${
+                                isAutoCategorizing
+                                  ? "bg-slate-850 border-slate-850 text-slate-500 cursor-not-allowed"
+                                  : isDarkMode
+                                    ? "bg-indigo-950/40 hover:bg-indigo-900/40 text-indigo-400 border-indigo-900/30 hover:border-indigo-800/40 cursor-pointer"
+                                    : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-100 hover:border-indigo-200 cursor-pointer"
+                              }`}
+                            >
+                              <Sparkles className={`w-4 h-4 ${isAutoCategorizing ? "animate-spin" : "text-indigo-500 animate-pulse"}`} />
+                              <span>{isAutoCategorizing ? "در حال دسته‌بندی هوشمند..." : "دسته‌بندی هوشمند با AI"}</span>
+                            </button>
                           </div>
 
                           <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
@@ -7034,7 +7543,23 @@ export default function App() {
                           </div>
 
                           {/* Filters and Sorting selectors */}
-                          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                          <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 w-full sm:w-auto justify-end">
+                            {/* Direct Upload inside File Manager */}
+                            <label className="cursor-pointer px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg text-[10px] font-black shadow-sm transition-all flex items-center gap-1.5 active:scale-95 shrink-0">
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                accept="image/*,application/pdf"
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files[0]) {
+                                    uploadFileDirectly(e.target.files[0]);
+                                  }
+                                }}
+                              />
+                              <Upload className="w-3.5 h-3.5 text-white" />
+                              <span>آپلود مستقیم سند</span>
+                            </label>
+
                             {/* Type filter */}
                             <div className="flex items-center gap-1 rounded-lg border p-1 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
                               <button
@@ -7170,11 +7695,6 @@ export default function App() {
                                 <span>دانلود گروهی</span>
                               </button>
 
-                              {/* Delete Selected */}
-                              <button
-                                onClick={handleBulkDelete}
-                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-rose-500 hover:bg-rose-600 text-white flex items-center gap-1 transition-all"
-                              >
                               {/* Export Excel Selected */}
                               <button
                                 onClick={() => {
@@ -7216,6 +7736,11 @@ export default function App() {
                                 <span>اکسل یکپارچه</span>
                               </button>
 
+                              {/* Delete Selected */}
+                              <button
+                                onClick={handleBulkDelete}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-rose-500 hover:bg-rose-600 text-white flex items-center gap-1 transition-all"
+                              >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 <span>حذف گروهی</span>
                               </button>
@@ -7353,26 +7878,59 @@ export default function App() {
                                   <div className={`p-2 rounded-lg mb-3 flex items-center justify-between text-[9px] font-bold ${
                                     isDarkMode ? "bg-slate-900/40 text-slate-400" : "bg-slate-50 text-slate-500"
                                   }`}>
-                                    <span>تراکنش‌های فاکتور: <span className="text-indigo-500 font-extrabold">{scan.transactions?.length.toLocaleString("fa-IR") || 0} ردیف</span></span>
-                                    {scan.file?.tokensUsed && (
+                                    {scan.file?.status === "idle" ? (
+                                      <span className="text-amber-500 font-extrabold flex items-center gap-1 animate-pulse">
+                                        <Cpu className="w-3 h-3 text-amber-500 animate-spin" />
+                                        آماده پردازش هوشمند
+                                      </span>
+                                    ) : (
+                                      <span>تراکنش‌های فاکتور: <span className="text-indigo-500 font-extrabold">{scan.transactions?.length.toLocaleString("fa-IR") || 0} ردیف</span></span>
+                                    )}
+                                    {scan.file?.tokensUsed ? (
                                       <span>توکن‌ها: <span className="text-emerald-500 font-extrabold">{scan.file.tokensUsed.toLocaleString("fa-IR")}</span></span>
+                                    ) : (
+                                      <span>حجم: {formatBytes(scan.file?.size || 0)}</span>
                                     )}
                                   </div>
 
                                   {/* Card Action Buttons */}
                                   <div className="flex items-center gap-1.5 pt-2.5 border-t border-slate-100 dark:border-slate-850 mt-auto">
+                                    {scan.file?.status === "idle" ? (
+                                      <button
+                                        onClick={() => handleProcessUnscannedFile(scan)}
+                                        className="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all shadow-md bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white animate-pulse cursor-pointer"
+                                      >
+                                        پردازش با هوش مصنوعی
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => {
+                                          selectPreviousScan(scan);
+                                          setIsFileManagerOpen(false);
+                                        }}
+                                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm cursor-pointer ${
+                                          isDarkMode 
+                                            ? "bg-indigo-600/20 text-indigo-400 hover:bg-indigo-650/30" 
+                                            : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                        }`}
+                                      >
+                                        باز کردن فاکتور
+                                      </button>
+                                    )}
+
+                                    {/* Quick Preview Button */}
                                     <button
                                       onClick={() => {
-                                        selectPreviousScan(scan);
-                                        setIsFileManagerOpen(false);
+                                        setActivePreviewScan(scan);
                                       }}
-                                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm ${
+                                      className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
                                         isDarkMode 
-                                          ? "bg-indigo-600/20 text-indigo-400 hover:bg-indigo-650/30" 
-                                          : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                          ? "border-slate-700 hover:bg-slate-750 text-indigo-400" 
+                                          : "border-slate-200 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-750"
                                       }`}
+                                      title="پیش‌نمایش اطلاعات"
                                     >
-                                      باز کردن فاکتور
+                                      <Eye className="w-3.5 h-3.5" />
                                     </button>
                                     
                                     {/* Download individual */}
@@ -7418,6 +7976,232 @@ export default function App() {
                   </div>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Preview Sub-Modal */}
+      {activePreviewScan && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 sm:p-6">
+          <div 
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            onClick={() => setActivePreviewScan(null)}
+          ></div>
+          
+          <div className={`relative w-full max-w-4xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden transform transition-all ${
+            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border-slate-200 text-slate-800"
+          }`} dir="rtl">
+            {/* Header */}
+            <div className={`p-4 border-b flex items-center justify-between shrink-0 ${isDarkMode ? "bg-slate-800/80 border-slate-700" : "bg-slate-50 border-slate-100"}`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${isDarkMode ? "bg-indigo-650/20 text-indigo-400" : "bg-indigo-50 text-indigo-600"}`}>
+                  <Eye className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm">{activePreviewScan.file?.name}</h4>
+                  <p className={`text-[10px] mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                    نوع: {activePreviewScan.file?.documentType || "نامشخص"} • حجم: {formatBytesGlobal(activePreviewScan.file?.size || 0)} • تاریخ بارگذاری: {new Date(activePreviewScan.timestamp).toLocaleDateString("fa-IR")}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setActivePreviewScan(null)}
+                className={`p-1.5 rounded-lg transition-colors ${isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-200 text-slate-500 hover:text-slate-900"}`}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Split Content */}
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+              {/* Document Preview (Left) */}
+              <div className={`flex-1 md:w-1/2 p-4 flex flex-col items-center justify-center overflow-auto border-l ${
+                isDarkMode ? "bg-slate-950/30 border-slate-800" : "bg-slate-50/50 border-slate-150"
+              }`}>
+                {activePreviewScan.file?.name?.toLowerCase().endsWith(".pdf") || activePreviewScan.file?.preview?.startsWith("data:application/pdf") ? (
+                  <div className="flex flex-col items-center justify-center p-8 text-center max-w-sm rounded-2xl border border-dashed border-rose-200 dark:border-rose-900/30 bg-rose-50/30 dark:bg-rose-950/10">
+                    <FileText className="w-16 h-16 text-rose-500 mb-3" />
+                    <h5 className="font-black text-xs text-rose-600 dark:text-rose-400">سند با قالب PDF</h5>
+                    <p className="text-[10px] mt-2 leading-relaxed text-slate-400">
+                      این فایل به صورت PDF بارگذاری شده است. برای مشاهده کامل و تعامل با سند می‌توانید روی دکمه دانلود یا دکمه باز کردن سند کلیک کنید.
+                    </p>
+                  </div>
+                ) : activePreviewScan.file?.preview ? (
+                  <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-md max-h-[60vh]">
+                    <img src={activePreviewScan.file.preview} alt="Document Preview" className="max-h-[58vh] max-w-full object-contain" referrerPolicy="no-referrer" />
+                  </div>
+                ) : (
+                  <div className="text-slate-500 text-xs flex flex-col items-center">
+                    <FileText className="w-12 h-12 mb-2 opacity-30" />
+                    پیش‌نمایش تصویر برای این فایل در دسترس نیست.
+                  </div>
+                )}
+              </div>
+
+              {/* Data and Details (Right) */}
+              <div className="flex-1 md:w-1/2 flex flex-col overflow-hidden">
+                {/* Tabs */}
+                <div className={`flex border-b shrink-0 px-4 ${isDarkMode ? "border-slate-800 bg-slate-900" : "border-slate-100 bg-slate-50/30"}`}>
+                  <button
+                    onClick={() => setPreviewTab("transactions")}
+                    className={`py-3 px-4 text-xs font-black transition-all border-b-2 -mb-px ${
+                      previewTab === "transactions"
+                        ? "border-indigo-600 text-indigo-500"
+                        : "border-transparent text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    تراکنش‌های استخراج‌شده ({activePreviewScan.transactions?.length || 0})
+                  </button>
+                  <button
+                    onClick={() => setPreviewTab("analysis")}
+                    className={`py-3 px-4 text-xs font-black transition-all border-b-2 -mb-px ${
+                      previewTab === "analysis"
+                        ? "border-indigo-600 text-indigo-500"
+                        : "border-transparent text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    تفسیر و ممیزی مالی AI
+                  </button>
+                  <button
+                    onClick={() => setPreviewTab("audit")}
+                    className={`py-3 px-4 text-xs font-black transition-all border-b-2 -mb-px ${
+                      previewTab === "audit"
+                        ? "border-indigo-600 text-indigo-500"
+                        : "border-transparent text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    لاگ ممیزی امنیتی
+                  </button>
+                </div>
+
+                {/* Tab Contents */}
+                <div className="flex-1 overflow-y-auto p-4">
+                  {previewTab === "transactions" && (
+                    <div className="space-y-3">
+                      {activePreviewScan.file?.status === "idle" ? (
+                        <div className="py-12 text-center flex flex-col items-center">
+                          <Cpu className="w-10 h-10 text-amber-500 animate-pulse mb-3" />
+                          <h5 className="font-bold text-xs mb-1">این سند هنوز پردازش نشده است!</h5>
+                          <p className="text-[10px] text-slate-400 max-w-xs leading-relaxed mb-4">
+                            برای استخراج اقلام بدهکار و بستانکار، کدینگ اتوماتیک حساب‌ها و ممیزی موازنه دوطرفه، ابتدا باید این فایل را با موتور هوش مصنوعی پردازش کنید.
+                          </p>
+                          <button
+                            onClick={() => {
+                              handleProcessUnscannedFile(activePreviewScan);
+                              setActivePreviewScan(null);
+                            }}
+                            className="px-4 py-2 text-[10px] font-black rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white transition-all shadow-md active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>شروع پردازش و استخراج هوشمند</span>
+                          </button>
+                        </div>
+                      ) : !activePreviewScan.transactions || activePreviewScan.transactions.length === 0 ? (
+                        <div className="py-12 text-center text-xs text-slate-400 italic">
+                          تراکنشی برای این سند استخراج نشده یا جدول خالی است.
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {activePreviewScan.transactions.map((t, idx) => (
+                            <div key={idx} className={`p-3 rounded-xl border text-right transition-colors ${
+                              isDarkMode ? "bg-slate-950/40 border-slate-800 hover:border-slate-700" : "bg-slate-50 border-slate-150 hover:border-slate-200"
+                            }`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
+                                  t.مبلغ_بدهکار > 0
+                                    ? "bg-blue-500/10 text-blue-400"
+                                    : "bg-emerald-500/10 text-emerald-400"
+                                }`}>
+                                  {t.مبلغ_بدهکار > 0 ? "بدهکار" : "بستانکار"}
+                                </span>
+                                <span className="font-mono text-[9px] text-slate-500">{t.تاریخ || "فاقد تاریخ"}</span>
+                              </div>
+                              <h6 className="font-extrabold text-xs mb-1.5 leading-snug">{t.نام_طرف_حساب || "بدون طرف حساب"}</h6>
+                              <p className={`text-[10px] leading-relaxed mb-2 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{t.شرح || "فاقد شرح تراکنش"}</p>
+                              <div className="flex justify-between items-center font-mono text-[10px] border-t border-dashed border-slate-800/40 pt-2 mt-1">
+                                <div>
+                                  <span className="text-slate-500 text-[9px]">بدهکار: </span>
+                                  <span className="font-black text-blue-500">{(t.مبلغ_بدهکار || 0).toLocaleString("fa-IR")}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 text-[9px]">بستانکار: </span>
+                                  <span className="font-black text-emerald-500">{(t.مبلغ_بستانکار || 0).toLocaleString("fa-IR")}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {previewTab === "analysis" && (
+                    <div className="space-y-3">
+                      {!activePreviewScan.file?.documentAnalysis ? (
+                        <div className="py-12 text-center text-xs text-slate-400 italic">
+                          {activePreviewScan.file?.status === "idle"
+                            ? "تحلیلی برای اسناد پردازش نشده وجود ندارد."
+                            : "تفسیری توسط هوش مصنوعی ثبت نشده است."}
+                        </div>
+                      ) : (
+                        <div className={`p-4 rounded-xl border text-right leading-relaxed text-xs leading-loose ${
+                          isDarkMode ? "bg-slate-950/40 border-slate-800 text-slate-300" : "bg-slate-50 border-slate-150 text-slate-600"
+                        }`} style={{ whiteSpace: "pre-line" }}>
+                          {activePreviewScan.file.documentAnalysis}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {previewTab === "audit" && (
+                    <div className="space-y-3">
+                      {!activePreviewScan.auditLogs || activePreviewScan.auditLogs.length === 0 ? (
+                        <div className="py-12 text-center text-xs text-slate-400 italic">
+                          تاریخچه لاگی برای این سند ضبط نشده است.
+                        </div>
+                      ) : (
+                        <div className="relative border-r border-slate-200 dark:border-slate-850 mr-2.5 space-y-4">
+                          {activePreviewScan.auditLogs.map((log) => (
+                            <div key={log.id} className="relative pr-4">
+                              <div className="absolute -right-[4.5px] top-1 w-2 h-2 rounded-full bg-indigo-500 ring-4 ring-white dark:ring-slate-900"></div>
+                              <span className="font-mono text-[9px] text-slate-500 block mb-1">{new Date(log.timestamp).toLocaleString("fa-IR")}</span>
+                              <h6 className="font-black text-xs text-slate-300">{log.action}</h6>
+                              <p className={`text-[10px] mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{log.details}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className={`p-4 border-t flex items-center justify-between shrink-0 ${isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-slate-50 border-slate-100"}`}>
+              <button
+                onClick={() => {
+                  if (activePreviewScan.file?.status === "idle") {
+                    handleProcessUnscannedFile(activePreviewScan);
+                  } else {
+                    selectPreviousScan(activePreviewScan);
+                    setIsFileManagerOpen(false);
+                  }
+                  setActivePreviewScan(null);
+                }}
+                className="px-4 py-1.5 rounded-lg text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow cursor-pointer"
+              >
+                {activePreviewScan.file?.status === "idle" ? "بارگذاری و پردازش هوشمند" : "باز کردن کامل و بارگذاری در سند جاری"}
+              </button>
+              <button
+                onClick={() => setActivePreviewScan(null)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer ${
+                  isDarkMode ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                بستن پیش‌نمایش
+              </button>
             </div>
           </div>
         </div>

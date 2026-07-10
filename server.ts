@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -36,13 +36,14 @@ function getGeminiClient(): GoogleGenAI {
 async function generateContentWithRetry(
   ai: GoogleGenAI,
   generateConfig: { model: string; contents: any; config?: any },
-  maxRetries = 3
+  maxRetries = 2
 ): Promise<any> {
   const originalModel = generateConfig.model;
   
   // Construct the sequence of fallback models to try if the primary model fails or is overloaded
   const candidateModels = [
     originalModel,
+    "gemini-3.5-flash",
     "gemini-flash-latest",
     "gemini-3.1-flash-lite",
     "gemini-3.1-pro-preview"
@@ -55,14 +56,24 @@ async function generateContentWithRetry(
 
   for (const currentModel of uniqueCandidates) {
     let attempt = 0;
-    let delay = 800; // Start with 800ms delay
+    let delay = 800; // Start with 800ms delay to allow service to recover
 
     console.info(`[Gemini API] Attempting generation with model: "${currentModel}"`);
 
     while (attempt <= maxRetries) {
       try {
+        const currentConfig = { ...generateConfig };
+        if (currentModel === "gemini-3.1-pro-preview") {
+          const configCopy = { ...(currentConfig.config || {}) };
+          delete configCopy.maxOutputTokens;
+          configCopy.thinkingConfig = {
+            thinkingLevel: ThinkingLevel.HIGH,
+          };
+          currentConfig.config = configCopy;
+        }
+
         const response = await ai.models.generateContent({
-          ...generateConfig,
+          ...currentConfig,
           model: currentModel,
         });
         if (currentModel !== originalModel) {
@@ -76,32 +87,38 @@ async function generateContentWithRetry(
         attempt++;
         
         const errorMessage = (apiError.message || "").toLowerCase();
+        const apiStatus = apiError.status || apiError.statusCode || (apiError.error && apiError.error.code);
+        
         const isTransient =
-          apiError.status === "RESOURCE_EXHAUSTED" ||
-          apiError.status === 429 ||
-          apiError.status === "UNAVAILABLE" ||
-          apiError.status === 503 ||
-          apiError.status === 500 ||
-          apiError.status === "INTERNAL" ||
+          apiStatus === "RESOURCE_EXHAUSTED" ||
+          apiStatus === 429 ||
+          apiStatus === "UNAVAILABLE" ||
+          apiStatus === 503 ||
+          apiStatus === 500 ||
+          apiStatus === "INTERNAL" ||
           errorMessage.includes("quota") ||
           errorMessage.includes("limit") ||
           errorMessage.includes("exhausted") ||
           errorMessage.includes("demand") ||
           errorMessage.includes("temporary") ||
-          errorMessage.includes("unavailable");
+          errorMessage.includes("unavailable") ||
+          errorMessage.includes("overloaded") ||
+          errorMessage.includes("rate limit") ||
+          errorMessage.includes("503") ||
+          errorMessage.includes("429");
 
         if (isTransient && attempt <= maxRetries) {
           console.warn(
-            `[Gemini API] Transient error on "${currentModel}" (${apiError.status || "Error"}): ${errorMessage.substring(0, 80)}. ` +
+            `[Gemini API] Transient error on "${currentModel}" (Status: ${apiStatus || "Error"}): ${errorMessage.substring(0, 120)}. ` +
             `Retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`
           );
           await new Promise((resolve) => setTimeout(resolve, delay));
-          delay *= 1.5; // Exponential backoff
+          delay *= 2; // Exponential backoff
         } else {
           // If not transient, or we ran out of retries for this model, break the inner loop and move to the next candidate model
           console.warn(
             `[Gemini API] Model "${currentModel}" failed with ${isTransient ? "transient errors (retries exhausted)" : "non-transient error"}. ` +
-            `Error: ${apiError.message || apiError}`
+            `Status: ${apiStatus || "N/A"}. Error: ${apiError.message || apiError}`
           );
           break;
         }
@@ -334,6 +351,56 @@ app.post("/api/extract", async (req, res) => {
       }
     }
 
+    // Dual-Pass AI Self-Correction & Math Audit (Cool accuracy-raising feature!)
+    if (tokenSettings && tokenSettings.highAccuracyDualPass === true) {
+      console.info("[Dual-Pass AI Audit] Initiating second pass audit and validation...");
+      
+      const auditInstruction = `You are an expert CPA, senior auditor and OCR reconciliation system. Your task is to perform an exhaustive audit and self-correction on the extracted JSON financial data against the original document.
+      Ensure complete mathematical correctness:
+      1. Recalculate row totals (quantity * unit_price = total_price) or sum credits/debits.
+      2. Verify tax/VAT calculations.
+      3. Repair any OCR misreads of digits, especially trailing zeros or Persian numbers.
+      4. Reconcile any currency differences (Rial vs Toman) based on context.
+      
+      Review the initially extracted JSON:
+      ${JSON.stringify(parsedData)}
+      
+      Produce the final, highly accurate and corrected JSON strictly conforming to the original schema structure. Only return valid JSON matching the schema.`;
+
+      const auditConfig = {
+        model: selectedModel,
+        contents: {
+          parts: [
+            imagePart,
+            { text: auditInstruction }
+          ]
+        },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: generateConfig.config.responseSchema
+        }
+      };
+
+      try {
+        const auditResponse = await generateContentWithRetry(ai, auditConfig);
+        const auditOutputText = auditResponse.text || "{}";
+        let auditedData: any = {};
+        try {
+          auditedData = JSON.parse(auditOutputText);
+        } catch (e) {
+          const match = auditOutputText.match(/\{([\s\S]*)\}/);
+          if (match) auditedData = JSON.parse(match[0]);
+        }
+        
+        if (auditedData && auditedData.ردیف_ها && auditedData.نوع_سند) {
+          console.info("[Dual-Pass AI Audit] Success! Data was successfully audited and healed.");
+          parsedData = auditedData;
+        }
+      } catch (auditErr) {
+        console.warn("[Dual-Pass AI Audit] Audit failed or was bypassed, falling back to initial data:", auditErr);
+      }
+    }
+
     const tokensUsed = response.usageMetadata?.totalTokenCount || 0;
     const tokenDetails = {
       promptTokenCount: response.usageMetadata?.promptTokenCount || 0,
@@ -346,6 +413,69 @@ app.post("/api/extract", async (req, res) => {
   } catch (error: any) {
     console.error("API Error in extraction:", error);
     res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در پردازش فایل" });
+  }
+});
+
+// Endpoint for explicit AI-driven Mathematical Audit and Self-Correction
+app.post("/api/audit-repair", async (req, res) => {
+  try {
+    const { image, mimeType, currentData, model } = req.body;
+    
+    if (!currentData) {
+      return res.status(400).json({ success: false, error: "داده‌های فعلی ارسال نشده است." });
+    }
+
+    const ai = getGeminiClient();
+    const selectedModel = ["gemini-3.5-flash", "gemini-3.1-pro-preview"].includes(model) ? model : "gemini-3.5-flash";
+
+    console.info("[API Audit Repair] Initiating on-demand mathematical alignment and OCR healing...");
+
+    const auditInstruction = `You are a professional CPA, senior auditor and expert accounting system. Review the current extracted financial table JSON data and compare it with the attached image of the document (if provided).
+    Your goal is to detect and resolve any mathematical inconsistencies, OCR misreads, currency mismatches (Rials/Tomans), or accounting balance mismatches.
+    
+    Current Extracted JSON Data:
+    ${JSON.stringify(currentData)}
+    
+    Deliver the fully healed, corrected, and reconciled JSON strictly matching the input's JSON schema structure. Make sure you audit:
+    - If a row has quantity and unit_price, ensure quantity * unit_price equals the total price.
+    - If a row has debit/credit, ensure standard ledger double-entry balances (totals balance).
+    - If a row has tax/VAT, verify it matches standard Iranian tax ratios (9% or 10%).
+    
+    Return ONLY a valid JSON object of the same schema format.`;
+
+    const parts: any[] = [];
+    if (image) {
+      parts.push({
+        inlineData: {
+          mimeType: mimeType || "image/png",
+          data: image
+        }
+      });
+    }
+    parts.push({ text: auditInstruction });
+
+    const auditConfig = {
+      model: selectedModel,
+      contents: { parts },
+      config: {
+        responseMimeType: "application/json",
+      }
+    };
+
+    const response = await generateContentWithRetry(ai, auditConfig);
+    const outputText = response.text || "{}";
+    let auditedData: any = {};
+    try {
+      auditedData = JSON.parse(outputText);
+    } catch (e) {
+      const match = outputText.match(/\{([\s\S]*)\}/);
+      if (match) auditedData = JSON.parse(match[0]);
+    }
+
+    res.json({ success: true, data: auditedData });
+  } catch (error: any) {
+    console.error("API Error in audit repair:", error);
+    res.status(500).json({ success: false, error: error.message || "خطا در ممیزی داده‌ها با هوش مصنوعی" });
   }
 });
 
@@ -611,6 +741,68 @@ app.post("/api/vouchers/validate", (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || "خطای ناشناخته در اجرای تابع اعتبارسنجی بکاند"
+    });
+  }
+});
+
+// API endpoint to auto categorize documents using Gemini
+app.post("/api/auto-categorize", async (req, res) => {
+  try {
+    const { files } = req.body;
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      res.status(400).json({ error: "لیست فایل‌ها خالی یا نامعتبر است." });
+      return;
+    }
+
+    const ai = getGeminiClient();
+    const prompt = `شما یک دستیار حسابدار ارشد هستید. من لیستی از فایل‌های مالی دارم. شما باید بر اساس نام فایل‌ها، آنها را به پوشه‌های مناسب حسابداری مالی دسته‌بندی کنید.
+پوشه‌های استاندارد پیشنهادی:
+- "اسناد فروش و درآمدها" (مانند فاکتور فروش، رسید مشتری)
+- "قبوض و هزینه‌های جاری" (مانند قبض برق، گاز، آب، اینترنت، اجاره، فاکتور خرید اقلام مصرفی)
+- "حقوق و دستمزد" (مانند فیش حقوقی، لیست بیمه، پرداختی پرسنل)
+- "قراردادها و اسناد حقوقی" (مانند قرارداد استخدام، اجاره‌نامه ملکی، توافق‌نامه)
+- "رسیدهای بانکی و پرداختی" (مانند رسید انتقال وجه، فیش واریز نقدی، حواله ساتنا/پایا)
+- "گزارش‌ها و دفاتر قانونی" (مانند تراز آزمایشی، ترازنامه، گزارش‌های حسابداری، صورت‌های مالی)
+
+لیست فایل‌ها:
+${JSON.stringify(files, null, 2)}
+
+پاسخ را دقیقاً به صورت یک آبجکت JSON برگردانید که دارای یک فیلد به نام "categories" است. این فیلد خود یک آبجکت است که کلیدهای آن شناسه‌های فایل (id) و مقادیر آن نام پوشه انتخاب‌شده (یکی از موارد بالا یا یک پوشه جدید مالی کوتاه و پرکاربرد متناسب با فایل) باشد.
+نمونه پاسخ:
+{
+  "categories": {
+    "file_1_id": "قبوض و هزینه‌های جاری",
+    "file_2_id": "رسیدهای بانکی و پرداختی"
+  }
+}
+هیچ متنی غیر از فایل خام JSON ننویسید. از نشانه‌گذاری markdown مانند \`\`\`json استفاده نکنید.`;
+
+    const response = await generateContentWithRetry(ai, {
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    let resultText = response.text || "";
+    // Clean response markup if any
+    if (resultText.includes("```json")) {
+      resultText = resultText.split("```json")[1].split("```")[0];
+    } else if (resultText.includes("```")) {
+      resultText = resultText.split("```")[1].split("```")[0];
+    }
+    const categoriesData = JSON.parse(resultText.trim());
+
+    res.json({
+      success: true,
+      categories: categoriesData.categories || {}
+    });
+  } catch (error: any) {
+    console.error("خطا در دسته‌بندی خودکار اسناد با هوش مصنوعی:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message || "خطای ناشناخته در دسته‌بندی هوشمند اسناد"
     });
   }
 });
