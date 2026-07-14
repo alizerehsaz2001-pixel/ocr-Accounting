@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Landmark, Package,
   FileJson,
@@ -81,7 +81,7 @@ import {
   Plus,
   Maximize,
   Printer,
-  Undo2, Calculator, LayoutGrid, List
+  Undo2, Calculator, LayoutGrid, List, Save, Database
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -1048,9 +1048,10 @@ export default function App() {
   };
 
   const [dragActive, setDragActive] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
-  const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
+    const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
+  const [userPanelTab, setUserPanelTab] = useState<"profile" | "api" | "general" | "ai">("profile");
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [adminPanelTab, setAdminPanelTab] = useState<"users" | "data" | "system" | "danger">("users");
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false);
   const [users, setUsers] = useState<any[]>(() => {
@@ -2240,9 +2241,9 @@ export default function App() {
           </div>
           
           <button
-            onClick={() => setGuideOpen(!guideOpen)}
+            onClick={() => setShowOnboarding(true)}
             className={`w-full flex items-center px-4 py-2.5 transition-all text-right ${
-              guideOpen 
+              showOnboarding 
                 ? "bg-blue-600/15 text-blue-400 border-r-4 border-blue-500 font-bold" 
                 : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
             }`}
@@ -2735,53 +2736,7 @@ export default function App() {
         {/* Workspace body */}
         {false ? null : (
           <div className="flex-1 overflow-y-auto p-4 flex flex-col">
-          {guideOpen && (
-            <div className={`p-4 shadow-sm animate-fade-in flex flex-col items-start gap-3 mb-4 shrink-0 rounded-xl border transition-all duration-300 ${
-              isDarkMode 
-                ? "bg-slate-900/60 border-slate-800/80 text-slate-300" 
-                : "bg-blue-50/40 border-blue-100/60 text-slate-700"
-            }`}>
-              <div className="flex items-start justify-between gap-4 w-full">
-                <div className="flex items-start gap-3 flex-1">
-                  <HelpCircle className={`h-5 w-5 shrink-0 mt-0.5 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} />
-                  <div className="text-right">
-                    <h3 className={`font-bold text-xs ${isDarkMode ? "text-slate-100" : "text-slate-900"} flex items-center gap-1.5`}>
-                      راهنمای سریع سیستم حسابداری هوشمند
-                    </h3>
-                    <p className="text-[10px] mt-1 text-slate-400 dark:text-slate-400 leading-relaxed">
-                      این پلتفرم اسناد مالی را تحلیل کرده و با موازنه دوطرفه، به سرفصل‌های معین حسابداری تخصیص می‌دهد.
-                    </p>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-3.5 text-[10.5px]">
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 font-bold select-none">•</span>
-                        <span><strong>موازنه تراز:</strong> تراز خودکار بدهکار و بستانکار بر اساس موازنه دوطرفه.</span>
-                      </div>
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 font-bold select-none">•</span>
-                        <span><strong>مالیات و تخفیف:</strong> تفکیک عوارض، ارزش افزوده (VAT) و کسر هوشمند تخفیفات فاکتور.</span>
-                      </div>
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 font-bold select-none">•</span>
-                        <span><strong>اسناد دست‌نویس:</strong> خوانش فوق‌هوشمند خطوط تحریری، اداری مخدوش و ناخوانا با مدل‌های Gemini.</span>
-                      </div>
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-blue-500 font-bold select-none">•</span>
-                        <span><strong>خروجی اکسل:</strong> دانلود مستقیم و راست‌چین فاکتور و تراکنش‌های استخراج‌شده به صورت XLSX.</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setGuideOpen(false)} 
-                  className={`p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/85 transition-colors ${isDarkMode ? "text-slate-400 hover:text-slate-200" : "text-slate-400 hover:text-slate-700"}`}
-                  title="بستن راهنما"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
+          
 
           {/* Conditional Layout: Hidden when no file is uploaded! */}
           {!activeFile ? (
@@ -6166,720 +6121,1042 @@ export default function App() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
           {/* Backdrop */}
           <div 
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-300"
             onClick={() => setIsUserPanelOpen(false)}
           ></div>
           
-          {/* Panel Container */}
-          <div className={`relative w-full max-w-lg rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up transform transition-all ${
-            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border border-slate-200 text-slate-800"
-          }`}>
-            <div className={`flex items-center justify-between p-4 border-b ${
-              isDarkMode ? "bg-slate-800/50 border-slate-700/50" : "bg-slate-50 border-slate-100"
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-full ${isDarkMode ? "bg-blue-900/30 text-blue-400" : "bg-blue-100 text-blue-600"}`}>
-                  <User className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm">پنل کاربری و تنظیمات سیستم</h3>
-                  <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>مدیریت کلیدهای API و نمایه</span>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsUserPanelOpen(false)}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500"
-                }`}
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+          {/* Panel Container - Side Navigation Layout */}
+          <div className={`relative w-full max-w-4xl h-[85vh] md:h-[650px] rounded-3xl shadow-2xl flex overflow-hidden transform transition-all animate-in slide-in-from-bottom-8 duration-300 ${
+            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-slate-50 border border-slate-200 text-slate-800"
+          }`} dir="rtl">
             
-            <div className={`p-5 overflow-y-auto max-h-[70vh] flex flex-col gap-6 ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
-              {/* Profile details */}
-              <section className="flex flex-col gap-3">
-                <h4 className="text-xs font-bold flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  حساب کاربری فعلی
-                </h4>
-                <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shrink-0">
-                      {currentUser?.name.charAt(0) || "U"}
-                    </div>
-                    <div className="flex flex-col flex-1">
-                      <select 
-                        value={currentUser?.id}
-                        onChange={(e) => {
-                           const user = users.find(u => u.id === parseInt(e.target.value));
-                           if (user) {
-                             if (user.status === "suspended") {
-                                setNotification({text: "این اکانت مسدود شده است", type: "error"});
-                                return;
-                             }
-                             setCurrentUser(user);
-                           }
-                        }}
-                        className={`text-sm font-bold bg-transparent outline-none cursor-pointer ${isDarkMode ? "text-white" : "text-slate-800"}`}
-                      >
-                         {users.map(u => (
-                            <option key={u.id} value={u.id} className={isDarkMode ? "bg-slate-800" : "bg-white"}>{u.name}</option>
-                         ))}
-                      </select>
-                      <span className={`text-[10px] mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تغییر سریع کاربر (شبیه‌ساز)</span>
-                    </div>
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-slate-200/50 flex items-center justify-between">
-                     <span className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>سطح دسترسی</span>
-                     <div className="flex items-center gap-3">
-                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          currentUser?.role === "admin" ? "text-purple-600 bg-purple-500/10" : "text-blue-500 bg-blue-500/10"
-                       }`}>
-                         {currentUser?.role === "admin" ? "مدیر کل سیستم" : "همکار حسابدار"}
-                       </span>
-                     </div>
-                  </div>
-                </div>
-              </section>
+            {/* Sidebar Navigation */}
+            <div className={`w-1/3 md:w-64 flex flex-col shrink-0 border-l ${isDarkMode ? "bg-slate-950/50 border-slate-800" : "bg-white border-slate-100"}`}>
+               <div className="p-6">
+                 <h3 className="font-black text-lg flex items-center gap-2 text-transparent bg-clip-text bg-gradient-to-l from-blue-600 to-indigo-500">
+                    <Settings className="w-6 h-6 text-blue-500" />
+                    تنظیمات سیستم
+                 </h3>
+                 <p className={`text-[10px] mt-2 leading-relaxed ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                   مدیریت حساب کاربری، دسترسی‌ها و شخصی‌سازی موتور هوش مصنوعی
+                 </p>
+               </div>
+               
+               <div className="flex-1 overflow-y-auto py-2 px-4 flex flex-col gap-1.5 custom-scrollbar">
+                 <button 
+                   onClick={() => setUserPanelTab("profile")}
+                   className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all group ${
+                     userPanelTab === "profile" 
+                       ? (isDarkMode ? "bg-blue-600/10 text-blue-400 ring-1 ring-blue-500/30" : "bg-blue-50 text-blue-700 ring-1 ring-blue-200") 
+                       : (isDarkMode ? "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")
+                   }`}
+                 >
+                   <User className={`w-4 h-4 transition-transform ${userPanelTab === "profile" ? "scale-110" : "group-hover:scale-110"}`} />
+                   نمایه و کاربری
+                 </button>
 
-              {/* API Setup */}
-              <section className="flex flex-col gap-3">
-                 <h4 className="text-xs font-bold flex items-center gap-2">
-                  <Key className="h-4 w-4" />
-                  اتصال مدل زبانی هوش مصنوعی (Gemini API)
-                </h4>
-                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-xs">کلید دسترسی (API Key) شخصی</span>
-                    <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                      در صورت وارد کردن کلید، درخواست‌ها از سهمیه خودتان مصرف خواهد شد.
-                    </span>
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="AIzaSy..."
-                    value={userPreferences.geminiApiKey}
-                    onChange={(e) => setUserPreferences(prev => ({...prev, geminiApiKey: e.target.value}))}
-                    className={`mt-1 text-sm py-2.5 px-3 font-mono rounded-lg border focus:ring-2 focus:outline-none transition-all ${isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200 focus:border-blue-500 focus:ring-blue-500/20" : "bg-white border-slate-300 text-slate-800 focus:border-blue-500 focus:ring-blue-500/20"}`}
-                  />
-                </div>
-              </section>
+                 <button 
+                   onClick={() => setUserPanelTab("api")}
+                   className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all group ${
+                     userPanelTab === "api" 
+                       ? (isDarkMode ? "bg-purple-600/10 text-purple-400 ring-1 ring-purple-500/30" : "bg-purple-50 text-purple-700 ring-1 ring-purple-200") 
+                       : (isDarkMode ? "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")
+                   }`}
+                 >
+                   <Key className={`w-4 h-4 transition-transform ${userPanelTab === "api" ? "scale-110" : "group-hover:scale-110"}`} />
+                   کلیدهای دسترسی
+                 </button>
 
-              {/* Accounting Setup */}
-              <section className="flex flex-col gap-3">
-                 <h4 className="text-xs font-bold flex items-center gap-2">
-                  <Calculator className="h-4 w-4" />
-                  تنظیمات پایه‌ای حسابداری
-                </h4>
-                <div className={`p-4 rounded-xl border flex flex-col gap-4 ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs">واحد پول پیش‌فرض سیستم</span>
-                    <div className="flex gap-1 bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
-                      <button 
-                        onClick={() => setUserPreferences(prev => ({...prev, defaultCurrency: "IRR"}))}
-                        className={`text-[10px] font-bold px-3 py-1.5 rounded transition-all ${userPreferences.defaultCurrency === "IRR" ? "bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"}`}
-                      >ریال</button>
-                      <button 
-                        onClick={() => setUserPreferences(prev => ({...prev, defaultCurrency: "IRT"}))}
-                        className={`text-[10px] font-bold px-3 py-1.5 rounded transition-all ${userPreferences.defaultCurrency === "IRT" ? "bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"}`}
-                      >تومان</button>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs">قالب پیش‌فرض تاریخ</span>
-                    <div className="flex gap-1 bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
-                      <button 
-                        onClick={() => setUserPreferences(prev => ({...prev, dateFormat: "Jalali"}))}
-                        className={`text-[10px] font-bold px-3 py-1.5 rounded transition-all ${userPreferences.dateFormat === "Jalali" ? "bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"}`}
-                      >شمسی</button>
-                      <button 
-                        onClick={() => setUserPreferences(prev => ({...prev, dateFormat: "Gregorian"}))}
-                        className={`text-[10px] font-bold px-3 py-1.5 rounded transition-all ${userPreferences.dateFormat === "Gregorian" ? "bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"}`}
-                      >میلادی</button>
-                    </div>
-                  </div>
-                </div>
-              </section>
+                 <button 
+                   onClick={() => setUserPanelTab("general")}
+                   className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all group ${
+                     userPanelTab === "general" 
+                       ? (isDarkMode ? "bg-emerald-600/10 text-emerald-400 ring-1 ring-emerald-500/30" : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200") 
+                       : (isDarkMode ? "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")
+                   }`}
+                 >
+                   <Calculator className={`w-4 h-4 transition-transform ${userPanelTab === "general" ? "scale-110" : "group-hover:scale-110"}`} />
+                   تنظیمات پایه‌ای
+                 </button>
 
-              {/* Optimization Setup */}
-              <section className="flex flex-col gap-3">
-                 <h4 className="text-xs font-bold flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  بهینه‌سازی و کنترل مصرف توکن هوشمند
-                </h4>
-                
-                {/* 1. Resolution Selection */}
-                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-xs text-blue-500">کیفیت و رزولوشن تصاویر سند</span>
-                    <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                      هرچه ابعاد کوچک‌تر باشد، هزینه توکن‌های ورودی (Input Tokens) تا ۷۰٪ کمتر خواهد شد.
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 mt-1">
-                    {(["super-eco", "balanced", "high"] as const).map((res) => {
-                      const labels = {
-                        "super-eco": "فوق اقتصادی (۶۰۰px)",
-                        "balanced": "متوازن (۱۰۰۰px)",
-                        "high": "کیفیت اصلی (۱۸۰۰px)"
-                      };
-                      const isSel = tokenSettings.imageResolution === res;
-                      return (
-                        <button
-                          key={res}
-                          onClick={() => setTokenSettings(prev => ({ ...prev, imageResolution: res }))}
-                          className={`py-2 px-1 rounded-lg text-[10px] font-bold border transition-all ${
-                            isSel 
-                              ? "bg-blue-600 border-blue-500 text-white shadow-sm" 
-                              : isDarkMode
-                                ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
-                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
-                          }`}
-                        >
-                          {labels[res]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 2. Compact descriptive words toggle */}
-                <div className={`p-4 flex items-center justify-between rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
-                  <div className="flex flex-col gap-1 flex-1 pl-2 text-right rtl">
-                    <span className="font-bold text-xs text-right block">خلاصه‌سازی متن خروجی (ECO Prompt)</span>
-                    <span className={`text-[10px] block text-right leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                      مجبور کردن مدل به فشرده‌سازی متن شرح و توضیحات تا حداکثر ۵ کلمه برای کاهش توکن‌های تولیدی.
-                    </span>
-                  </div>
-                  <button 
-                    onClick={() => setTokenSettings(prev => ({ ...prev, ecoPromptEnabled: !prev.ecoPromptEnabled }))}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 mr-2 ${
-                      tokenSettings.ecoPromptEnabled ? "bg-blue-600" : "bg-slate-300"
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      tokenSettings.ecoPromptEnabled ? "-translate-x-6" : "-translate-x-1"
-                    }`} />
-                  </button>
-                </div>
-
-                {/* 3. Row limitation selection */}
-                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
-                  <div className="flex flex-col gap-1">
-                    <span className="font-bold text-xs text-indigo-500">محدودیت تعداد ردیف‌های استخراج‌شده</span>
-                    <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                      اگر لیست فاکتور شما بسیار طولانی است، می‌توانید تعداد ردیف‌های خروجی را برای صرفه‌جویی شدید توکن محدود کنید.
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1.5 mt-1">
-                    {(["unlimited", "5", "10", "20"] as const).map((limit) => {
-                      const labels = {
-                        "unlimited": "نامحدود",
-                        "5": "۵ ردیف",
-                        "10": "۱۰ ردیف",
-                        "20": "۲۰ ردیف"
-                      };
-                      const isSel = tokenSettings.maxRowsToExtract === limit;
-                      return (
-                        <button
-                          key={limit}
-                          onClick={() => setTokenSettings(prev => ({ ...prev, maxRowsToExtract: limit }))}
-                          className={`py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                            isSel 
-                              ? "bg-indigo-600 border-indigo-500 text-white shadow-sm" 
-                              : isDarkMode
-                                ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
-                                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
-                          }`}
-                        >
-                          {labels[limit]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 4. Omit optional empty fields */}
-                <div className={`p-4 flex items-center justify-between rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
-                  <div className="flex flex-col gap-1 flex-1 pl-2 text-right">
-                    <span className="font-bold text-xs text-right block">حذف توضیحات متنی خالی</span>
-                    <span className={`text-[10px] block text-right leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                      عدم ثبت اطلاعات تفصیلی تکراری یا سنگین داکیومنت در ستون توضیحات جهت فشرده نگه داشتن پاسخ مدل.
-                    </span>
-                  </div>
-                  <button 
-                    onClick={() => setTokenSettings(prev => ({ ...prev, skipSecondaryFields: !prev.skipSecondaryFields }))}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 mr-2 ${
-                      tokenSettings.skipSecondaryFields ? "bg-blue-600" : "bg-slate-300"
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      tokenSettings.skipSecondaryFields ? "-translate-x-6" : "-translate-x-1"
-                    }`} />
-                  </button>
-                </div>
-
-                {/* 5. Dual-Pass High Accuracy Self-Correction */}
-                <div className={`p-4 flex items-center justify-between rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-slate-50 border-slate-200"}`}>
-                  <div className="flex flex-col gap-1 flex-1 pl-2 text-right">
-                    <span className="font-bold text-xs text-right block text-amber-500">حالت ممیزی دو مرحله‌ای (Dual-Pass)</span>
-                    <span className={`text-[10px] block text-right leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                      ارسال مجدد خروجی به ممیز CPA هوشمند جهت بازبینی ریاضی، تطابق با فایل اصلی و رفع کامل خطاهای چشمی OCR.
-                    </span>
-                  </div>
-                  <button 
-                    onClick={() => setTokenSettings(prev => ({ ...prev, highAccuracyDualPass: !prev.highAccuracyDualPass }))}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 mr-2 ${
-                      tokenSettings.highAccuracyDualPass ? "bg-amber-500" : "bg-slate-300"
-                    }`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      tokenSettings.highAccuracyDualPass ? "-translate-x-6" : "-translate-x-1"
-                    }`} />
-                  </button>
-                </div>
-
-
-              </section>
+                 <button 
+                   onClick={() => setUserPanelTab("ai")}
+                   className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all group ${
+                     userPanelTab === "ai" 
+                       ? (isDarkMode ? "bg-amber-600/10 text-amber-400 ring-1 ring-amber-500/30" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200") 
+                       : (isDarkMode ? "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")
+                   }`}
+                 >
+                   <Cpu className={`w-4 h-4 transition-transform ${userPanelTab === "ai" ? "scale-110" : "group-hover:scale-110"}`} />
+                   بهینه‌سازی AI
+                 </button>
+               </div>
+               
+               <div className={`p-5 border-t ${isDarkMode ? "border-slate-800" : "border-slate-200/60"}`}>
+                 <button 
+                    onClick={() => {
+                      setNotification({ text: "تنظیمات دستگاه شما با موفقیت ذخیره شد", type: "success" });
+                      setIsUserPanelOpen(false);
+                    }}
+                    className="w-full flex justify-center items-center gap-2 px-4 py-3 rounded-xl text-xs font-black bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 shadow-[0_4px_14px_0_rgba(79,70,229,0.39)] hover:shadow-[0_6px_20px_rgba(79,70,229,0.23)] transition-all active:scale-95"
+                 >
+                   <Save className="w-4 h-4" />
+                   ذخیره تغییرات
+                 </button>
+               </div>
             </div>
 
-            <div className={`p-4 border-t flex items-center justify-end gap-3 ${isDarkMode ? "bg-slate-800/50 border-slate-700/50" : "bg-slate-50 border-slate-100"}`}>
-              <button 
-                onClick={() => setIsUserPanelOpen(false)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
-                  isDarkMode ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800" : "text-slate-500 hover:text-slate-700 hover:bg-slate-200"
-                }`}
-              >
-                انصراف
-              </button>
-              <button 
-                onClick={() => {
-                  setNotification({ text: "تنظیمات دستگاه شما ذخیره شد", type: "success" });
-                  setIsUserPanelOpen(false);
-                }}
-                className="px-6 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-transform active:scale-95"
-              >
-                ذخیره تنظیمات
-              </button>
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col relative overflow-hidden bg-transparent">
+               <button 
+                  onClick={() => setIsUserPanelOpen(false)}
+                  className={`absolute top-5 left-5 p-2 rounded-full z-10 transition-colors ${
+                    isDarkMode ? "bg-slate-800/80 text-slate-400 hover:bg-slate-700 hover:text-white" : "bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-800"
+                  }`}
+                >
+                  <X className="h-4 w-4" />
+               </button>
+
+               <div className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar">
+                 {/* Profile Tab */}
+                 {userPanelTab === "profile" && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
+                      <div>
+                        <h4 className="text-xl font-black mb-2">حساب کاربری فعلی</h4>
+                        <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>مشاهده مشخصات نمایه و سطح دسترسی سیستم. شما می‌توانید بین حساب‌های کاربری آزمایشی جابجا شوید.</p>
+                      </div>
+
+                      <div className={`p-8 rounded-3xl border ${isDarkMode ? "bg-slate-800/40 border-slate-700/60" : "bg-white border-slate-200/80 shadow-sm"}`}>
+                        <div className="flex items-center gap-6 mb-8">
+                          <div className="h-20 w-20 rounded-3xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-3xl shadow-lg shadow-blue-500/20 shrink-0">
+                            {currentUser?.name.charAt(0) || "U"}
+                          </div>
+                          <div className="flex-1">
+                            <select 
+                              value={currentUser?.id}
+                              onChange={(e) => {
+                                 const user = users.find(u => u.id === parseInt(e.target.value));
+                                 if (user) {
+                                   if (user.status === "suspended") {
+                                      setNotification({text: "این اکانت مسدود شده است", type: "error"});
+                                      return;
+                                   }
+                                   setCurrentUser(user);
+                                 }
+                              }}
+                              className={`w-full text-xl font-black bg-transparent border-b-2 pb-2 outline-none cursor-pointer appearance-none ${
+                                isDarkMode ? "text-white border-slate-700 focus:border-blue-500" : "text-slate-800 border-slate-200 focus:border-blue-500"
+                              }`}
+                            >
+                               {users.map(u => (
+                                  <option key={u.id} value={u.id} className={isDarkMode ? "bg-slate-800" : "bg-white"}>{u.name}</option>
+                               ))}
+                            </select>
+                            <p className={`text-xs mt-2 font-mono ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>User ID: {currentUser?.id.toString().padStart(5, '0')}</p>
+                          </div>
+                        </div>
+
+                        <div className={`grid grid-cols-2 gap-4 p-5 rounded-2xl ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
+                           <div className="flex flex-col gap-1.5">
+                             <span className={`text-[10px] font-black uppercase tracking-wider ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>سطح دسترسی (Role)</span>
+                             <span className={`inline-flex items-center self-start px-3 py-1.5 rounded-lg text-[11px] font-black shadow-sm ${
+                                currentUser?.role === "admin" ? "text-purple-700 bg-purple-100 border border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20" : "text-blue-700 bg-blue-100 border border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20"
+                             }`}>
+                               {currentUser?.role === "admin" ? "مدیر کل سیستم (Admin)" : "همکار حسابدار (User)"}
+                             </span>
+                           </div>
+                           <div className="flex flex-col gap-1.5">
+                             <span className={`text-[10px] font-black uppercase tracking-wider ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>وضعیت اکانت (Status)</span>
+                             <span className="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-lg text-[11px] font-black text-emerald-700 bg-emerald-100 border border-emerald-200 dark:text-emerald-400 dark:bg-emerald-500/10 dark:border-emerald-500/20 shadow-sm">
+                               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                               فعال و متصل
+                             </span>
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+                 )}
+
+                 {/* API Tab */}
+                 {userPanelTab === "api" && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
+                      <div>
+                        <h4 className="text-xl font-black mb-2">اتصال مدل زبانی (API)</h4>
+                        <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>پیکربندی کلیدهای اختصاصی برای استفاده از موتورهای استخراج و تفسیر هوش مصنوعی.</p>
+                      </div>
+
+                      <div className={`p-8 rounded-3xl border ${isDarkMode ? "bg-slate-800/40 border-slate-700/60" : "bg-white border-slate-200/80 shadow-sm"}`}>
+                        <div className="flex flex-col gap-2 mb-6">
+                          <label className="font-bold text-sm">کلید دسترسی شخصی (Gemini API Key)</label>
+                          <p className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            در صورت وارد کردن کلید در این بخش، تمام درخواست‌های استخراج به جای سهمیه سیستم از سهمیه شخصی شما کسر خواهد شد. این کار برای دور زدن محدودیت‌های نرخ سیستم عمومی (Rate Limits) پیشنهاد می‌شود.
+                          </p>
+                        </div>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                            <Key className={`w-5 h-5 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
+                          </div>
+                          <input
+                            type="password"
+                            placeholder="AIzaSy..."
+                            value={userPreferences.geminiApiKey}
+                            onChange={(e) => setUserPreferences(prev => ({...prev, geminiApiKey: e.target.value}))}
+                            className={`w-full text-base py-3.5 pr-12 pl-4 font-mono rounded-xl border focus:ring-2 focus:outline-none transition-all ${
+                              isDarkMode 
+                                ? "bg-slate-900 border-slate-700 text-slate-200 focus:border-purple-500 focus:ring-purple-500/20" 
+                                : "bg-slate-50 border-slate-300 text-slate-800 focus:border-purple-500 focus:ring-purple-500/20"
+                            }`}
+                            dir="ltr"
+                          />
+                        </div>
+                        {userPreferences.geminiApiKey && (
+                          <div className="mt-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 leading-relaxed">
+                            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+                            <span>کلید با موفقیت تنظیم شده است. سیستم آماده پردازش هوشمند اسناد با استفاده از سهمیه شخصی و نامحدود شماست.</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                 )}
+
+                 {/* General Settings Tab */}
+                 {userPanelTab === "general" && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
+                      <div>
+                        <h4 className="text-xl font-black mb-2">تنظیمات پایه‌ای</h4>
+                        <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>قالب‌های نمایش مقادیر پولی و تاریخی در جداول سیستم</p>
+                      </div>
+
+                      <div className={`p-8 rounded-3xl border space-y-8 ${isDarkMode ? "bg-slate-800/40 border-slate-700/60" : "bg-white border-slate-200/80 shadow-sm"}`}>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                          <div>
+                            <span className="font-bold text-sm block mb-1">واحد پول پیش‌فرض</span>
+                            <span className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              انتخاب واحد پولی برای نمایش تمام مبالغ، داشبوردها و گزارشات نهایی.
+                            </span>
+                          </div>
+                          <div className={`flex gap-1.5 p-1.5 rounded-2xl shrink-0 ${isDarkMode ? "bg-slate-900 border border-slate-800" : "bg-slate-100 border border-slate-200"}`}>
+                            <button 
+                              onClick={() => setUserPreferences(prev => ({...prev, defaultCurrency: "IRR"}))}
+                              className={`text-[11px] font-black px-6 py-2.5 rounded-xl transition-all ${
+                                userPreferences.defaultCurrency === "IRR" 
+                                  ? (isDarkMode ? "bg-slate-700 text-white shadow-md" : "bg-white text-emerald-700 shadow-md") 
+                                  : (isDarkMode ? "text-slate-500 hover:text-slate-300" : "text-slate-500 hover:text-slate-700")
+                              }`}
+                            >ریال</button>
+                            <button 
+                              onClick={() => setUserPreferences(prev => ({...prev, defaultCurrency: "IRT"}))}
+                              className={`text-[11px] font-black px-6 py-2.5 rounded-xl transition-all ${
+                                userPreferences.defaultCurrency === "IRT" 
+                                  ? (isDarkMode ? "bg-slate-700 text-white shadow-md" : "bg-white text-emerald-700 shadow-md") 
+                                  : (isDarkMode ? "text-slate-500 hover:text-slate-300" : "text-slate-500 hover:text-slate-700")
+                              }`}
+                            >تومان</button>
+                          </div>
+                        </div>
+
+                        <div className="h-px w-full bg-slate-200/70 dark:bg-slate-700/50"></div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                          <div>
+                            <span className="font-bold text-sm block mb-1">قالب تاریخ</span>
+                            <span className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              نحوه نمایش تاریخ صدور فاکتورها و لاگ‌های سیستمی.
+                            </span>
+                          </div>
+                          <div className={`flex gap-1.5 p-1.5 rounded-2xl shrink-0 ${isDarkMode ? "bg-slate-900 border border-slate-800" : "bg-slate-100 border border-slate-200"}`}>
+                            <button 
+                              onClick={() => setUserPreferences(prev => ({...prev, dateFormat: "Jalali"}))}
+                              className={`text-[11px] font-black px-6 py-2.5 rounded-xl transition-all ${
+                                userPreferences.dateFormat === "Jalali" 
+                                  ? (isDarkMode ? "bg-slate-700 text-white shadow-md" : "bg-white text-emerald-700 shadow-md") 
+                                  : (isDarkMode ? "text-slate-500 hover:text-slate-300" : "text-slate-500 hover:text-slate-700")
+                              }`}
+                            >شمسی</button>
+                            <button 
+                              onClick={() => setUserPreferences(prev => ({...prev, dateFormat: "Gregorian"}))}
+                              className={`text-[11px] font-black px-6 py-2.5 rounded-xl transition-all ${
+                                userPreferences.dateFormat === "Gregorian" 
+                                  ? (isDarkMode ? "bg-slate-700 text-white shadow-md" : "bg-white text-emerald-700 shadow-md") 
+                                  : (isDarkMode ? "text-slate-500 hover:text-slate-300" : "text-slate-500 hover:text-slate-700")
+                              }`}
+                            >میلادی</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                 )}
+
+                 {/* AI Tab */}
+                 {userPanelTab === "ai" && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8 max-w-2xl mx-auto">
+                      <div>
+                        <h4 className="text-xl font-black mb-2">مدیریت مصرف و کیفیت (Tokens)</h4>
+                        <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>پارامترهای موتور هوش مصنوعی برای کنترل کیفیت استخراج، سرعت پردازش و هزینه‌های مصرف توکن.</p>
+                      </div>
+
+                      {/* AI Options List */}
+                      <div className="flex flex-col gap-4">
+                        
+                        {/* Option 1 */}
+                        <div className={`p-6 rounded-3xl border flex flex-col md:flex-row md:items-center justify-between gap-6 ${
+                          isDarkMode ? "bg-slate-800/40 border-slate-700/60 hover:border-slate-600/80" : "bg-white border-slate-200/80 hover:border-slate-300 shadow-sm"
+                        } transition-colors`}>
+                          <div className="flex flex-col flex-1">
+                            <span className="font-black text-sm text-blue-500 dark:text-blue-400 mb-1">کیفیت و رزولوشن تصاویر ارسالی</span>
+                            <span className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              استفاده از ابعاد کوچک‌تر می‌تواند هزینه‌های توکن ورودی تصویر (Input Tokens) را تا ۷۰٪ کاهش دهد اما ممکن است در فاکتورهای ناخوانا باعث افت دقت شود.
+                            </span>
+                          </div>
+                          <div className={`flex gap-1.5 p-1.5 rounded-2xl shrink-0 md:self-center ${isDarkMode ? "bg-slate-900 border border-slate-800" : "bg-slate-100 border border-slate-200"}`}>
+                            {(["super-eco", "balanced", "high"] as const).map((res) => {
+                              const labels = {
+                                "super-eco": "۶۰۰px",
+                                "balanced": "۱۰۰۰px",
+                                "high": "اصلی"
+                              };
+                              const isSel = tokenSettings.imageResolution === res;
+                              return (
+                                <button
+                                  key={res}
+                                  onClick={() => setTokenSettings(prev => ({ ...prev, imageResolution: res }))}
+                                  className={`py-2 px-4 rounded-xl text-[10px] font-black transition-all ${
+                                    isSel 
+                                      ? "bg-blue-600 text-white shadow-md" 
+                                      : isDarkMode
+                                        ? "text-slate-500 hover:text-slate-300 hover:bg-slate-800"
+                                        : "text-slate-600 hover:text-slate-800 hover:bg-slate-200/80"
+                                  }`}
+                                >
+                                  {labels[res]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Option 2 */}
+                        <div className={`p-6 rounded-3xl border flex items-center justify-between gap-6 ${
+                          isDarkMode ? "bg-slate-800/40 border-slate-700/60 hover:border-slate-600/80" : "bg-white border-slate-200/80 hover:border-slate-300 shadow-sm"
+                        } transition-colors`}>
+                          <div className="flex flex-col flex-1">
+                            <span className="font-black text-sm mb-1">خلاصه‌سازی توضیحات (ECO Prompt)</span>
+                            <span className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              مجبور کردن هوش مصنوعی به فشرده‌سازی متن ستون شرح و توضیحات تا حداکثر ۵ کلمه. این کار توکن‌های تولیدی (Output Tokens) را به‌شدت کاهش می‌دهد.
+                            </span>
+                          </div>
+                          <button 
+                            onClick={() => setTokenSettings(prev => ({ ...prev, ecoPromptEnabled: !prev.ecoPromptEnabled }))}
+                            className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors shrink-0 ${
+                              tokenSettings.ecoPromptEnabled ? "bg-amber-500" : isDarkMode ? "bg-slate-700" : "bg-slate-300"
+                            }`}
+                          >
+                            <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${
+                              tokenSettings.ecoPromptEnabled ? "-translate-x-7" : "-translate-x-1"
+                            }`} />
+                          </button>
+                        </div>
+
+                        {/* Option 3 */}
+                        <div className={`p-6 rounded-3xl border flex items-center justify-between gap-6 ${
+                          isDarkMode ? "bg-slate-800/40 border-slate-700/60 hover:border-slate-600/80" : "bg-white border-slate-200/80 hover:border-slate-300 shadow-sm"
+                        } transition-colors`}>
+                          <div className="flex flex-col flex-1">
+                            <span className="font-black text-sm mb-1 text-emerald-500 dark:text-emerald-400">حذف فیلدهای غیرضروری</span>
+                            <span className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              رد کردن استخراج اطلاعات تفصیلی و اضافی جهت افزایش سرعت پاسخگویی مدل و حجم خروجی کمتر.
+                            </span>
+                          </div>
+                          <button 
+                            onClick={() => setTokenSettings(prev => ({ ...prev, skipSecondaryFields: !prev.skipSecondaryFields }))}
+                            className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors shrink-0 ${
+                              tokenSettings.skipSecondaryFields ? "bg-emerald-500" : isDarkMode ? "bg-slate-700" : "bg-slate-300"
+                            }`}
+                          >
+                            <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${
+                              tokenSettings.skipSecondaryFields ? "-translate-x-7" : "-translate-x-1"
+                            }`} />
+                          </button>
+                        </div>
+
+                        {/* Option 4 */}
+                        <div className={`p-6 rounded-3xl border flex items-center justify-between gap-6 ${
+                          isDarkMode ? "bg-slate-800/40 border-slate-700/60 hover:border-slate-600/80" : "bg-white border-slate-200/80 hover:border-slate-300 shadow-sm"
+                        } transition-colors`}>
+                          <div className="flex flex-col flex-1">
+                            <span className="font-black text-sm mb-1 text-rose-500 dark:text-rose-400">ممیزی دو مرحله‌ای (Dual-Pass)</span>
+                            <span className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              ارسال مجدد خروجی به ممیز هوشمند جهت چک کردن موازنه و تصحیح خطاهای احتمالی محاسباتی. دقت را به ۱۰۰٪ نزدیک می‌کند اما زمان‌برتر است و هزینه توکن دو برابر دارد.
+                            </span>
+                          </div>
+                          <button 
+                            onClick={() => setTokenSettings(prev => ({ ...prev, highAccuracyDualPass: !prev.highAccuracyDualPass }))}
+                            className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors shrink-0 ${
+                              tokenSettings.highAccuracyDualPass ? "bg-rose-500" : isDarkMode ? "bg-slate-700" : "bg-slate-300"
+                            }`}
+                          >
+                            <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-md transition-transform ${
+                              tokenSettings.highAccuracyDualPass ? "-translate-x-7" : "-translate-x-1"
+                            }`} />
+                          </button>
+                        </div>
+
+                        {/* Option 5 */}
+                        <div className={`p-6 rounded-3xl border flex flex-col md:flex-row md:items-center justify-between gap-6 ${
+                          isDarkMode ? "bg-slate-800/40 border-slate-700/60 hover:border-slate-600/80" : "bg-white border-slate-200/80 hover:border-slate-300 shadow-sm"
+                        } transition-colors`}>
+                          <div className="flex flex-col flex-1">
+                            <span className="font-black text-sm mb-1 text-purple-500 dark:text-purple-400">سقف مجاز ردیف‌های استخراجی</span>
+                            <span className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              جلوگیری از تولید بیش از حد توکن‌ها در فاکتورهای بسیار طولانی با اعمال محدودیت در خروجی.
+                            </span>
+                          </div>
+                          <div className={`flex flex-wrap gap-1.5 p-1.5 rounded-2xl shrink-0 md:self-center ${isDarkMode ? "bg-slate-900 border border-slate-800" : "bg-slate-100 border border-slate-200"}`}>
+                            {(["unlimited", "5", "10", "20"] as const).map((limit) => {
+                              const labels = {
+                                "unlimited": "نامحدود",
+                                "5": "۵",
+                                "10": "۱۰",
+                                "20": "۲۰"
+                              };
+                              const isSel = tokenSettings.maxRowsToExtract === limit;
+                              return (
+                                <button
+                                  key={limit}
+                                  onClick={() => setTokenSettings(prev => ({ ...prev, maxRowsToExtract: limit }))}
+                                  className={`py-2 px-4 rounded-xl text-[10px] font-black transition-all min-w-[3rem] ${
+                                    isSel 
+                                      ? "bg-purple-600 text-white shadow-md" 
+                                      : isDarkMode
+                                        ? "text-slate-500 hover:text-slate-300 hover:bg-slate-800"
+                                        : "text-slate-600 hover:text-slate-800 hover:bg-slate-200/80"
+                                  }`}
+                                >
+                                  {labels[limit]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                 )}
+               </div>
             </div>
           </div>
         </div>
       )}
 
+      
       {/* Admin Panel Modal */}
       {isAdminPanelOpen && currentUser?.role === "admin" && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
           <div 
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-300"
             onClick={() => setIsAdminPanelOpen(false)}
           ></div>
           
-          <div className={`relative w-full max-w-lg rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up transform transition-all ${
-            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border border-slate-200 text-slate-800"
-          }`}>
-            <div className={`flex items-center justify-between p-4 border-b ${
-              isDarkMode ? "bg-slate-800/50 border-slate-700/50" : "bg-slate-50 border-slate-100"
-            }`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-full ${isDarkMode ? "bg-purple-900/30 text-purple-400" : "bg-purple-100 text-purple-600"}`}>
-                  <Shield className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm">پنل مدیریت ادمین</h3>
-                  <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کنترل سیستم و مدیریت کلی داده‌ها</span>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsAdminPanelOpen(false)}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                <X className="h-4 w-4" />
-              </button>
+          <div className={`relative w-full max-w-5xl h-[85vh] md:h-[700px] rounded-3xl shadow-2xl flex overflow-hidden transform transition-all animate-in slide-in-from-bottom-8 duration-300 ${
+            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-slate-50 border border-slate-200 text-slate-800"
+          }`} dir="rtl">
+            
+            {/* Sidebar Navigation */}
+            <div className={`w-1/3 md:w-64 flex flex-col shrink-0 border-l ${isDarkMode ? "bg-slate-950/50 border-slate-800" : "bg-white border-slate-100"}`}>
+               <div className="p-6">
+                 <h3 className="font-black text-lg flex items-center gap-2 text-transparent bg-clip-text bg-gradient-to-l from-purple-600 to-indigo-500">
+                    <Shield className="w-6 h-6 text-purple-500" />
+                    پنل مدیریت (Admin)
+                 </h3>
+                 <p className={`text-[10px] mt-2 leading-relaxed ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                   کنترل کاربران، پشتیبان‌گیری داده‌ها، پایش سیستم و مدیریت منابع
+                 </p>
+               </div>
+               
+               <div className="flex-1 overflow-y-auto py-2 px-4 flex flex-col gap-1.5 custom-scrollbar">
+                 <button 
+                   onClick={() => setAdminPanelTab("users")}
+                   className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all group ${
+                     adminPanelTab === "users" 
+                       ? (isDarkMode ? "bg-blue-600/10 text-blue-400 ring-1 ring-blue-500/30" : "bg-blue-50 text-blue-700 ring-1 ring-blue-200") 
+                       : (isDarkMode ? "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")
+                   }`}
+                 >
+                   <User className={`w-4 h-4 transition-transform ${adminPanelTab === "users" ? "scale-110" : "group-hover:scale-110"}`} />
+                   مدیریت کاربران
+                 </button>
+
+                 <button 
+                   onClick={() => setAdminPanelTab("data")}
+                   className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all group ${
+                     adminPanelTab === "data" 
+                       ? (isDarkMode ? "bg-emerald-600/10 text-emerald-400 ring-1 ring-emerald-500/30" : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200") 
+                       : (isDarkMode ? "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")
+                   }`}
+                 >
+                   <Download className={`w-4 h-4 transition-transform ${adminPanelTab === "data" ? "scale-110" : "group-hover:scale-110"}`} />
+                   پشتیبان‌گیری و داده
+                 </button>
+
+                 <button 
+                   onClick={() => setAdminPanelTab("system")}
+                   className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all group ${
+                     adminPanelTab === "system" 
+                       ? (isDarkMode ? "bg-purple-600/10 text-purple-400 ring-1 ring-purple-500/30" : "bg-purple-50 text-purple-700 ring-1 ring-purple-200") 
+                       : (isDarkMode ? "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")
+                   }`}
+                 >
+                   <Cpu className={`w-4 h-4 transition-transform ${adminPanelTab === "system" ? "scale-110" : "group-hover:scale-110"}`} />
+                   وضعیت سیستم
+                 </button>
+
+                 <button 
+                   onClick={() => setAdminPanelTab("danger")}
+                   className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all group ${
+                     adminPanelTab === "danger" 
+                       ? (isDarkMode ? "bg-rose-600/10 text-rose-400 ring-1 ring-rose-500/30" : "bg-rose-50 text-rose-700 ring-1 ring-rose-200") 
+                       : (isDarkMode ? "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")
+                   }`}
+                 >
+                   <Trash2 className={`w-4 h-4 transition-transform ${adminPanelTab === "danger" ? "scale-110" : "group-hover:scale-110"}`} />
+                   عملیات خطرناک
+                 </button>
+               </div>
             </div>
 
-            <div className="p-5 overflow-y-auto max-h-[60vh] space-y-6">
-              
-              <div className="space-y-3">
-                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>پشتیبان‌گیری از اطلاعات (JSON Backup)</h4>
-                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
-                  <p className={`text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-                    برای امنیت اطلاعات یا انتقال به سیستم دیگر، می‌توانید از تمام تاریخچه اسناد و تراکنش‌ها فایل پشتیبان تهیه کنید و یا فایل قبلی را بارگذاری نمایید.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        const data = { transactions, previousScans, modelQuotas };
-                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = `CPA-Backup-${new Date().toISOString().split('T')[0]}.json`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                        setNotification({ text: "فایل پشتیبان با موفقیت دانلود شد.", type: "success" });
-                      }}
-                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
-                        isDarkMode ? "bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"
-                      }`}
-                    >
-                      <Download className="h-3 w-3" />
-                      تهیه نسخه JSON
-                    </button>
-                    <button
-                      onClick={() => {
-                        const input = document.createElement("input");
-                        input.type = "file";
-                        input.accept = "application/json";
-                        input.onchange = (e: any) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            try {
-                              const data = JSON.parse(event.target?.result as string);
-                              if (data.transactions) setTransactions(data.transactions);
-                              if (data.previousScans) setPreviousScans(data.previousScans);
-                              if (data.modelQuotas) setModelQuotas(data.modelQuotas);
-                              setNotification({ text: "اطلاعات با موفقیت بازیابی شد.", type: "success" });
-                            } catch (err) {
-                              setNotification({ text: "فرمت فایل پشتیبان نامعتبر است.", type: "error" });
-                            }
-                          };
-                          reader.readAsText(file);
-                        };
-                        input.click();
-                      }}
-                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
-                        isDarkMode ? "bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"
-                      }`}
-                    >
-                      <Upload className="h-3 w-3" />
-                      بارگذاری (Import)
-                    </button>
-                  </div>
-                  <button
-                      onClick={() => {
-                        let worksheetData;
-                        let colWidths;
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col relative overflow-hidden bg-transparent">
+               <button 
+                  onClick={() => setIsAdminPanelOpen(false)}
+                  className={`absolute top-5 left-5 p-2 rounded-full z-10 transition-colors ${
+                    isDarkMode ? "bg-slate-800/80 text-slate-400 hover:bg-slate-700 hover:text-white" : "bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-800"
+                  }`}
+                >
+                  <X className="h-4 w-4" />
+               </button>
+
+               <div className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar">
+                 {/* Users Tab */}
+                 {adminPanelTab === "users" && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-4xl mx-auto">
+                      <div>
+                        <h4 className="text-xl font-black mb-2">مدیریت کاربران سیستم</h4>
+                        <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>در این بخش می‌توانید دسترسی کاربران، میزان فضای اختصاصی، و وضعیت حساب‌ها را کنترل کنید.</p>
+                      </div>
+
+                      <div className={`rounded-3xl border overflow-hidden ${isDarkMode ? "bg-slate-800/40 border-slate-700/60" : "bg-white border-slate-200/80 shadow-sm"}`}>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-right text-[12px]">
+                             <thead className={`${isDarkMode ? "bg-slate-900/80 text-slate-300" : "bg-slate-50 text-slate-600"}`}>
+                                <tr>
+                                   <th className="p-4 font-black">نام کاربر</th>
+                                   <th className="p-4 font-black text-center">نقش (Role)</th>
+                                   <th className="p-4 font-black text-center">وضعیت حساب</th>
+                                   <th className="p-4 font-black text-center">توکن مصرفی</th>
+                                   <th className="p-4 font-black text-center">فضای اختصاصی</th>
+                                   <th className="p-4 font-black text-center">عملیات</th>
+                                </tr>
+                             </thead>
+                             <tbody className={`divide-y ${isDarkMode ? "divide-slate-700/50" : "divide-slate-100"}`}>
+                                {users.map(u => (
+                                   <tr key={u.id} className={`transition-colors ${isDarkMode ? "hover:bg-slate-800/50" : "hover:bg-slate-50/80"}`}>
+                                      <td className="p-4">
+                                        <div className="flex items-center gap-3">
+                                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-white shadow-sm ${
+                                            u.role === "admin" ? "bg-gradient-to-tr from-purple-500 to-fuchsia-600" : "bg-gradient-to-tr from-blue-500 to-indigo-600"
+                                          }`}>
+                                            {u.name.charAt(0)}
+                                          </div>
+                                          <div>
+                                            <div className="font-bold">{u.name}</div>
+                                            <div className={`text-[10px] font-mono mt-0.5 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>ID: {u.id.toString().padStart(5, '0')}</div>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="p-4 text-center">
+                                         <span className={`inline-flex px-3 py-1 rounded-lg text-[10px] font-black shadow-sm ${
+                                            u.role === "admin" 
+                                            ? "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400" 
+                                            : "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400"
+                                         }`}>{u.role === "admin" ? "مدیر کل" : "کاربر عادی"}</span>
+                                      </td>
+                                      <td className="p-4 text-center">
+                                         <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black shadow-sm ${
+                                            u.status === "active" 
+                                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400" 
+                                            : "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400"
+                                         }`}>
+                                            {u.status === "active" ? (
+                                              <><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>فعال</>
+                                            ) : (
+                                              <><div className="w-1.5 h-1.5 rounded-full bg-rose-500"></div>مسدود</>
+                                            )}
+                                         </span>
+                                      </td>
+                                      <td className="p-4 text-center font-mono font-bold text-[11px] text-orange-500">
+                                        {u.apiUsage.toLocaleString("fa-IR")} <span className="text-[9px] text-slate-400">Tokens</span>
+                                      </td>
+                                      <td className="p-4 text-center">
+                                         <div className="flex items-center justify-center gap-2">
+                                            <span className="font-bold text-[11px] text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-1 rounded-lg shadow-sm border border-indigo-100 dark:border-indigo-500/20">
+                                               {(5 + (u.extraStorage || 0)).toLocaleString("fa-IR")} GB
+                                            </span>
+                                            <button
+                                              onClick={() => {
+                                                const currentExtra = u.extraStorage || 0;
+                                                const input = prompt(`فضای اضافه تخصیص یافته به ${u.name} را وارد کنید (به گیگابایت):`, currentExtra.toString());
+                                                if (input !== null) {
+                                                  const parsed = parseFloat(input);
+                                                  if (!isNaN(parsed) && parsed >= 0) {
+                                                    setUsers(prev => prev.map(usr => {
+                                                      if (usr.id === u.id) {
+                                                        return { ...usr, extraStorage: parsed };
+                                                      }
+                                                      return usr;
+                                                    }));
+                                                    logEvent("تخصیص فضا", `مدیر فضا اضافه کاربر «${u.name}» را به ${parsed} گیگابایت تغییر داد.`);
+                                                    showNotification(`فضای اضافه کاربر «${u.name}» با موفقیت به ${parsed} گیگابایت تغییر یافت.`, "success");
+                                                  } else {
+                                                    showNotification("لطفاً یک عدد معتبر و بزرگتر یا مساوی صفر وارد کنید.", "error");
+                                                  }
+                                                }
+                                              }}
+                                              className="p-1.5 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 text-indigo-500 transition-colors shadow-sm"
+                                              title="تخصیص فضای اختصاصی"
+                                            >
+                                               <HardDrive className="w-4 h-4" />
+                                            </button>
+                                         </div>
+                                      </td>
+                                      <td className="p-4 text-center">
+                                         <button
+                                             onClick={() => {
+                                                setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, status: usr.status === "active" ? "suspended" : "active"} : usr));
+                                                setNotification({text: `وضعیت کاربر ${u.name} تغییر یافت.`, type: 'success'});
+                                             }}
+                                             className={`px-4 py-1.5 rounded-lg border text-[10px] font-black transition-colors shadow-sm ${
+                                                u.status === "active"
+                                                ? "border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10"
+                                                : "border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500/30 dark:hover:bg-emerald-500/10"
+                                             }`}
+                                         >
+                                             {u.status === "active" ? "مسدود کن" : "فعال سازی"}
+                                         </button>
+                                      </td>
+                                   </tr>
+                                ))}
+                             </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                 )}
+
+                 {/* Data & Backup Tab */}
+                 {adminPanelTab === "data" && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
+                      <div>
+                        <h4 className="text-xl font-black mb-2">مدیریت داده‌ها و پشتیبان‌گیری</h4>
+                        <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تهیه نسخه پشتیبان امن از تمام تراکنش‌ها، اسناد و تاریخچه سیستم.</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-6">
+                        {/* JSON Backup */}
+                        <div className={`p-6 rounded-3xl border flex flex-col sm:flex-row justify-between gap-6 ${
+                          isDarkMode ? "bg-slate-800/40 border-slate-700/60" : "bg-white border-slate-200/80 shadow-sm"
+                        }`}>
+                          <div className="flex flex-col flex-1">
+                            <h5 className="font-black text-sm mb-1 flex items-center gap-2">
+                              <Download className="w-4 h-4 text-blue-500" />
+                              فایل پشتیبان کامل (JSON)
+                            </h5>
+                            <span className={`text-[11px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              این فایل شامل تمام تاریخچه پردازش‌ها، تراکنش‌ها، و سهمیه مصرفی مدل‌هاست که برای انتقال سیستم یا بازگردانی امن استفاده می‌شود.
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-2 shrink-0 sm:w-48">
+                            <button
+                              onClick={() => {
+                                const data = { transactions, previousScans, modelQuotas };
+                                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = `CPA-Backup-${new Date().toISOString().split('T')[0]}.json`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                                setNotification({ text: "فایل پشتیبان با موفقیت دانلود شد.", type: "success" });
+                              }}
+                              className="w-full py-2.5 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white shadow-md flex justify-center items-center gap-2 transition-all active:scale-95"
+                            >
+                              <Download className="w-4 h-4" />
+                              دانلود پشتیبان
+                            </button>
+                            <button
+                              onClick={() => {
+                                const input = document.createElement("input");
+                                input.type = "file";
+                                input.accept = "application/json";
+                                input.onchange = (e: any) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const reader = new FileReader();
+                                  reader.onload = (event) => {
+                                    try {
+                                      const data = JSON.parse(event.target?.result as string);
+                                      if (data.transactions) setTransactions(data.transactions);
+                                      if (data.previousScans) setPreviousScans(data.previousScans);
+                                      if (data.modelQuotas) setModelQuotas(data.modelQuotas);
+                                      setNotification({ text: "اطلاعات با موفقیت بازیابی شد.", type: "success" });
+                                    } catch (err) {
+                                      setNotification({ text: "فرمت فایل پشتیبان نامعتبر است.", type: "error" });
+                                    }
+                                  };
+                                  reader.readAsText(file);
+                                };
+                                input.click();
+                              }}
+                              className={`w-full py-2.5 rounded-xl text-xs font-black border flex justify-center items-center gap-2 transition-all active:scale-95 ${
+                                isDarkMode ? "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700" : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                              }`}
+                            >
+                              <Upload className="w-4 h-4" />
+                              بازیابی (Import)
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Excel Export */}
+                        <div className={`p-6 rounded-3xl border flex flex-col sm:flex-row justify-between gap-6 ${
+                          isDarkMode ? "bg-emerald-900/10 border-emerald-800/30" : "bg-emerald-50/50 border-emerald-200/50 shadow-sm"
+                        }`}>
+                          <div className="flex flex-col flex-1">
+                            <h5 className="font-black text-sm mb-1 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                              <List className="w-4 h-4" />
+                              خروجی مستقیم اکسل (XLSX)
+                            </h5>
+                            <span className={`text-[11px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              تولید یک فایل اکسل ساختاریافته از تمامی تراکنش‌های مالی موجود در سیستم با ستون‌بندی هوشمند.
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              let worksheetData;
+                              let colWidths;
+                              
+                              if (activeFile?.columns && activeFile.columns.length > 0) {
+                                 worksheetData = transactions.map((t, idx) => {
+                                   const row: any = { "ردیف": idx + 1 };
+                                   activeFile.columns!.forEach(col => {
+                                     row[col.عنوان] = col.نوع_داده === 'number' && t[col.کلید] ? Number(t[col.کلید]) : t[col.کلید];
+                                   });
+                                   row["ضریب_اطمینان"] = t.ضریب_اطمینان || 100;
+                                   return row;
+                                 });
+                                 colWidths = [{ wch: 5 }, ...activeFile.columns.map(() => ({ wch: 20 })), { wch: 10 }];
+                              } else {
+                                 worksheetData = transactions.map((t, idx) => ({
+                                    "ردیف": idx + 1,
+                                    "تاریخ": t.تاریخ,
+                                    "شماره_سند": t.شماره_سند,
+                                    "نام_طرف_حساب": t.نام_طرف_حساب,
+                                    "شناسه_کد_ملی": t.شناسه_ملی || "",
+                                    "شماره_مالیاتی": t.شماره_مالیاتی || "",
+                                    "شرح": t.شرح,
+                                    "هزینه_غیرقابل_قبول": t.هزینه_غیرقابل_قبول ? "بله" : "خیر",
+                                    "ارزش_افزوده": t.مالیات_ارزش_افزوده || 0,
+                                    "مبلغ_بدهکار": t.مبلغ_بدهکار || 0,
+                                    "مبلغ_بستانکار": t.مبلغ_بستانکار || 0,
+                                    "نوع_ارز": t.نوع_ارز,
+                                    "توضیحات": t.توضیحات,
+                                    "ضریب_اطمینان": t.ضریب_اطمینان || 100
+                                 }));
+                                 colWidths = [
+                                    { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 30 }, { wch: 10 }
+                                 ];
+                              }
+
+                              const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+                              worksheet["!cols"] = colWidths;
+                              if (!worksheet['!views']) worksheet['!views'] = [];
+                              worksheet['!views'].push({ rightToLeft: true });
+
+                              const workbook = XLSX.utils.book_new();
+                              XLSX.utils.book_append_sheet(workbook, worksheet, "تراکنش‌های مالی");
+                              
+                              XLSX.writeFile(workbook, `Transactions-Export-${new Date().toISOString().split('T')[0]}.xlsx`);
+                              setNotification({ text: "فایل اکسل با موفقیت دانلود شد.", type: "success" });
+                            }}
+                            className="w-full sm:w-48 py-2.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-md flex justify-center items-center gap-2 transition-all active:scale-95 shrink-0 self-center"
+                          >
+                            <Download className="w-4 h-4" />
+                            تولید اکسل (Excel)
+                          </button>
+                        </div>
+
+                        {/* Mock Data Seed */}
+                        <div className={`p-6 rounded-3xl border flex flex-col sm:flex-row justify-between gap-6 ${
+                          isDarkMode ? "bg-slate-800/40 border-slate-700/60" : "bg-white border-slate-200/80 shadow-sm"
+                        }`}>
+                          <div className="flex flex-col flex-1">
+                            <h5 className="font-black text-sm mb-1 flex items-center gap-2">
+                              <Database className="w-4 h-4 text-indigo-500" />
+                              تزریق داده نمونه (Mock Seed)
+                            </h5>
+                            <span className={`text-[11px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              اضافه کردن چندین رکورد مالی فرضی برای تست و بررسی عملکرد داشبوردها و ماشین‌حساب‌های ترازنامه سیستم.
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                                const newMock = [
+                                    {   
+                                        id: "mock-" + Date.now() + 1,
+                                        تاریخ: "۱۴۰۳/۰۲/۱۵",
+                                        شماره_سند: "۱۰۵۵۰",
+                                        نام_طرف_حساب: "شرکت تجهیزات شبکه مبین",
+                                        شرح: "خرید سرورهای اچ‌پی جهت ارتقا زیرساخت مرکز داده",
+                                        مبلغ_بدهکار: 580000000,
+                                        مبلغ_بستانکار: 0,
+                                        نوع_ارز: "ریال",
+                                        توضیحات: "تسویه قطعی طی چک صیادی دو ماهه",
+                                        ضریب_اطمینان: 92
+                                    },
+                                    {   
+                                        id: "mock-" + Date.now() + 2,
+                                        تاریخ: "۱۴۰۳/۰۲/۱۸",
+                                        شماره_سند: "۱۰۵۵۱",
+                                        نام_طرف_حساب: "حساب‌های دریافتنی / مشتریان خرد",
+                                        شرح: "وصول مطالبات از صورتحساب فروش قطعات ماه قبل",
+                                        مبلغ_بدهکار: 0,
+                                        مبلغ_بستانکار: 125000000,
+                                        نوع_ارز: "ریال",
+                                        توضیحات: "واریز نقدی به حساب جاری بانک سامان",
+                                        ضریب_اطمینان: 98
+                                    },
+                                    {   
+                                        id: "mock-" + Date.now() + 3,
+                                        تاریخ: "۱۴۰۳/۰۲/۲۰",
+                                        شماره_سند: "۱۰۵۵۲",
+                                        نام_طرف_حساب: "سازمان امور مالیاتی",
+                                        شرح: "پرداخت علی‌الحساب مالیات بر ارزش افزوده دوره زمستان",
+                                        مبلغ_بدهکار: 325000000,
+                                        مبلغ_بستانکار: 0,
+                                        نوع_ارز: "ریال",
+                                        توضیحات: "دارای فیش واریزی شبا",
+                                        ضریب_اطمینان: 100
+                                    }
+                                ];
+                                setTransactions(prev => [...prev, ...newMock]);
+                                setNotification({ text: "داده‌های نمونه با موفقیت افزوده شدند.", type: "success" });
+                            }}
+                            className={`w-full sm:w-48 py-2.5 rounded-xl text-xs font-black border flex justify-center items-center gap-2 transition-all active:scale-95 shrink-0 self-center ${
+                              isDarkMode ? "bg-indigo-900/30 border-indigo-500/30 text-indigo-400 hover:bg-indigo-900/50" : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                            }`}
+                          >
+                            <Plus className="w-4 h-4" />
+                            تزریق تراکنش‌ها
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                 )}
+
+                 {/* System Info Tab */}
+                 {adminPanelTab === "system" && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-3xl mx-auto">
+                      <div>
+                        <h4 className="text-xl font-black mb-2">وضعیت و منابع سیستم</h4>
+                        <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نمایش زنده آمار کلیدی دیتابیس، مصرف توکن‌ها و دسترسی سریع به پنل مدیریت منابع.</p>
+                      </div>
+
+                      {/* Stats Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className={`p-6 rounded-3xl border flex flex-col items-center justify-center text-center gap-2 ${
+                          isDarkMode ? "bg-blue-900/10 border-blue-500/20" : "bg-blue-50 border-blue-100 shadow-sm"
+                        }`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDarkMode ? "bg-blue-500/20 text-blue-400" : "bg-blue-200 text-blue-700"}`}>
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className={`text-2xl font-black ${isDarkMode ? "text-blue-400" : "text-blue-700"}`}>{previousScans.length}</div>
+                            <div className={`text-[10px] font-bold mt-1 ${isDarkMode ? "text-slate-400" : "text-blue-600/70"}`}>اسناد پردازش شده</div>
+                          </div>
+                        </div>
+
+                        <div className={`p-6 rounded-3xl border flex flex-col items-center justify-center text-center gap-2 ${
+                          isDarkMode ? "bg-emerald-900/10 border-emerald-500/20" : "bg-emerald-50 border-emerald-100 shadow-sm"
+                        }`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDarkMode ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-200 text-emerald-700"}`}>
+                            <List className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className={`text-2xl font-black ${isDarkMode ? "text-emerald-400" : "text-emerald-700"}`}>{transactions.length}</div>
+                            <div className={`text-[10px] font-bold mt-1 ${isDarkMode ? "text-slate-400" : "text-emerald-600/70"}`}>تراکنش‌های موفق</div>
+                          </div>
+                        </div>
+
+                        <div className={`p-6 rounded-3xl border flex flex-col items-center justify-center text-center gap-2 ${
+                          isDarkMode ? "bg-purple-900/10 border-purple-500/20" : "bg-purple-50 border-purple-100 shadow-sm"
+                        }`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-200 text-purple-700"}`}>
+                            <Database className="w-5 h-5" />
+                          </div>
+                          <div>
+                            {(() => {
+                               let totalStorage = 0;
+                               for (let i = 0; i < localStorage.length; i++) {
+                                 const key = localStorage.key(i);
+                                 if (key) totalStorage += localStorage.getItem(key)?.length || 0;
+                               }
+                               const kb = (totalStorage / 1024).toFixed(1);
+                               return <div className={`text-2xl font-black font-mono ${isDarkMode ? "text-purple-400" : "text-purple-700"}`}>{kb}</div>;
+                            })()}
+                            <div className={`text-[10px] font-bold mt-1 ${isDarkMode ? "text-slate-400" : "text-purple-600/70"}`}>حجم محلی (KB)</div>
+                          </div>
+                        </div>
+
+                        <div className={`p-6 rounded-3xl border flex flex-col items-center justify-center text-center gap-2 ${
+                          isDarkMode ? "bg-orange-900/10 border-orange-500/20" : "bg-orange-50 border-orange-100 shadow-sm"
+                        }`}>
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDarkMode ? "bg-orange-500/20 text-orange-400" : "bg-orange-200 text-orange-700"}`}>
+                            <Coins className="w-5 h-5" />
+                          </div>
+                          <div>
+                            {(() => {
+                               let totalTokens = 0;
+                               Object.values(modelQuotas).forEach((q: any) => totalTokens += q.used);
+                               return <div className={`text-2xl font-black font-mono ${isDarkMode ? "text-orange-400" : "text-orange-700"}`}>{totalTokens}</div>;
+                            })()}
+                            <div className={`text-[10px] font-bold mt-1 ${isDarkMode ? "text-slate-400" : "text-orange-600/70"}`}>کل توکن‌های مصرفی</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Token Manager Link */}
+                      <div className={`p-8 rounded-3xl border flex flex-col sm:flex-row items-center justify-between gap-6 mt-8 ${
+                        isDarkMode ? "bg-slate-800/40 border-slate-700/60" : "bg-white border-slate-200/80 shadow-sm"
+                      }`}>
+                        <div className="flex flex-col flex-1">
+                          <h5 className="font-black text-base mb-1 flex items-center gap-2">
+                            مدیریت پیشرفته منابع و توکن‌ها
+                          </h5>
+                          <span className={`text-xs leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            ورود به پنل تخصصی توکن‌ها برای مشاهده نمودارهای مصرف، تخصیص بودجه و اعمال محدودیت‌های هوش مصنوعی.
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setIsAdminPanelOpen(false);
+                            setIsTokenManagerOpen(true);
+                            logEvent("پنل مدیریت توکن", "مدیر سیستم وارد پنل مدیریت پیشرفته توکن‌ها شد.");
+                          }}
+                          className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl text-xs font-black shadow-[0_4px_14px_0_rgba(168,85,247,0.39)] hover:shadow-[0_6px_20px_rgba(168,85,247,0.23)] flex justify-center items-center gap-2 transition-all active:scale-95 shrink-0 ${
+                            isDarkMode ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"
+                          }`}
+                        >
+                          <Settings className="w-4 h-4" />
+                          ورود به Token Manager
+                        </button>
+                      </div>
+
+                    </div>
+                 )}
+
+                 {/* Danger Zone Tab */}
+                 {adminPanelTab === "danger" && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
+                      <div>
+                        <h4 className="text-xl font-black mb-2 text-rose-500">عملیات خطرناک (Danger Zone)</h4>
+                        <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>اقدامات این بخش غیرقابل بازگشت هستند. پیش از تایید، اطمینان حاصل کنید.</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-6">
                         
-                        if (activeFile?.columns && activeFile.columns.length > 0) {
-                           worksheetData = transactions.map((t, idx) => {
-                             const row: any = { "ردیف": idx + 1 };
-                             activeFile.columns!.forEach(col => {
-                               row[col.عنوان] = col.نوع_داده === 'number' && t[col.کلید] ? Number(t[col.کلید]) : t[col.کلید];
-                             });
-                             row["ضریب_اطمینان"] = t.ضریب_اطمینان || 100;
-                             return row;
-                           });
-                           colWidths = [{ wch: 5 }, ...activeFile.columns.map(() => ({ wch: 20 })), { wch: 10 }];
-                        } else {
-                           worksheetData = transactions.map((t, idx) => ({
-                              "ردیف": idx + 1,
-                              "تاریخ": t.تاریخ,
-                              "شماره_سند": t.شماره_سند,
-                              "نام_طرف_حساب": t.نام_طرف_حساب,
-                              "شناسه_کد_ملی": t.شناسه_ملی || "",
-                              "شماره_مالیاتی": t.شماره_مالیاتی || "",
-                              "شرح": t.شرح,
-                              "هزینه_غیرقابل_قبول": t.هزینه_غیرقابل_قبول ? "بله" : "خیر",
-                              "ارزش_افزوده": t.مالیات_ارزش_افزوده || 0,
-                              "مبلغ_بدهکار": t.مبلغ_بدهکار || 0,
-                              "مبلغ_بستانکار": t.مبلغ_بستانکار || 0,
-                              "نوع_ارز": t.نوع_ارز,
-                              "توضیحات": t.توضیحات,
-                              "ضریب_اطمینان": t.ضریب_اطمینان || 100
-                           }));
-                           colWidths = [
-                              { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 30 }, { wch: 10 }
-                           ];
-                        }
+                        <div className={`p-6 rounded-3xl border border-rose-200 dark:border-rose-900/50 flex flex-col sm:flex-row justify-between gap-6 ${
+                          isDarkMode ? "bg-rose-950/20" : "bg-rose-50/50"
+                        }`}>
+                          <div className="flex flex-col flex-1">
+                            <h5 className="font-black text-sm mb-1 text-rose-600 dark:text-rose-400">پاکسازی مخزن تراکنش‌ها</h5>
+                            <span className={`text-[11px] leading-relaxed ${isDarkMode ? "text-rose-300/70" : "text-rose-800/70"}`}>
+                              حذف تمامی ردیف‌های مالی استخراج شده. اسناد پردازش شده در تاریخچه باقی می‌مانند.
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (confirm("آیا از حذف تمام تراکنش‌ها مطمئن هستید؟")) {
+                                setTransactions([]);
+                                setActiveFile(null);
+                                setRawJsonText("");
+                                setNotification({ text: "جدول تراکنش‌های سیستم پاکسازی شد.", type: "success" });
+                              }
+                            }}
+                            className={`w-full sm:w-40 py-2.5 rounded-xl text-xs font-black border flex justify-center items-center gap-2 transition-all active:scale-95 shrink-0 self-center ${
+                              isDarkMode ? "bg-rose-900/40 border-rose-700/50 text-rose-400 hover:bg-rose-900/60" : "bg-white border-rose-200 text-rose-600 hover:bg-rose-100"
+                            }`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            حذف تراکنش‌ها
+                          </button>
+                        </div>
 
-                        const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-                        worksheet["!cols"] = colWidths;
-                        if (!worksheet['!views']) worksheet['!views'] = [];
-                        worksheet['!views'].push({ rightToLeft: true });
+                        <div className={`p-6 rounded-3xl border border-rose-200 dark:border-rose-900/50 flex flex-col sm:flex-row justify-between gap-6 ${
+                          isDarkMode ? "bg-rose-950/20" : "bg-rose-50/50"
+                        }`}>
+                          <div className="flex flex-col flex-1">
+                            <h5 className="font-black text-sm mb-1 text-rose-600 dark:text-rose-400">پاکسازی تاریخچه اسناد</h5>
+                            <span className={`text-[11px] leading-relaxed ${isDarkMode ? "text-rose-300/70" : "text-rose-800/70"}`}>
+                              حذف کامل تصاویر، متون اولیه و متادیتای تمام اسناد اسکن شده قبلی.
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (confirm("آیا از حذف تاریخچه اسناد مطمئن هستید؟")) {
+                                setPreviousScans([]);
+                                setNotification({ text: "تاریخچه اسناد با موفقیت حذف گردید.", type: "success" });
+                              }
+                            }}
+                            className={`w-full sm:w-40 py-2.5 rounded-xl text-xs font-black border flex justify-center items-center gap-2 transition-all active:scale-95 shrink-0 self-center ${
+                              isDarkMode ? "bg-rose-900/40 border-rose-700/50 text-rose-400 hover:bg-rose-900/60" : "bg-white border-rose-200 text-rose-600 hover:bg-rose-100"
+                            }`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            حذف تاریخچه
+                          </button>
+                        </div>
 
-                        const workbook = XLSX.utils.book_new();
-                        XLSX.utils.book_append_sheet(workbook, worksheet, "تراکنش‌های مالی");
-                        
-                        XLSX.writeFile(workbook, `Transactions-Export-${new Date().toISOString().split('T')[0]}.xlsx`);
-                        setNotification({ text: "فایل اکسل (XLSX) با موفقیت تولید و دانلود شد.", type: "success" });
-                      }}
-                      className={`w-full py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 mt-1 ${
-                        isDarkMode ? "bg-emerald-900/30 border-emerald-800/50 text-emerald-300 hover:bg-emerald-900/50" : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                      }`}
-                    >
-                      <Download className="h-3 w-3" />
-                      خروجی مستقیم اکسل (XLSX) از تراکنش‌های فعلی
-                    </button>
-                </div>
-              </div>
+                        <div className={`p-6 rounded-3xl border border-red-500/30 flex flex-col gap-4 ${
+                          isDarkMode ? "bg-red-950/40" : "bg-red-50"
+                        }`}>
+                          <div className="flex flex-col">
+                            <h5 className="font-black text-sm mb-1 text-red-600 dark:text-red-400">بازنشانی کامل سیستم (Hard Reset)</h5>
+                            <span className={`text-[11px] leading-relaxed ${isDarkMode ? "text-red-300/70" : "text-red-800/70"}`}>
+                              این عملیات تمام داده‌های ذخیره شده در مرورگر را به طور کامل پاک کرده و برنامه را مجددا بارگیری می‌کند.
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (confirm("هشدار! آیا از پاکسازی کامل سیستم و ریست آن مطمئن هستید؟ تمام داده‌ها نابود خواهند شد.")) {
+                                window.localStorage.clear();
+                                window.location.reload();
+                              }
+                            }}
+                            className="w-full py-3 rounded-xl text-xs font-black bg-red-600 hover:bg-red-700 text-white shadow-md flex justify-center items-center gap-2 transition-all active:scale-95"
+                          >
+                            <AlertTriangle className="w-4 h-4" />
+                            پاکسازی کامل (رادیواکتیو)
+                          </button>
+                        </div>
 
-              <div className="space-y-3">
-                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>تزریق داده نمونه (Mock Data Seed)</h4>
-                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
-                  <p className={`text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-                    جهت بررسی عملکرد جداول، ماشین حساب تراز و استایل‌ها، می‌توانید تراکنش‌های فرضی حسابداری به برنامه تزریق کنید.
-                  </p>
-                  <button
-                    onClick={() => {
-                        const newMock = [
-                            {   
-                                id: "mock-" + Date.now() + 1,
-                                تاریخ: "۱۴۰۳/۰۲/۱۵",
-                                شماره_سند: "۱۰۵۵۰",
-                                نام_طرف_حساب: "شرکت تجهیزات شبکه مبین",
-                                شرح: "خرید سرورهای اچ‌پی جهت ارتقا زیرساخت مرکز داده",
-                                مبلغ_بدهکار: 580000000,
-                                مبلغ_بستانکار: 0,
-                                نوع_ارز: "ریال",
-                                توضیحات: "تسویه قطعی طی چک صیادی دو ماهه",
-                                ضریب_اطمینان: 92
-                            },
-                            {   
-                                id: "mock-" + Date.now() + 2,
-                                تاریخ: "۱۴۰۳/۰۲/۱۸",
-                                شماره_سند: "۱۰۵۵۱",
-                                نام_طرف_حساب: "حساب‌های دریافتنی / مشتریان خرد",
-                                شرح: "وصول مطالبات از صورتحساب فروش قطعات ماه قبل",
-                                مبلغ_بدهکار: 0,
-                                مبلغ_بستانکار: 125000000,
-                                نوع_ارز: "ریال",
-                                توضیحات: "واریز نقدی به حساب جاری بانک سامان",
-                                ضریب_اطمینان: 98
-                            },
-                            {   
-                                id: "mock-" + Date.now() + 3,
-                                تاریخ: "۱۴۰۳/۰۲/۲۰",
-                                شماره_سند: "۱۰۵۵۲",
-                                نام_طرف_حساب: "سازمان امور مالیاتی",
-                                شرح: "پرداخت علی‌الحساب مالیات بر ارزش افزوده دوره زمستان",
-                                مبلغ_بدهکار: 325000000,
-                                مبلغ_بستانکار: 0,
-                                نوع_ارز: "ریال",
-                                توضیحات: "دارای فیش واریزی شبا",
-                                ضریب_اطمینان: 100
-                            }
-                        ];
-                        setTransactions(prev => [...prev, ...newMock]);
-                        setNotification({ text: "داده‌های مالی نمونه با موفقیت افزوده شدند.", type: "success" });
-                    }}
-                    className={`w-full py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 ${
-                        isDarkMode ? "bg-blue-900/30 border border-blue-800 text-blue-300 hover:bg-blue-900/50" : "bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100"
-                    }`}
-                  >
-                    + تزریق تراکنش‌های آماده حسابداری
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>پاکسازی حافظه سیستم</h4>
-                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/40 border-red-900/30" : "bg-red-50/50 border-red-100"}`}>
-                  <p className={`text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-                    شما می‌توانید تمام اطلاعات محلی، یا بخش‌هایی از آن را بازنشانی کنید. موارد حذف شده غیرقابل بازگشت هستند.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setTransactions([]);
-                        setActiveFile(null);
-                        setRawJsonText("");
-                        setNotification({ text: "جدول تراکنش‌های سیستم پاکسازی شد.", type: "success" });
-                      }}
-                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
-                        isDarkMode ? "border-slate-600 text-slate-300 hover:bg-slate-700" : "border-slate-300 text-slate-700 hover:bg-slate-200"
-                      }`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      مخزن تراکنش
-                    </button>
-                    <button
-                      onClick={() => {
-                        setPreviousScans([]);
-                        setNotification({ text: "تاریخچه اسناد با موفقیت حذف گردید.", type: "success" });
-                      }}
-                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
-                        isDarkMode ? "border-slate-600 text-slate-300 hover:bg-slate-700" : "border-slate-300 text-slate-700 hover:bg-slate-200"
-                      }`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                      تاریخچه اسناد
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => {
-                        window.localStorage.clear();
-                        window.location.reload();
-                    }}
-                    className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 mt-1"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    پاکسازی کامل دیتابیس (رادیواکتیو)
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>
-                  <Coins className="h-4 w-4" />
-                  مدیریت پیشرفته توکن‌ها (Token Management)
-                </h4>
-                <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
-                  <p className={`text-xs mb-3 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-                    پایش مصرف لحظه‌ای توکن‌ها به تفکیک مدل‌های هوش مصنوعی، تنظیم محدودیت‌های کاربری، و مدیریت هزینه‌های API.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setIsAdminPanelOpen(false);
-                      setIsTokenManagerOpen(true);
-                      logEvent("پنل مدیریت توکن", "مدیر سیستم وارد پنل مدیریت پیشرفته توکن‌ها شد.");
-                    }}
-                    className={`w-full py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 ${
-                      isDarkMode ? "bg-purple-600 hover:bg-purple-700 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"
-                    }`}
-                  >
-                    <Settings className="h-4 w-4" />
-                    ورود به پنل Token Management
-                  </button>
-                </div>
-              </div>
-              
-              <div className="space-y-3">
-                <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>
-                  <Shield className="h-4 w-4" />
-                  مدیریت و کنترل کاربران سیستم
-                </h4>
-                <div className={`rounded-xl border overflow-hidden ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
-                  <table className="w-full text-right text-[11px]">
-                     <thead className={`${isDarkMode ? "bg-slate-800/80" : "bg-slate-100/80"}`}>
-                        <tr>
-                           <th className="p-3">کاربر</th>
-                           <th className="p-3 text-center">نقش</th>
-                           <th className="p-3 text-center">وضعیت</th>
-                           <th className="p-3 text-left">توکن مصرفی</th>
-                           <th className="p-3 text-center">فضای ذخیره‌سازی</th>
-                           <th className="p-3 text-center">دسترسی</th>
-                        </tr>
-                     </thead>
-                     <tbody className={`divide-y ${isDarkMode ? "divide-slate-700/50" : "divide-slate-200"}`}>
-                        {users.map(u => (
-                           <tr key={u.id} className={`${isDarkMode ? "hover:bg-slate-800/50" : "hover:bg-slate-100/50"}`}>
-                              <td className="p-3 font-semibold">{u.name}</td>
-                              <td className="p-3 text-center">
-                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                                    u.role === "admin" 
-                                    ? "bg-purple-100 text-purple-700" 
-                                    : "bg-blue-100 text-blue-700"
-                                 }`}>{u.role === "admin" ? "مدیر" : "کاربر"}</span>
-                              </td>
-                              <td className="p-3 text-center">
-                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                                    u.status === "active" 
-                                    ? "bg-emerald-100 text-emerald-700" 
-                                    : "bg-rose-100 text-rose-700"
-                                 }`}>{u.status === "active" ? "فعال" : "مسدود"}</span>
-                              </td>
-                              <td className="p-3 text-left font-mono text-[10px]">{u.apiUsage.toLocaleString("fa-IR")}</td>
-                              <td className="p-3 text-center">
-                                 <div className="flex items-center justify-center gap-1.5">
-                                    <span className="font-semibold text-[10px] text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded">
-                                       {(5 + (u.extraStorage || 0)).toLocaleString("fa-IR")} گیگ
-                                    </span>
-                                    <button
-                                      onClick={() => {
-                                        const currentExtra = u.extraStorage || 0;
-                                        const input = prompt(`فضای اضافه تخصیص یافته به ${u.name} را وارد کنید (به گیگابایت):`, currentExtra.toString());
-                                        if (input !== null) {
-                                          const parsed = parseFloat(input);
-                                          if (!isNaN(parsed) && parsed >= 0) {
-                                            setUsers(prev => prev.map(usr => {
-                                              if (usr.id === u.id) {
-                                                return { ...usr, extraStorage: parsed };
-                                              }
-                                              return usr;
-                                            }));
-                                            logEvent("تخصیص فضا", `مدیر فضا اضافه کاربر «${u.name}» را به ${parsed} گیگابایت تغییر داد.`);
-                                            showNotification(`فضای اضافه کاربر «${u.name}» با موفقیت به ${parsed} گیگابایت تغییر یافت.`, "success");
-                                          } else {
-                                            showNotification("لطفاً یک عدد معتبر و بزرگتر یا مساوی صفر وارد کنید.", "error");
-                                          }
-                                        }
-                                      }}
-                                      className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 transition-colors"
-                                      title="تخصیص فضای اختصاصی"
-                                    >
-                                       <HardDrive className="w-3.5 h-3.5 text-indigo-500 hover:text-indigo-600" />
-                                    </button>
-                                 </div>
-                              </td>
-                              <td className="p-3 text-center">
-                                 <button
-                                     onClick={() => {
-                                        setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, status: usr.status === "active" ? "suspended" : "active"} : usr));
-                                        setNotification({text: `وضعیت کاربر ${u.name} تغییر یافت.`, type: 'success'});
-                                     }}
-                                     className={`px-2 py-1 rounded border text-[9px] font-bold transition-colors ${
-                                        u.status === "active"
-                                        ? "border-rose-200 text-rose-600 hover:bg-rose-50"
-                                        : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
-                                     }`}
-                                 >
-                                     {u.status === "active" ? "مسدود کن" : "فعال کن"}
-                                 </button>
-                              </td>
-                           </tr>
-                        ))}
-                     </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                  <Shield className="h-4 w-4" />
-                  آمار لحظه‌ای سیستم
-                </h4>
-                <div className={`p-4 rounded-xl border grid grid-cols-2 gap-4 ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
-                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
-                        <div className={`text-2xl font-black mb-1 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>{previousScans.length}</div>
-                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کل اسناد پردازش شده</div>
+                      </div>
                     </div>
-                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
-                        <div className={`text-2xl font-black mb-1 ${isDarkMode ? "text-emerald-400" : "text-emerald-600"}`}>{transactions.length}</div>
-                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تراکنش‌های استخراجی</div>
-                    </div>
-                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
-                        {(() => {
-                           let totalStorage = 0;
-                           for (let i = 0; i < localStorage.length; i++) {
-                             const key = localStorage.key(i);
-                             if (key) totalStorage += localStorage.getItem(key)?.length || 0;
-                           }
-                           const kb = (totalStorage / 1024).toFixed(1);
-                           return <div className={`text-lg font-black mb-1 ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>{kb} KB</div>;
-                        })()}
-                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>حجم دیتابیس محلی</div>
-                    </div>
-                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
-                        {(() => {
-                           let totalTokens = 0;
-                           Object.values(modelQuotas).forEach((q: any) => totalTokens += q.used);
-                           return <div className={`text-lg font-black mb-1 ${isDarkMode ? "text-orange-400" : "text-orange-600"}`}>{totalTokens}</div>;
-                        })()}
-                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کل درخواست‌های API</div>
-                    </div>
-                </div>
-              </div>
+                 )}
 
+               </div>
             </div>
           </div>
         </div>
       )}
-
       {/* Token Management Panel Modal */}
       {isTokenManagerOpen && currentUser?.role === "admin" && (
         <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 sm:p-6">

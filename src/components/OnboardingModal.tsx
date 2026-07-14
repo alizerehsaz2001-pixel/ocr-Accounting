@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Upload, Cpu, Edit3, Settings, ShieldCheck, Check, MousePointerClick, FileJson, FileSpreadsheet, Mic, Database, ArrowLeft, ArrowRight, Sparkles, Zap, ChartPie } from "lucide-react";
+import { Upload, Cpu, Edit3, Settings, ShieldCheck, Check, MousePointerClick, FileJson, FileSpreadsheet, Camera, Database, ArrowLeft, ArrowRight, Sparkles, Zap, ChartPie } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface OnboardingModalProps {
@@ -15,51 +15,51 @@ export default function OnboardingModal({ isOpen, onClose, isDarkMode }: Onboard
 
   const steps = [
     {
-      title: "سیستم یکپارچه حسابداری هوشمند",
-      subtitle: "نسل جدید مدیریت مالی با اتکا به هوش مصنوعی",
-      description: "با ترکیب دقت حسابداری سنتی و سرعت هوش مصنوعی، تمام اسناد، فاکتورها و تراکنش‌های شما به صورت خودکار پردازش و تراز می‌شوند.",
+      title: "به سیستم حسابداری هوشمند خوش آمدید",
+      subtitle: "معرفی پلتفرم پردازش اسناد",
+      description: "این نرم‌افزار به شما کمک می‌کند تا با استفاده از هوش مصنوعی (Gemini)، فاکتورها، رسیدها و اسناد مالی خود را در کمترین زمان پردازش کرده و به داده‌های ساختاریافته حسابداری تبدیل کنید.",
       icon: <Sparkles className="h-16 w-16 text-white" />,
       color: "from-blue-600 to-indigo-600",
       features: [
-        { icon: <ShieldCheck className="h-5 w-5" />, title: "امنیت و دقت بالا", desc: "استخراج بدون خطای مبالغ و تاریخ‌ها" },
-        { icon: <Zap className="h-5 w-5" />, title: "پردازش آنی", desc: "تشخیص فوری فایل‌های چندصفحه‌ای" },
-        { icon: <ChartPie className="h-5 w-5" />, title: "موازنه خودکار", desc: "محاسبه و تطبیق هوشمند بدهکار/بستانکار" }
+        { icon: <ShieldCheck className="h-5 w-5" />, title: "امنیت داده‌ها", desc: "پردازش امن و نگهداری اطلاعات در مرورگر شما" },
+        { icon: <Zap className="h-5 w-5" />, title: "سرعت بالا", desc: "استخراج آنی اقلام و مبالغ فاکتور" },
+        { icon: <ChartPie className="h-5 w-5" />, title: "دقت بالا", desc: "کاهش چشمگیر خطاهای ورود دستی اطلاعات" }
       ]
     },
     {
-      title: "هسته قدرتمند دفتر کل",
-      subtitle: "پایه و اساس تمامی عملیات مالی شما",
-      description: "سیستم حسابداری مالی و دفتر کل، قلب تپنده نرم‌افزار است که تمامی اطلاعات پس از پردازش هوشمند به اینجا منتقل شده و طبقه‌بندی می‌شوند.",
-      icon: <Database className="h-16 w-16 text-white" />,
+      title: "۱. بارگذاری و اسکن اسناد",
+      subtitle: "ورود اطلاعات به سیستم",
+      description: "برای شروع، می‌توانید فایل‌های تصویری یا PDF خود را در برنامه آپلود کنید. همچنین امکان استفاده از دوربین برای اسکن مستقیم و زنده فاکتورها وجود دارد.",
+      icon: <Upload className="h-16 w-16 text-white" />,
       color: "from-indigo-600 to-purple-600",
       features: [
-        { icon: <Database className="h-5 w-5" />, title: "کدینگ پیشرفته", desc: "تعریف حساب‌ها در سطوح کل، معین و تفصیلی" },
-        { icon: <FileJson className="h-5 w-5" />, title: "صدور اسناد", desc: "ثبت خودکار و دستی اسناد با تایید چندمرحله‌ای" },
-        { icon: <FileSpreadsheet className="h-5 w-5" />, title: "گزارشات جامع", desc: "ترازنامه‌های چندستونی و دفاتر قانونی" }
+        { icon: <Upload className="h-5 w-5" />, title: "آپلود فایل", desc: "پشتیبانی از فرمت‌های تصویری رایج و PDF" },
+        { icon: <Camera className="h-5 w-5" />, title: "اسکن زنده", desc: "عکس‌برداری مستقیم با دوربین دستگاه" },
+        { icon: <Settings className="h-5 w-5" />, title: "تنظیمات کیفیت", desc: "امکان کاهش حجم تصویر برای مصرف کمتر اینترنت" }
       ]
     },
     {
-      title: "پردازشگر تصویر و اسناد",
-      subtitle: "خداحافظی با ورود دستی اطلاعات",
-      description: "تصویر فاکتور، رسید یا اسناد حسابداری خود را بارگذاری کنید. موتور OCR هوشمند ما در کسری از ثانیه داده‌ها را ساختاریافته تحویل می‌دهد.",
-      icon: <Upload className="h-16 w-16 text-white" />,
+      title: "۲. استخراج هوشمند و موازنه",
+      subtitle: "پردازش توسط هوش مصنوعی",
+      description: "هوش مصنوعی سند شما را به دقت تحلیل کرده و مقادیری نظیر مبلغ بدهکار/بستانکار، مالیات بر ارزش افزوده، نوع ارز و نام طرف حساب را استخراج می‌کند.",
+      icon: <Cpu className="h-16 w-16 text-white" />,
       color: "from-emerald-500 to-teal-600",
       features: [
-        { icon: <Upload className="h-5 w-5" />, title: "تشخیص هوشمند", desc: "پشتیبانی از عکس دوربین یا PDF" },
-        { icon: <Cpu className="h-5 w-5" />, title: "یادگیری ماشین", desc: "بهبود دقت با هر اسکن جدید" },
-        { icon: <Settings className="h-5 w-5" />, title: "یکپارچگی کامل", desc: "تبدیل خودکار به داده‌های JSON" }
+        { icon: <Cpu className="h-5 w-5" />, title: "موازنه خودکار", desc: "تراز کردن مقادیر بدهکار و بستانکار هر سند" },
+        { icon: <FileJson className="h-5 w-5" />, title: "درک محتوا", desc: "تشخیص فاکتورهای دست‌نویس و مخدوش" },
+        { icon: <Database className="h-5 w-5" />, title: "محاسبه اطمینان", desc: "ارائه ضریب اطمینان (Confidence) برای هر پردازش" }
       ]
     },
     {
-      title: "دستیار صوتی و ویرایشگر پیشرفته",
-      subtitle: "کنترل نهایی همیشه در دست شماست",
-      description: "پیش از تایید نهایی اسناد، می‌توانید آنها را بازبینی کرده، یادداشت صوتی بگذارید و خروجی‌های متنوعی برای نرم‌افزارهای دیگر دریافت کنید.",
-      icon: <Mic className="h-16 w-16 text-white" />,
-      color: "from-rose-500 to-orange-500",
+      title: "۳. بررسی، ویرایش و خروجی",
+      subtitle: "مدیریت نهایی داده‌ها",
+      description: "داده‌های استخراج شده در یک جدول حسابداری منظم نمایش داده می‌شوند. شما می‌توانید اطلاعات را به صورت دستی ویرایش کرده و در نهایت خروجی اکسل بگیرید.",
+      icon: <FileSpreadsheet className="h-16 w-16 text-white" />,
+      color: "from-orange-500 to-rose-500",
       features: [
-        { icon: <Mic className="h-5 w-5" />, title: "یادداشت صوتی", desc: "ضمیمه کردن توضیحات شفاهی به هر سند" },
-        { icon: <Edit3 className="h-5 w-5" />, title: "ویرایش سریع", desc: "اصلاح آسان ردیف‌های استخراج شده" },
-        { icon: <MousePointerClick className="h-5 w-5" />, title: "خروجی منعطف", desc: "دریافت فایل اکسل یا اتصال به ERP" }
+        { icon: <Edit3 className="h-5 w-5" />, title: "ویرایش سریع", desc: "اصلاح مستقیم سلول‌ها در محیط جدول" },
+        { icon: <MousePointerClick className="h-5 w-5" />, title: "خروجی اکسل", desc: "دانلود داده‌ها به صورت فایل XLSX استاندارد" },
+        { icon: <Database className="h-5 w-5" />, title: "پشتیبان‌گیری", desc: "امکان دانلود فایل JSON برای نگهداری تاریخچه" }
       ]
     }
   ];

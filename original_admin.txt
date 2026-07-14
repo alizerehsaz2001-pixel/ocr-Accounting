@@ -1,0 +1,414 @@
+{/* Admin Panel Modal */}
+      {isAdminPanelOpen && currentUser?.role === "admin" && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+          <div 
+            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
+            onClick={() => setIsAdminPanelOpen(false)}
+          ></div>
+          
+          <div className={`relative w-full max-w-lg rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-up transform transition-all ${
+            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border border-slate-200 text-slate-800"
+          }`}>
+            <div className={`flex items-center justify-between p-4 border-b ${
+              isDarkMode ? "bg-slate-800/50 border-slate-700/50" : "bg-slate-50 border-slate-100"
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${isDarkMode ? "bg-purple-900/30 text-purple-400" : "bg-purple-100 text-purple-600"}`}>
+                  <Shield className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">پنل مدیریت ادمین</h3>
+                  <span className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کنترل سیستم و مدیریت کلی داده‌ها</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsAdminPanelOpen(false)}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-slate-200" : "hover:bg-slate-200 text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto max-h-[60vh] space-y-6">
+              
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>پشتیبان‌گیری از اطلاعات (JSON Backup)</h4>
+                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                  <p className={`text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                    برای امنیت اطلاعات یا انتقال به سیستم دیگر، می‌توانید از تمام تاریخچه اسناد و تراکنش‌ها فایل پشتیبان تهیه کنید و یا فایل قبلی را بارگذاری نمایید.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const data = { transactions, previousScans, modelQuotas };
+                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `CPA-Backup-${new Date().toISOString().split('T')[0]}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        setNotification({ text: "فایل پشتیبان با موفقیت دانلود شد.", type: "success" });
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
+                        isDarkMode ? "bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Download className="h-3 w-3" />
+                      تهیه نسخه JSON
+                    </button>
+                    <button
+                      onClick={() => {
+                        const input = document.createElement("input");
+                        input.type = "file";
+                        input.accept = "application/json";
+                        input.onchange = (e: any) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            try {
+                              const data = JSON.parse(event.target?.result as string);
+                              if (data.transactions) setTransactions(data.transactions);
+                              if (data.previousScans) setPreviousScans(data.previousScans);
+                              if (data.modelQuotas) setModelQuotas(data.modelQuotas);
+                              setNotification({ text: "اطلاعات با موفقیت بازیابی شد.", type: "success" });
+                            } catch (err) {
+                              setNotification({ text: "فرمت فایل پشتیبان نامعتبر است.", type: "error" });
+                            }
+                          };
+                          reader.readAsText(file);
+                        };
+                        input.click();
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
+                        isDarkMode ? "bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700" : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Upload className="h-3 w-3" />
+                      بارگذاری (Import)
+                    </button>
+                  </div>
+                  <button
+                      onClick={() => {
+                        let worksheetData;
+                        let colWidths;
+                        
+                        if (activeFile?.columns && activeFile.columns.length > 0) {
+                           worksheetData = transactions.map((t, idx) => {
+                             const row: any = { "ردیف": idx + 1 };
+                             activeFile.columns!.forEach(col => {
+                               row[col.عنوان] = col.نوع_داده === 'number' && t[col.کلید] ? Number(t[col.کلید]) : t[col.کلید];
+                             });
+                             row["ضریب_اطمینان"] = t.ضریب_اطمینان || 100;
+                             return row;
+                           });
+                           colWidths = [{ wch: 5 }, ...activeFile.columns.map(() => ({ wch: 20 })), { wch: 10 }];
+                        } else {
+                           worksheetData = transactions.map((t, idx) => ({
+                              "ردیف": idx + 1,
+                              "تاریخ": t.تاریخ,
+                              "شماره_سند": t.شماره_سند,
+                              "نام_طرف_حساب": t.نام_طرف_حساب,
+                              "شناسه_کد_ملی": t.شناسه_ملی || "",
+                              "شماره_مالیاتی": t.شماره_مالیاتی || "",
+                              "شرح": t.شرح,
+                              "هزینه_غیرقابل_قبول": t.هزینه_غیرقابل_قبول ? "بله" : "خیر",
+                              "ارزش_افزوده": t.مالیات_ارزش_افزوده || 0,
+                              "مبلغ_بدهکار": t.مبلغ_بدهکار || 0,
+                              "مبلغ_بستانکار": t.مبلغ_بستانکار || 0,
+                              "نوع_ارز": t.نوع_ارز,
+                              "توضیحات": t.توضیحات,
+                              "ضریب_اطمینان": t.ضریب_اطمینان || 100
+                           }));
+                           colWidths = [
+                              { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 30 }, { wch: 10 }
+                           ];
+                        }
+
+                        const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+                        worksheet["!cols"] = colWidths;
+                        if (!worksheet['!views']) worksheet['!views'] = [];
+                        worksheet['!views'].push({ rightToLeft: true });
+
+                        const workbook = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(workbook, worksheet, "تراکنش‌های مالی");
+                        
+                        XLSX.writeFile(workbook, `Transactions-Export-${new Date().toISOString().split('T')[0]}.xlsx`);
+                        setNotification({ text: "فایل اکسل (XLSX) با موفقیت تولید و دانلود شد.", type: "success" });
+                      }}
+                      className={`w-full py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 mt-1 ${
+                        isDarkMode ? "bg-emerald-900/30 border-emerald-800/50 text-emerald-300 hover:bg-emerald-900/50" : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                      }`}
+                    >
+                      <Download className="h-3 w-3" />
+                      خروجی مستقیم اکسل (XLSX) از تراکنش‌های فعلی
+                    </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>تزریق داده نمونه (Mock Data Seed)</h4>
+                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                  <p className={`text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                    جهت بررسی عملکرد جداول، ماشین حساب تراز و استایل‌ها، می‌توانید تراکنش‌های فرضی حسابداری به برنامه تزریق کنید.
+                  </p>
+                  <button
+                    onClick={() => {
+                        const newMock = [
+                            {   
+                                id: "mock-" + Date.now() + 1,
+                                تاریخ: "۱۴۰۳/۰۲/۱۵",
+                                شماره_سند: "۱۰۵۵۰",
+                                نام_طرف_حساب: "شرکت تجهیزات شبکه مبین",
+                                شرح: "خرید سرورهای اچ‌پی جهت ارتقا زیرساخت مرکز داده",
+                                مبلغ_بدهکار: 580000000,
+                                مبلغ_بستانکار: 0,
+                                نوع_ارز: "ریال",
+                                توضیحات: "تسویه قطعی طی چک صیادی دو ماهه",
+                                ضریب_اطمینان: 92
+                            },
+                            {   
+                                id: "mock-" + Date.now() + 2,
+                                تاریخ: "۱۴۰۳/۰۲/۱۸",
+                                شماره_سند: "۱۰۵۵۱",
+                                نام_طرف_حساب: "حساب‌های دریافتنی / مشتریان خرد",
+                                شرح: "وصول مطالبات از صورتحساب فروش قطعات ماه قبل",
+                                مبلغ_بدهکار: 0,
+                                مبلغ_بستانکار: 125000000,
+                                نوع_ارز: "ریال",
+                                توضیحات: "واریز نقدی به حساب جاری بانک سامان",
+                                ضریب_اطمینان: 98
+                            },
+                            {   
+                                id: "mock-" + Date.now() + 3,
+                                تاریخ: "۱۴۰۳/۰۲/۲۰",
+                                شماره_سند: "۱۰۵۵۲",
+                                نام_طرف_حساب: "سازمان امور مالیاتی",
+                                شرح: "پرداخت علی‌الحساب مالیات بر ارزش افزوده دوره زمستان",
+                                مبلغ_بدهکار: 325000000,
+                                مبلغ_بستانکار: 0,
+                                نوع_ارز: "ریال",
+                                توضیحات: "دارای فیش واریزی شبا",
+                                ضریب_اطمینان: 100
+                            }
+                        ];
+                        setTransactions(prev => [...prev, ...newMock]);
+                        setNotification({ text: "داده‌های مالی نمونه با موفقیت افزوده شدند.", type: "success" });
+                    }}
+                    className={`w-full py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 ${
+                        isDarkMode ? "bg-blue-900/30 border border-blue-800 text-blue-300 hover:bg-blue-900/50" : "bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100"
+                    }`}
+                  >
+                    + تزریق تراکنش‌های آماده حسابداری
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>پاکسازی حافظه سیستم</h4>
+                <div className={`p-4 rounded-xl border flex flex-col gap-3 ${isDarkMode ? "bg-slate-800/40 border-red-900/30" : "bg-red-50/50 border-red-100"}`}>
+                  <p className={`text-xs ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                    شما می‌توانید تمام اطلاعات محلی، یا بخش‌هایی از آن را بازنشانی کنید. موارد حذف شده غیرقابل بازگشت هستند.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setTransactions([]);
+                        setActiveFile(null);
+                        setRawJsonText("");
+                        setNotification({ text: "جدول تراکنش‌های سیستم پاکسازی شد.", type: "success" });
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
+                        isDarkMode ? "border-slate-600 text-slate-300 hover:bg-slate-700" : "border-slate-300 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      مخزن تراکنش
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPreviousScans([]);
+                        setNotification({ text: "تاریخچه اسناد با موفقیت حذف گردید.", type: "success" });
+                      }}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border flex items-center justify-center gap-2 ${
+                        isDarkMode ? "border-slate-600 text-slate-300 hover:bg-slate-700" : "border-slate-300 text-slate-700 hover:bg-slate-200"
+                      }`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      تاریخچه اسناد
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => {
+                        window.localStorage.clear();
+                        window.location.reload();
+                    }}
+                    className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 mt-1"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    پاکسازی کامل دیتابیس (رادیواکتیو)
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>
+                  <Coins className="h-4 w-4" />
+                  مدیریت پیشرفته توکن‌ها (Token Management)
+                </h4>
+                <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                  <p className={`text-xs mb-3 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                    پایش مصرف لحظه‌ای توکن‌ها به تفکیک مدل‌های هوش مصنوعی، تنظیم محدودیت‌های کاربری، و مدیریت هزینه‌های API.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setIsAdminPanelOpen(false);
+                      setIsTokenManagerOpen(true);
+                      logEvent("پنل مدیریت توکن", "مدیر سیستم وارد پنل مدیریت پیشرفته توکن‌ها شد.");
+                    }}
+                    className={`w-full py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 ${
+                      isDarkMode ? "bg-purple-600 hover:bg-purple-700 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"
+                    }`}
+                  >
+                    <Settings className="h-4 w-4" />
+                    ورود به پنل Token Management
+                  </button>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>
+                  <Shield className="h-4 w-4" />
+                  مدیریت و کنترل کاربران سیستم
+                </h4>
+                <div className={`rounded-xl border overflow-hidden ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                  <table className="w-full text-right text-[11px]">
+                     <thead className={`${isDarkMode ? "bg-slate-800/80" : "bg-slate-100/80"}`}>
+                        <tr>
+                           <th className="p-3">کاربر</th>
+                           <th className="p-3 text-center">نقش</th>
+                           <th className="p-3 text-center">وضعیت</th>
+                           <th className="p-3 text-left">توکن مصرفی</th>
+                           <th className="p-3 text-center">فضای ذخیره‌سازی</th>
+                           <th className="p-3 text-center">دسترسی</th>
+                        </tr>
+                     </thead>
+                     <tbody className={`divide-y ${isDarkMode ? "divide-slate-700/50" : "divide-slate-200"}`}>
+                        {users.map(u => (
+                           <tr key={u.id} className={`${isDarkMode ? "hover:bg-slate-800/50" : "hover:bg-slate-100/50"}`}>
+                              <td className="p-3 font-semibold">{u.name}</td>
+                              <td className="p-3 text-center">
+                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                    u.role === "admin" 
+                                    ? "bg-purple-100 text-purple-700" 
+                                    : "bg-blue-100 text-blue-700"
+                                 }`}>{u.role === "admin" ? "مدیر" : "کاربر"}</span>
+                              </td>
+                              <td className="p-3 text-center">
+                                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                    u.status === "active" 
+                                    ? "bg-emerald-100 text-emerald-700" 
+                                    : "bg-rose-100 text-rose-700"
+                                 }`}>{u.status === "active" ? "فعال" : "مسدود"}</span>
+                              </td>
+                              <td className="p-3 text-left font-mono text-[10px]">{u.apiUsage.toLocaleString("fa-IR")}</td>
+                              <td className="p-3 text-center">
+                                 <div className="flex items-center justify-center gap-1.5">
+                                    <span className="font-semibold text-[10px] text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded">
+                                       {(5 + (u.extraStorage || 0)).toLocaleString("fa-IR")} گیگ
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        const currentExtra = u.extraStorage || 0;
+                                        const input = prompt(`فضای اضافه تخصیص یافته به ${u.name} را وارد کنید (به گیگابایت):`, currentExtra.toString());
+                                        if (input !== null) {
+                                          const parsed = parseFloat(input);
+                                          if (!isNaN(parsed) && parsed >= 0) {
+                                            setUsers(prev => prev.map(usr => {
+                                              if (usr.id === u.id) {
+                                                return { ...usr, extraStorage: parsed };
+                                              }
+                                              return usr;
+                                            }));
+                                            logEvent("تخصیص فضا", `مدیر فضا اضافه کاربر «${u.name}» را به ${parsed} گیگابایت تغییر داد.`);
+                                            showNotification(`فضای اضافه کاربر «${u.name}» با موفقیت به ${parsed} گیگابایت تغییر یافت.`, "success");
+                                          } else {
+                                            showNotification("لطفاً یک عدد معتبر و بزرگتر یا مساوی صفر وارد کنید.", "error");
+                                          }
+                                        }
+                                      }}
+                                      className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 transition-colors"
+                                      title="تخصیص فضای اختصاصی"
+                                    >
+                                       <HardDrive className="w-3.5 h-3.5 text-indigo-500 hover:text-indigo-600" />
+                                    </button>
+                                 </div>
+                              </td>
+                              <td className="p-3 text-center">
+                                 <button
+                                     onClick={() => {
+                                        setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, status: usr.status === "active" ? "suspended" : "active"} : usr));
+                                        setNotification({text: `وضعیت کاربر ${u.name} تغییر یافت.`, type: 'success'});
+                                     }}
+                                     className={`px-2 py-1 rounded border text-[9px] font-bold transition-colors ${
+                                        u.status === "active"
+                                        ? "border-rose-200 text-rose-600 hover:bg-rose-50"
+                                        : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                                     }`}
+                                 >
+                                     {u.status === "active" ? "مسدود کن" : "فعال کن"}
+                                 </button>
+                              </td>
+                           </tr>
+                        ))}
+                     </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center gap-2 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                  <Shield className="h-4 w-4" />
+                  آمار لحظه‌ای سیستم
+                </h4>
+                <div className={`p-4 rounded-xl border grid grid-cols-2 gap-4 ${isDarkMode ? "bg-slate-800/40 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
+                        <div className={`text-2xl font-black mb-1 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`}>{previousScans.length}</div>
+                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کل اسناد پردازش شده</div>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
+                        <div className={`text-2xl font-black mb-1 ${isDarkMode ? "text-emerald-400" : "text-emerald-600"}`}>{transactions.length}</div>
+                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تراکنش‌های استخراجی</div>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
+                        {(() => {
+                           let totalStorage = 0;
+                           for (let i = 0; i < localStorage.length; i++) {
+                             const key = localStorage.key(i);
+                             if (key) totalStorage += localStorage.getItem(key)?.length || 0;
+                           }
+                           const kb = (totalStorage / 1024).toFixed(1);
+                           return <div className={`text-lg font-black mb-1 ${isDarkMode ? "text-purple-400" : "text-purple-600"}`}>{kb} KB</div>;
+                        })()}
+                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>حجم دیتابیس محلی</div>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-slate-900/5 border border-slate-500/10">
+                        {(() => {
+                           let totalTokens = 0;
+                           Object.values(modelQuotas).forEach((q: any) => totalTokens += q.used);
+                           return <div className={`text-lg font-black mb-1 ${isDarkMode ? "text-orange-400" : "text-orange-600"}`}>{totalTokens}</div>;
+                        })()}
+                        <div className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کل درخواست‌های API</div>
+                    </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      
