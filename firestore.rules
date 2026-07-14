@@ -36,7 +36,13 @@ service cloud.firestore {
         && data.email is string
         && data.email.size() <= 128
         && data.role in ['admin', 'user']
-        && data.status in ['active', 'suspended'];
+        && data.status in ['active', 'suspended']
+        && (!data.keys().contains('firstName') || (data.firstName is string && data.firstName.size() <= 128))
+        && (!data.keys().contains('lastName') || (data.lastName is string && data.lastName.size() <= 128))
+        && (!data.keys().contains('companyName') || (data.companyName is string && data.companyName.size() <= 128))
+        && (!data.keys().contains('phone') || (data.phone is string && data.phone.size() <= 32))
+        && (!data.keys().contains('jobTitle') || (data.jobTitle is string && data.jobTitle.size() <= 128))
+        && (!data.keys().contains('isOnboarded') || (data.isOnboarded is bool));
     }
 
     // User Profile Rules (Pillar 4 and 6)

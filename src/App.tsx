@@ -88,6 +88,7 @@ import CameraCapture from "./components/CameraCapture";
 import AudioNotesSection from "./components/AudioNotesSection";
 import ThemeSwitcher from "./components/ThemeSwitcher";
 import OnboardingModal from "./components/OnboardingModal";
+import OnboardingProfileModal from "./components/OnboardingProfileModal";
 import AuditLogsModal from "./components/AuditLogsModal";
 import LoginScreen from "./components/LoginScreen";
 import { auth, db } from "./lib/firebase";
@@ -186,7 +187,14 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [pendingFile, setPendingFile] = useState<{ base64: string; name: string; mimeType: string; size: number } | null>(null);
+  const [pendingFile, setPendingFile] = useState<{ 
+    base64: string; 
+    name: string; 
+    mimeType: string; 
+    size: number;
+    id?: string;
+    folder?: string;
+  } | null>(null);
   const [customPrompt, setCustomPrompt] = useState<string>("");
   const [preExtractChat, setPreExtractChat] = useState<{ role: 'user' | 'assistant'; text: string; files?: { base64: string; name: string; mimeType: string; size: number }[] }[]>([]);
   const [preExtractInput, setPreExtractInput] = useState<string>("");
@@ -330,7 +338,9 @@ export default function App() {
       base64: scan.file.preview,
       name: scan.file.name,
       mimeType: scan.file.mimeType || "image/jpeg",
-      size: scan.file.size
+      size: scan.file.size,
+      id: scan.id,
+      folder: scan.folder
     });
     setCustomPrompt("");
     showNotification(`سند "${scan.file.name}" آماده استخراج است. روی دکمه شروع استخراج کلیک کنید.`, "info");
@@ -1032,19 +1042,68 @@ export default function App() {
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false);
   const [users, setUsers] = useState<any[]>(() => {
+    const initial = [
+      { 
+        id: 1, 
+        name: "سمانه رسولی", 
+        firstName: "سمانه",
+        lastName: "رسولی",
+        companyName: "بازرگانی دریا",
+        phone: "09121111111",
+        jobTitle: "مدیر مالی",
+        email: "samaneh.rasouli@example.com",
+        role: "admin", 
+        status: "active", 
+        apiUsage: 45000, 
+        extraStorage: 0,
+        isOnboarded: true
+      },
+      { 
+        id: 2, 
+        name: "محمد کریمی", 
+        firstName: "محمد",
+        lastName: "کریمی",
+        companyName: "پارس الوان",
+        phone: "09122222222",
+        jobTitle: "حسابدار ارشد",
+        email: "m.karimi@example.com",
+        role: "user", 
+        status: "active", 
+        apiUsage: 12400, 
+        extraStorage: 0,
+        isOnboarded: true
+      },
+      { 
+        id: 3, 
+        name: "حسابدار پاره‌وقت", 
+        firstName: "حسابدار",
+        lastName: "پاره‌وقت",
+        companyName: "صنایع نوین",
+        phone: "09123333333",
+        jobTitle: "حسابدار مستقل",
+        email: "parttime@example.com",
+        role: "user", 
+        status: "suspended", 
+        apiUsage: 850, 
+        extraStorage: 0,
+        isOnboarded: true
+      }
+    ];
     try {
       const stored = localStorage.getItem("system_users");
-      return stored ? JSON.parse(stored) : [
-        { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000, extraStorage: 0 },
-        { id: 2, name: "محمد کریمی (حسابدار ارشد)", role: "user", status: "active", apiUsage: 12400, extraStorage: 0 },
-        { id: 3, name: "حسابدار پاره‌وقت", role: "user", status: "suspended", apiUsage: 850, extraStorage: 0 }
-      ];
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.map((u: any) => {
+          const matched = initial.find(init => String(init.id) === String(u.id));
+          if (matched && !u.firstName) {
+            return { ...u, ...matched };
+          }
+          return u;
+        });
+      }
+      return initial;
     } catch {
-      return [
-        { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000, extraStorage: 0 },
-        { id: 2, name: "محمد کریمی (حسابدار ارشد)", role: "user", status: "active", apiUsage: 12400, extraStorage: 0 },
-        { id: 3, name: "حسابدار پاره‌وقت", role: "user", status: "suspended", apiUsage: 850, extraStorage: 0 }
-      ];
+      return initial;
     }
   });
 
@@ -1076,7 +1135,8 @@ export default function App() {
               role: firebaseUser.email === "alizerehsaz2001@gmail.com" ? "admin" : "user",
               status: "active",
               apiUsage: 0,
-              extraStorage: 0
+              extraStorage: 0,
+              isOnboarded: false
             };
             await setDoc(userRef, dbUser);
           }
@@ -1099,7 +1159,8 @@ export default function App() {
             role: firebaseUser.email === "alizerehsaz2001@gmail.com" ? "admin" : "user",
             status: "active",
             apiUsage: 0,
-            extraStorage: 0
+            extraStorage: 0,
+            isOnboarded: false
           };
           setCurrentUser(localUser);
         }
@@ -1115,9 +1176,84 @@ export default function App() {
   }, []);
 
   const handleEnterDemo = () => {
-    const demoUser = { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000, extraStorage: 0 };
+    const demoUser = { 
+      id: 1, 
+      name: "سمانه رسولی", 
+      firstName: "سمانه",
+      lastName: "رسولی",
+      companyName: "بازرگانی دریا",
+      phone: "09121111111",
+      jobTitle: "مدیر مالی",
+      email: "samaneh.rasouli@example.com",
+      role: "admin", 
+      status: "active", 
+      apiUsage: 45000, 
+      extraStorage: 0,
+      isOnboarded: true
+    };
     localStorage.setItem("is_demo_mode", "true");
     setCurrentUser(demoUser);
+  };
+
+  const [profileFirstName, setProfileFirstName] = useState("");
+  const [profileLastName, setProfileLastName] = useState("");
+  const [profileCompanyName, setProfileCompanyName] = useState("");
+  const [profileJobTitle, setProfileJobTitle] = useState("");
+  const [profilePhone, setProfilePhone] = useState("");
+
+  useEffect(() => {
+    if (currentUser) {
+      setProfileFirstName(currentUser.firstName || "");
+      setProfileLastName(currentUser.lastName || "");
+      setProfileCompanyName(currentUser.companyName || "");
+      setProfileJobTitle(currentUser.jobTitle || "");
+      setProfilePhone(currentUser.phone || "");
+    } else {
+      setProfileFirstName("");
+      setProfileLastName("");
+      setProfileCompanyName("");
+      setProfileJobTitle("");
+      setProfilePhone("");
+    }
+  }, [currentUser]);
+
+  const handleUpdateProfile = async () => {
+    if (!currentUser) return;
+    if (!profileFirstName.trim() || !profileLastName.trim() || !profileCompanyName.trim() || !profileJobTitle.trim() || !profilePhone.trim()) {
+      showNotification("لطفاً تمامی فیلدهای الزامی را تکمیل کنید.", "error");
+      return;
+    }
+    if (!/^09\d{9}$/.test(profilePhone.trim())) {
+      showNotification("شماره تلفن همراه وارد شده نامعتبر است.", "error");
+      return;
+    }
+
+    try {
+      const updatedUser = {
+        ...currentUser,
+        firstName: profileFirstName.trim(),
+        lastName: profileLastName.trim(),
+        name: `${profileFirstName.trim()} ${profileLastName.trim()}`,
+        companyName: profileCompanyName.trim(),
+        jobTitle: profileJobTitle.trim(),
+        phone: profilePhone.trim(),
+        isOnboarded: true
+      };
+
+      const isDemo = localStorage.getItem("is_demo_mode") === "true";
+      if (!isDemo && auth.currentUser) {
+        const userRef = doc(db, "users", String(currentUser.id));
+        await setDoc(userRef, updatedUser, { merge: true });
+      }
+
+      setCurrentUser(updatedUser);
+      setUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
+      showNotification("مشخصات حساب کاربری شما با موفقیت بروزرسانی شد.", "success");
+      logEvent("بروزرسانی حساب", `کاربر مشخصات حساب کاربری خود را بروزرسانی کرد.`);
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      showNotification("خطا در بروزرسانی مشخصات حساب کاربری.", "error");
+    }
   };
 
   const handleSignOut = async () => {
@@ -1592,12 +1728,20 @@ export default function App() {
   };
 
   // Main processing pipeline
-  const processImageForExtraction = async (base64Image: string, fileName: string, fileMimeType: string, userPrompt: string = "", chatFiles: any[] = []) => {
+  const processImageForExtraction = async (
+    base64Image: string, 
+    fileName: string, 
+    fileMimeType: string, 
+    userPrompt: string = "", 
+    chatFiles: any[] = [],
+    existingScanId?: string,
+    folder?: string
+  ) => {
     logEvent("آپلود و پردازش سند", `کاربر سند جدیدی با نام ${fileName} را آپلود و به هوش مصنوعی ارسال کرد.`);
     showNotification("در حال ارسال تصویر به هوش مصنوعی حسابدار و استخراج داده‌های مالی...", "info");
 
     const newFile: UploadedFile = {
-      id: `file-${Date.now()}`,
+      id: existingScanId || `file-${Date.now()}`,
       name: fileName,
       size: Math.round((base64Image.length * 3) / 4),
       preview: `data:${fileMimeType};base64,${base64Image}`,
@@ -1706,13 +1850,14 @@ export default function App() {
       setActiveFile(successFile);
 
       setPreviousScans((prev) => {
-        const filtered = prev.filter((s) => s.file.name !== fileName);
+        const filtered = prev.filter((s) => s.id !== (existingScanId || successFile.id) && s.file.name !== fileName);
         return [
           {
-            id: successFile.id,
+            id: existingScanId || successFile.id,
             file: successFile,
             transactions: extractedItems,
             timestamp: Date.now(),
+            folder: folder,
           },
           ...filtered,
         ].slice(0, 50);
@@ -1952,6 +2097,7 @@ export default function App() {
 
   const deletePreviousScan = (scanId: string) => {
     setPreviousScans((prev) => prev.filter((s) => s.id !== scanId));
+    if (activeFile?.id === scanId) clearCurrentFile();
     showNotification("سند از تاریخچه اسکن‌ها حذف شد.", "info");
   };
 
@@ -2272,6 +2418,17 @@ export default function App() {
         isOpen={showOnboarding} 
         onClose={handleCloseOnboarding} 
         isDarkMode={isDarkMode} 
+      />
+
+      <OnboardingProfileModal 
+        isOpen={currentUser !== null && currentUser.isOnboarded !== true} 
+        isDarkMode={isDarkMode} 
+        currentUser={currentUser} 
+        onComplete={(updatedUser) => {
+          setCurrentUser(updatedUser);
+          setUsers((prev) => prev.map((u) => u.id === updatedUser.id ? updatedUser : u));
+        }}
+        showNotification={(text, type) => showNotification(text, type)}
       />
 
       {/* Toast Notifications */}
@@ -3350,7 +3507,15 @@ export default function App() {
                                 return acc;
                               }, [] as any[]);
 
-                              await processImageForExtraction(fileData.base64, fileData.name, fileData.mimeType, finalPrompt + "\n\nخلاصه تایید شده:\n" + verificationSummary, allChatFiles);
+                              await processImageForExtraction(
+                                fileData.base64, 
+                                fileData.name, 
+                                fileData.mimeType, 
+                                finalPrompt + "\n\nخلاصه تایید شده:\n" + verificationSummary, 
+                                allChatFiles,
+                                fileData.id,
+                                fileData.folder
+                              );
                             }}
                             className={`px-4.5 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/20 hover:-translate-y-0.5`}
                           >
@@ -3598,6 +3763,38 @@ export default function App() {
                           <span className="text-[10px] text-center font-medium opacity-90 max-w-[180px]">
                             در حال بررسی همه‌جانبه سطرها و مبالغ...
                           </span>
+                        </div>
+                      )}
+                      {activeFile.status === "idle" && (
+                        <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-[1.5px] flex flex-col items-center justify-center text-white p-4 select-none rounded-lg" dir="rtl">
+                          <div className="p-2.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mb-2 animate-bounce">
+                            <Sparkles className="w-5 h-5" />
+                          </div>
+                          <span className="text-xs text-center font-black mb-1">
+                            سند در انتظار استخراج اطلاعات مالی
+                          </span>
+                          <span className="text-[9.5px] text-center opacity-75 max-w-[200px] mb-4.5 font-sans">
+                            این سند هنوز پردازش هوشمند نشده است. برای تفکیک خودکار و تولید سند حسابداری اقدام کنید.
+                          </span>
+                          <button
+                            onClick={() => {
+                              const fullScan = previousScans.find(s => s.id === activeFile.id);
+                              if (fullScan) {
+                                handleProcessUnscannedFile(fullScan);
+                              } else {
+                                handleProcessUnscannedFile({
+                                  id: activeFile.id,
+                                  file: activeFile,
+                                  transactions: [],
+                                  timestamp: Date.now()
+                                });
+                              }
+                            }}
+                            className="py-2 px-4.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-95 text-white rounded-xl transition-all text-[10.5px] font-black cursor-pointer flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
+                          >
+                            <Cpu className="w-3.5 h-3.5" />
+                            شروع پردازش هوشمند سند
+                          </button>
                         </div>
                       )}
                     </div>
@@ -6338,7 +6535,76 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className={`grid grid-cols-2 gap-4 p-5 rounded-2xl ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6 pt-6 border-t border-slate-700/20">
+                          <div className="space-y-1.5 text-right">
+                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نام</label>
+                            <input 
+                              type="text"
+                              value={profileFirstName}
+                              onChange={(e) => setProfileFirstName(e.target.value)}
+                              className={`w-full text-xs px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"
+                              }`}
+                            />
+                          </div>
+                          <div className="space-y-1.5 text-right">
+                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نام خانوادگی</label>
+                            <input 
+                              type="text"
+                              value={profileLastName}
+                              onChange={(e) => setProfileLastName(e.target.value)}
+                              className={`w-full text-xs px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"
+                              }`}
+                            />
+                          </div>
+                          <div className="space-y-1.5 text-right">
+                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نام شرکت / مجموعه اقتصادی</label>
+                            <input 
+                              type="text"
+                              value={profileCompanyName}
+                              onChange={(e) => setProfileCompanyName(e.target.value)}
+                              className={`w-full text-xs px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"
+                              }`}
+                            />
+                          </div>
+                          <div className="space-y-1.5 text-right">
+                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>سمت شغلی</label>
+                            <input 
+                              type="text"
+                              value={profileJobTitle}
+                              onChange={(e) => setProfileJobTitle(e.target.value)}
+                              className={`w-full text-xs px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"
+                              }`}
+                            />
+                          </div>
+                          <div className="space-y-1.5 text-right md:col-span-2">
+                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>شماره تلفن همراه</label>
+                            <input 
+                              type="text"
+                              value={profilePhone}
+                              onChange={(e) => setProfilePhone(e.target.value)}
+                              className={`w-full text-xs px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all text-left ${
+                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"
+                              }`}
+                              dir="ltr"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-5 flex justify-end">
+                          <button
+                            onClick={handleUpdateProfile}
+                            className="flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-lg shadow-blue-500/10 cursor-pointer"
+                          >
+                            <Save className="w-4 h-4" />
+                            ثبت و بروزرسانی مشخصات حساب
+                          </button>
+                        </div>
+
+                        <div className={`grid grid-cols-2 gap-4 p-5 rounded-2xl mt-6 ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
                            <div className="flex flex-col gap-1.5">
                              <span className={`text-[10px] font-black uppercase tracking-wider ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>سطح دسترسی (Role)</span>
                              <span className={`inline-flex items-center self-start px-3 py-1.5 rounded-lg text-[11px] font-black shadow-sm ${
@@ -6764,8 +7030,18 @@ export default function App() {
                                             {u.name.charAt(0)}
                                           </div>
                                           <div>
-                                            <div className="font-bold">{u.name}</div>
-                                            <div className={`text-[10px] font-mono mt-0.5 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>ID: {u.id.toString().padStart(5, '0')}</div>
+                                            <div className="font-bold flex items-center gap-1.5">
+                                              <span>{u.name}</span>
+                                              {!u.isOnboarded && (
+                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-bold">در انتظار تکمیل مشخصات</span>
+                                              )}
+                                            </div>
+                                            <div className={`text-[10px] mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 font-medium ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                              {u.companyName && <span className="flex items-center gap-1">🏢 {u.companyName}</span>}
+                                              {u.jobTitle && <span className="flex items-center gap-1">💼 {u.jobTitle}</span>}
+                                              {u.phone && <span className="flex items-center gap-1" dir="ltr">📞 {u.phone}</span>}
+                                            </div>
+                                            <div className={`text-[9px] font-mono mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>ID: {u.id.toString().substring(0, 10)}... | Email: {u.email || "بدون ایمیل"}</div>
                                           </div>
                                         </div>
                                       </td>

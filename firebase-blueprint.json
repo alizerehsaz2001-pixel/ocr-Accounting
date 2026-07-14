@@ -7,11 +7,17 @@
       "properties": {
         "id": { "type": "string", "description": "The unique user UID" },
         "name": { "type": "string", "description": "Full name of the user" },
+        "firstName": { "type": "string", "description": "First name of the user" },
+        "lastName": { "type": "string", "description": "Last name of the user" },
+        "companyName": { "type": "string", "description": "Company or business name" },
+        "phone": { "type": "string", "description": "Mobile phone number of the user" },
+        "jobTitle": { "type": "string", "description": "Job title or position" },
         "email": { "type": "string", "description": "Email address of the user" },
         "role": { "type": "string", "enum": ["admin", "user"], "description": "System role" },
         "status": { "type": "string", "enum": ["active", "suspended"], "description": "Account status" },
         "apiUsage": { "type": "number", "description": "Tokens or API points consumed" },
-        "extraStorage": { "type": "number", "description": "Extra storage granted in gigabytes" }
+        "extraStorage": { "type": "number", "description": "Extra storage granted in gigabytes" },
+        "isOnboarded": { "type": "boolean", "description": "Whether the user completed registration onboarding" }
       },
       "required": ["id", "name", "email", "role", "status"]
     }
