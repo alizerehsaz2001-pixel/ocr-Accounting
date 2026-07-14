@@ -89,6 +89,10 @@ import AudioNotesSection from "./components/AudioNotesSection";
 import ThemeSwitcher from "./components/ThemeSwitcher";
 import OnboardingModal from "./components/OnboardingModal";
 import AuditLogsModal from "./components/AuditLogsModal";
+import LoginScreen from "./components/LoginScreen";
+import { auth, db } from "./lib/firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
@@ -117,6 +121,16 @@ const formatBytesGlobal = (bytes: number, decimals = 2) => {
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+};
+
+const FOLDER_COLORS: { [key: string]: { text: string; bg: string; border: string; dot: string; hover: string; fill: string } } = {
+  rose: { text: "text-rose-500 dark:text-rose-400", bg: "bg-rose-500/10", border: "border-rose-500/20", dot: "bg-rose-500", hover: "hover:bg-rose-500/5", fill: "fill-rose-500" },
+  emerald: { text: "text-emerald-500 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", dot: "bg-emerald-500", hover: "hover:bg-emerald-500/5", fill: "fill-emerald-500" },
+  amber: { text: "text-amber-500 dark:text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", dot: "bg-amber-500", hover: "hover:bg-amber-500/5", fill: "fill-amber-500" },
+  blue: { text: "text-blue-500 dark:text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20", dot: "bg-blue-500", hover: "hover:bg-blue-500/5", fill: "fill-blue-500" },
+  purple: { text: "text-purple-500 dark:text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20", dot: "bg-purple-500", hover: "hover:bg-purple-500/5", fill: "fill-purple-500" },
+  cyan: { text: "text-cyan-500 dark:text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/20", dot: "bg-cyan-500", hover: "hover:bg-cyan-500/5", fill: "fill-cyan-500" },
+  indigo: { text: "text-indigo-500 dark:text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20", dot: "bg-indigo-500", hover: "hover:bg-indigo-500/5", fill: "fill-indigo-500" }
 };
 
 export default function App() {
@@ -220,9 +234,31 @@ export default function App() {
     localStorage.setItem("previous_scans", JSON.stringify(previousScans));
   }, [previousScans]);
 
-  const [userDefinedFolders, setUserDefinedFolders] = useState<string[]>(() => {
+  const [userDefinedFolders, setUserDefinedFolders] = useState<any[]>(() => {
     const saved = localStorage.getItem("user_defined_folders");
-    return saved ? JSON.parse(saved) : ["Tax", "Utilities", "Salaries"];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.map((item: any) => {
+          if (typeof item === "string") {
+            return { name: item, color: "indigo", description: "", createdAt: new Date().toISOString() };
+          }
+          return {
+            name: item.name || "پوشه جدید",
+            color: item.color || "indigo",
+            description: item.description || "",
+            createdAt: item.createdAt || new Date().toISOString()
+          };
+        });
+      } catch (e) {
+        console.error("Error reading folders:", e);
+      }
+    }
+    return [
+      { name: "Tax", color: "rose", description: "اسناد مالیاتی و ارزش افزوده", createdAt: new Date().toISOString() },
+      { name: "Utilities", color: "amber", description: "قبوض آب، برق، گاز و هزینه‌های جاری عمومی", createdAt: new Date().toISOString() },
+      { name: "Salaries", color: "emerald", description: "فیش‌های حقوقی و پرداختی‌های پرسنل", createdAt: new Date().toISOString() }
+    ];
   });
 
   useEffect(() => {
@@ -236,73 +272,14 @@ export default function App() {
   const [fileManagerTypeFilter, setFileManagerTypeFilter] = useState<string>("all");
   const [selectedScanIds, setSelectedScanIds] = useState<string[]>([]);
 
-  const [isAutoCategorizing, setIsAutoCategorizing] = useState(false);
+  // Folder creation form states
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderColor, setNewFolderColor] = useState("indigo");
+  const [newFolderDesc, setNewFolderDesc] = useState("");
+
   const [activePreviewScan, setActivePreviewScan] = useState<PreviousScan | null>(null);
   const [previewTab, setPreviewTab] = useState<"transactions" | "analysis" | "audit">("transactions");
-
-  const handleAiAutoCategorize = async () => {
-    if (previousScans.length === 0) {
-      showNotification("سندی برای دسته‌بندی وجود ندارد.", "error");
-      return;
-    }
-    setIsAutoCategorizing(true);
-    try {
-      const filesPayload = previousScans.map(scan => ({
-        id: scan.id,
-        name: scan.file.name
-      }));
-
-      const res = await fetch("/api/auto-categorize", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ files: filesPayload })
-      });
-
-      if (!res.ok) {
-        throw new Error("خطا در پاسخ سرور");
-      }
-
-      const data = await res.json();
-      if (data.success && data.categories) {
-        const categoriesMap: { [key: string]: string } = data.categories;
-        
-        // Find new folders that are not in userDefinedFolders
-        const newFoldersSet = new Set<string>();
-        Object.values(categoriesMap).forEach(folderName => {
-          if (folderName && !userDefinedFolders.includes(folderName)) {
-            newFoldersSet.add(folderName);
-          }
-        });
-
-        if (newFoldersSet.size > 0) {
-          setUserDefinedFolders(prev => Array.from(new Set([...prev, ...newFoldersSet])));
-        }
-
-        // Update previous scans with categorized folders
-        setPreviousScans(prev => 
-          prev.map(scan => {
-            const suggestedFolder = categoriesMap[scan.id];
-            if (suggestedFolder) {
-              return { ...scan, folder: suggestedFolder };
-            }
-            return scan;
-          })
-        );
-
-        showNotification(`دسته‌بندی هوشمند با موفقیت انجام شد و پوشه‌های جدید ایجاد گردید.`, "success");
-        logEvent("دسته‌بندی هوشمند اسناد", `دسته‌بندی گروهی ${previousScans.length} سند با هوش مصنوعی انجام شد.`);
-      } else {
-        throw new Error(data.error || "خطا در پردازش دسته‌بندی");
-      }
-    } catch (err: any) {
-      console.error(err);
-      showNotification(err.message || "خطا در برقراری ارتباط با سرویس هوشمند دسته‌بندی.", "error");
-    } finally {
-      setIsAutoCategorizing(false);
-    }
-  };
 
   const uploadFileDirectly = async (file: File) => {
     if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
@@ -1074,11 +1051,87 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<any>(() => {
      try {
        const stored = localStorage.getItem("current_user");
-       return stored ? JSON.parse(stored) : { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000, extraStorage: 0 };
+       return stored ? JSON.parse(stored) : null;
      } catch {
-       return { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000, extraStorage: 0 };
+       return null;
      }
   });
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const userRef = doc(db, "users", firebaseUser.uid);
+          const docSnap = await getDoc(userRef);
+          
+          let dbUser: any;
+          if (docSnap.exists()) {
+            dbUser = docSnap.data();
+          } else {
+            dbUser = {
+              id: firebaseUser.uid,
+              name: firebaseUser.displayName || firebaseUser.email || "کاربر ممیزی",
+              email: firebaseUser.email || "",
+              role: firebaseUser.email === "alizerehsaz2001@gmail.com" ? "admin" : "user",
+              status: "active",
+              apiUsage: 0,
+              extraStorage: 0
+            };
+            await setDoc(userRef, dbUser);
+          }
+          
+          setUsers((prevUsers) => {
+            if (!prevUsers.some((u) => u.id === firebaseUser.uid)) {
+              return [...prevUsers, dbUser];
+            }
+            return prevUsers.map((u) => u.id === firebaseUser.uid ? { ...u, ...dbUser } : u);
+          });
+          
+          setCurrentUser(dbUser);
+          localStorage.setItem("is_demo_mode", "false");
+        } catch (err: any) {
+          console.error("Firestore sync warning:", err);
+          const localUser = {
+            id: firebaseUser.uid,
+            name: firebaseUser.displayName || firebaseUser.email || "کاربر ممیزی",
+            email: firebaseUser.email || "",
+            role: firebaseUser.email === "alizerehsaz2001@gmail.com" ? "admin" : "user",
+            status: "active",
+            apiUsage: 0,
+            extraStorage: 0
+          };
+          setCurrentUser(localUser);
+        }
+      } else {
+        const isDemo = localStorage.getItem("is_demo_mode") === "true";
+        if (!isDemo) {
+          setCurrentUser(null);
+        }
+      }
+      setIsAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleEnterDemo = () => {
+    const demoUser = { id: 1, name: "سمانه رسولی (مدیر مالی)", role: "admin", status: "active", apiUsage: 45000, extraStorage: 0 };
+    localStorage.setItem("is_demo_mode", "true");
+    setCurrentUser(demoUser);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      localStorage.setItem("is_demo_mode", "false");
+      localStorage.removeItem("current_user");
+      setCurrentUser(null);
+      showNotification("با موفقیت از حساب کاربری خارج شدید.", "success");
+    } catch (error) {
+      console.error("Logout Error:", error);
+      showNotification("خطا در خروج از حساب کاربری.", "error");
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem("system_users", JSON.stringify(users));
@@ -2178,6 +2231,35 @@ export default function App() {
     setIsCounterpartyFocused(false);
     showNotification(`اطلاعات تکمیلی برای «${item.name}» خودکار تکمیل شد.`, "success");
   };
+
+  if (isAuthLoading) {
+    return (
+      <div 
+        className={`min-h-screen w-full flex flex-col items-center justify-center p-6 ${
+          isDarkMode ? "bg-[#090D16] text-white" : "bg-slate-50 text-slate-800"
+        }`} 
+        dir="rtl"
+      >
+        <div className="flex flex-col items-center text-center max-w-sm">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-500 mb-6" />
+          <h2 className="text-lg font-black mb-2">در حال ارزیابی کانال‌های امنیتی...</h2>
+          <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+            لطفا شکیبا باشید، سامانه حسابداری هوشمند در حال تایید احراز هویت شماست.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <LoginScreen 
+        isDarkMode={isDarkMode} 
+        onEnterDemo={handleEnterDemo} 
+        showNotification={showNotification} 
+      />
+    );
+  }
 
   return (
     <div
@@ -6235,7 +6317,7 @@ export default function App() {
                             <select 
                               value={currentUser?.id}
                               onChange={(e) => {
-                                 const user = users.find(u => u.id === parseInt(e.target.value));
+                                 const user = users.find(u => String(u.id) === String(e.target.value));
                                  if (user) {
                                    if (user.status === "suspended") {
                                       setNotification({text: "این اکانت مسدود شده است", type: "error"});
@@ -6272,6 +6354,20 @@ export default function App() {
                                فعال و متصل
                              </span>
                            </div>
+                        </div>
+
+                        {/* Logout Button */}
+                        <div className="mt-6 pt-6 border-t border-dashed border-slate-700/30 flex justify-end">
+                          <button
+                            onClick={() => {
+                              handleSignOut();
+                              setIsUserPanelOpen(false);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-rose-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors border border-rose-500/20 shadow-sm cursor-pointer"
+                          >
+                            <UserX className="w-4 h-4" />
+                            خروج از حساب کاربری
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -7441,22 +7537,49 @@ export default function App() {
                 };
 
                 const renameFolder = (oldName: string) => {
+                  const folderObj = userDefinedFolders.find(f => (typeof f === "string" ? f : f.name) === oldName);
+                  const currentDesc = typeof folderObj === "string" ? "" : (folderObj?.description || "");
+                  const currentCc = typeof folderObj === "string" ? "indigo" : (folderObj?.color || "indigo");
+
                   const newName = prompt(`نام جدید برای پوشه «${oldName}» را وارد کنید:`, oldName);
-                  if (newName && newName.trim()) {
-                    const trimmed = newName.trim();
-                    if (trimmed === oldName) return;
-                    if (userDefinedFolders.includes(trimmed)) {
-                      showNotification("پوشه‌ای با این نام از قبل وجود دارد.", "error");
-                      return;
-                    }
-                    setUserDefinedFolders(prev => prev.map(f => f === oldName ? trimmed : f));
-                    setPreviousScans(prev => prev.map(s => s.folder === oldName ? { ...s, folder: trimmed } : s));
-                    if (selectedFolderFilter === oldName) {
-                      setSelectedFolderFilter(trimmed);
-                    }
-                    logEvent("ویرایش پوشه", `کاربر نام پوشه «${oldName}» را به «${trimmed}» تغییر داد.`);
-                    showNotification(`پوشه با موفقیت به «${trimmed}» تغییر نام یافت.`, "success");
+                  if (newName === null) return; // user cancelled
+                  
+                  const trimmed = newName.trim();
+                  if (!trimmed) {
+                    showNotification("نام پوشه نمی‌تواند خالی باشد.", "error");
+                    return;
                   }
+                  
+                  if (trimmed !== oldName && userDefinedFolders.some(f => (typeof f === "string" ? f : f.name) === trimmed)) {
+                    showNotification("پوشه‌ای با این نام از قبل وجود دارد.", "error");
+                    return;
+                  }
+
+                  const newDesc = prompt(`توضیحات پوشه را وارد کنید (اختیاری):`, currentDesc);
+                  const trimmedDesc = newDesc !== null ? newDesc.trim() : currentDesc;
+
+                  const newColor = prompt(`کد رنگ پوشه را وارد کنید (یکی از موارد: rose, emerald, amber, blue, purple, cyan, indigo):`, currentCc);
+                  const chosenColor = newColor && FOLDER_COLORS[newColor] ? newColor : currentCc;
+
+                  setUserDefinedFolders(prev => prev.map(f => {
+                    const fName = typeof f === "string" ? f : f.name;
+                    if (fName === oldName) {
+                      return {
+                        name: trimmed,
+                        color: chosenColor,
+                        description: trimmedDesc,
+                        createdAt: typeof f === "string" ? new Date().toISOString() : (f.createdAt || new Date().toISOString())
+                      };
+                    }
+                    return f;
+                  }));
+
+                  setPreviousScans(prev => prev.map(s => s.folder === oldName ? { ...s, folder: trimmed } : s));
+                  if (selectedFolderFilter === oldName) {
+                    setSelectedFolderFilter(trimmed);
+                  }
+                  logEvent("ویرایش پوشه", `کاربر پوشه «${oldName}» را به «${trimmed}» تغییر داد و رنگ و توضیحات را به‌روزرسانی کرد.`);
+                  showNotification(`پوشه با موفقیت ویرایش شد.`, "success");
                 };
 
                 const handleBulkDelete = () => {
@@ -7621,38 +7744,143 @@ export default function App() {
                                 پوشه‌های اختصاصی
                               </span>
                               
-                              {/* Create Folder */}
+                              {/* Create Folder Toggle */}
                               <button
-                                onClick={() => {
-                                  const name = prompt("نام پوشه جدید را وارد کنید:");
-                                  if (name && name.trim()) {
-                                    const trimmed = name.trim();
-                                    if (userDefinedFolders.includes(trimmed)) {
-                                      showNotification("پوشه‌ای با این نام از قبل وجود دارد.", "error");
-                                    } else {
-                                      setUserDefinedFolders(prev => [...prev, trimmed]);
-                                      logEvent("ایجاد پوشه جدید", `کاربر پوشه جدید با نام «${trimmed}» ایجاد کرد.`);
-                                      showNotification(`پوشه «${trimmed}» با موفقیت ایجاد شد.`, "success");
-                                    }
-                                  }
-                                }}
-                                className={`p-1 rounded-lg transition-colors border ${
-                                  isDarkMode 
-                                    ? "bg-slate-900 border-slate-750 text-slate-300 hover:bg-slate-800" 
-                                    : "bg-white border-slate-250 text-indigo-600 hover:bg-indigo-50"
+                                onClick={() => setIsCreatingFolder(prev => !prev)}
+                                className={`p-1 rounded-lg transition-colors border cursor-pointer ${
+                                  isCreatingFolder
+                                    ? "bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100"
+                                    : isDarkMode 
+                                      ? "bg-slate-900 border-slate-750 text-slate-300 hover:bg-slate-800" 
+                                      : "bg-white border-slate-250 text-indigo-600 hover:bg-indigo-50"
                                 }`}
-                                title="ایجاد پوشه جدید"
+                                title={isCreatingFolder ? "بستن فرم ایجاد" : "ایجاد پوشه جدید"}
                               >
-                                <Plus className="w-3.5 h-3.5" />
+                                {isCreatingFolder ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
                               </button>
                             </div>
+
+                            {/* Inline Custom Folder Creator Form */}
+                            {isCreatingFolder && (
+                              <div 
+                                className={`p-3 rounded-xl border space-y-3 ${
+                                  isDarkMode ? "bg-slate-900/90 border-slate-750" : "bg-white border-slate-200"
+                                }`}
+                              >
+                                <div className="space-y-1">
+                                  <label className={`text-[9px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نام پوشه اختصاصی</label>
+                                  <input
+                                    type="text"
+                                    value={newFolderName}
+                                    onChange={(e) => setNewFolderName(e.target.value)}
+                                    placeholder="مثلاً: اسناد بازرگانی"
+                                    className={`w-full px-2.5 py-1.5 rounded-lg text-xs outline-none border transition-all ${
+                                      isDarkMode 
+                                        ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" 
+                                        : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
+                                    }`}
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className={`text-[9px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>توضیح کوتاه (اختیاری)</label>
+                                  <input
+                                    type="text"
+                                    value={newFolderDesc}
+                                    onChange={(e) => setNewFolderDesc(e.target.value)}
+                                    placeholder="مثلاً: فاکتورهای ترخیص کالا"
+                                    className={`w-full px-2.5 py-1.5 rounded-lg text-xs outline-none border transition-all ${
+                                      isDarkMode 
+                                        ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" 
+                                        : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500"
+                                    }`}
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className={`text-[9px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>تم رنگی پوشه</label>
+                                  <div className="flex items-center gap-1.5 pt-0.5">
+                                    {Object.keys(FOLDER_COLORS).map(colorKey => {
+                                      const config = FOLDER_COLORS[colorKey];
+                                      const isColorSelected = newFolderColor === colorKey;
+                                      return (
+                                        <button
+                                          key={colorKey}
+                                          type="button"
+                                          onClick={() => setNewFolderColor(colorKey)}
+                                          className={`w-4 h-4 rounded-full ${config.dot} transition-transform relative flex items-center justify-center shrink-0 cursor-pointer hover:scale-110`}
+                                          title={colorKey}
+                                        >
+                                          {isColorSelected && (
+                                            <div className="w-1.5 h-1.5 rounded-full bg-white"></div>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-1">
+                                  <button
+                                    onClick={() => {
+                                      if (!newFolderName.trim()) {
+                                        showNotification("نام پوشه نمی‌تواند خالی باشد.", "error");
+                                        return;
+                                      }
+                                      const trimmed = newFolderName.trim();
+                                      if (userDefinedFolders.some(f => (typeof f === 'string' ? f : f.name) === trimmed)) {
+                                        showNotification("پوشه‌ای با این نام از قبل وجود دارد.", "error");
+                                        return;
+                                      }
+                                      
+                                      setUserDefinedFolders(prev => [
+                                        ...prev, 
+                                        { 
+                                          name: trimmed, 
+                                          color: newFolderColor, 
+                                          description: newFolderDesc.trim(),
+                                          createdAt: new Date().toISOString()
+                                        }
+                                      ]);
+                                      
+                                      logEvent("ایجاد پوشه جدید", `کاربر پوشه جدید با نام «${trimmed}» ایجاد کرد.`);
+                                      showNotification(`پوشه «${trimmed}» با موفقیت ایجاد شد.`, "success");
+                                      
+                                      // Reset state
+                                      setNewFolderName("");
+                                      setNewFolderDesc("");
+                                      setNewFolderColor("indigo");
+                                      setIsCreatingFolder(false);
+                                    }}
+                                    className="flex-1 py-1.5 rounded-lg text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer text-center"
+                                  >
+                                    ثبت پوشه
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setNewFolderName("");
+                                      setNewFolderDesc("");
+                                      setNewFolderColor("indigo");
+                                      setIsCreatingFolder(false);
+                                    }}
+                                    className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
+                                      isDarkMode 
+                                        ? "border-slate-800 text-slate-400 hover:bg-slate-900" 
+                                        : "border-slate-200 text-slate-500 hover:bg-slate-100"
+                                    }`}
+                                  >
+                                    انصراف
+                                  </button>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Folders List inside Sidebar */}
                             <div className="space-y-1.5">
                               {/* All scans */}
                               <button
                                 onClick={() => setSelectedFolderFilter("all")}
-                                className={`w-full px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
+                                className={`w-full px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
                                   selectedFolderFilter === "all"
                                     ? "bg-indigo-600 text-white shadow-sm"
                                     : isDarkMode
@@ -7674,7 +7902,7 @@ export default function App() {
                               {/* Uncategorized */}
                               <button
                                 onClick={() => setSelectedFolderFilter("uncategorized")}
-                                className={`w-full px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
+                                className={`w-full px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
                                   selectedFolderFilter === "uncategorized"
                                     ? "bg-indigo-600 text-white shadow-sm"
                                     : isDarkMode
@@ -7697,89 +7925,88 @@ export default function App() {
                               <div className="h-px bg-slate-200 dark:bg-slate-800 my-2"></div>
 
                               {/* User Defined Folders */}
-                              {userDefinedFolders.map(folder => {
-                                const isSelected = selectedFolderFilter === folder;
+                              {userDefinedFolders.map(folderObj => {
+                                const folderName = typeof folderObj === "string" ? folderObj : folderObj.name;
+                                const folderColor = typeof folderObj === "string" ? "indigo" : (folderObj.color || "indigo");
+                                const folderDesc = typeof folderObj === "string" ? "" : folderObj.description;
+                                const colorConfig = FOLDER_COLORS[folderColor] || FOLDER_COLORS.indigo;
+                                const isSelected = selectedFolderFilter === folderName;
                                 return (
-                                  <div key={folder} className="group relative flex items-center justify-between rounded-lg transition-all hover:bg-slate-200/50 dark:hover:bg-slate-900/50">
-                                    <button
-                                      onClick={() => setSelectedFolderFilter(folder)}
-                                      className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
-                                        isSelected
-                                          ? "bg-indigo-600 text-white shadow-sm"
-                                          : isDarkMode
-                                            ? "text-slate-300"
-                                            : "text-slate-600"
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-2 max-w-[120px] truncate text-right">
-                                        <Folder className={`w-3.5 h-3.5 ${isSelected ? "text-white" : "text-indigo-400"}`} />
-                                        <span className="truncate">{folder}</span>
-                                      </div>
-                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
-                                        isSelected ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-500"
-                                      }`}>
-                                        {getFolderFileCount(folder)}
-                                      </span>
-                                    </button>
-
-                                    {/* Action items on hover/always */}
-                                    <div className="absolute left-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      {/* Rename folder button */}
+                                  <div key={folderName} className="group relative flex flex-col rounded-lg transition-all hover:bg-slate-200/30 dark:hover:bg-slate-900/30 p-0.5">
+                                    <div className="flex items-center justify-between">
                                       <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          renameFolder(folder);
-                                        }}
-                                        className={`p-1 rounded transition-colors ${
-                                          isSelected ? "text-indigo-100 hover:bg-white/20" : "text-slate-400 hover:text-indigo-500"
+                                        onClick={() => setSelectedFolderFilter(folderName)}
+                                        className={`flex-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                                          isSelected
+                                            ? "bg-indigo-600 text-white shadow-sm"
+                                            : isDarkMode
+                                              ? "text-slate-300"
+                                              : "text-slate-600"
                                         }`}
-                                        title="ویرایش پوشه"
                                       >
-                                        <FileEdit className="w-3 h-3" />
+                                        <div className="flex items-center gap-2 max-w-[130px] truncate text-right">
+                                          <Folder className={`w-3.5 h-3.5 shrink-0 ${isSelected ? "text-white" : colorConfig.text} ${isSelected ? "fill-white/10" : "fill-current/10"}`} />
+                                          <div className="flex flex-col text-right">
+                                            <span className="truncate">{folderName}</span>
+                                            {folderDesc && (
+                                              <span className={`text-[8.5px] font-medium opacity-70 truncate max-w-[100px] ${
+                                                isSelected 
+                                                  ? "text-indigo-200" 
+                                                  : isDarkMode ? "text-slate-400" : "text-slate-500"
+                                              }`}>{folderDesc}</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
+                                          isSelected ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-500"
+                                        }`}>
+                                          {getFolderFileCount(folderName)}
+                                        </span>
                                       </button>
 
-                                      {/* Delete Folder button */}
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (window.confirm(`آیا مطمئن هستید که می‌خواهید پوشه «${folder}» را حذف کنید؟ اسناد این پوشه حذف نمی‌شوند و فقط به حالت بدون پوشه برمی‌گردند.`)) {
-                                            setUserDefinedFolders(prev => prev.filter(f => f !== folder));
-                                            setPreviousScans(prev => prev.map(s => s.folder === folder ? { ...s, folder: undefined } : s));
-                                            if (selectedFolderFilter === folder) {
-                                              setSelectedFolderFilter("all");
+                                      {/* Action items on hover/always */}
+                                      <div className="absolute left-2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {/* Rename/Edit folder button */}
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            renameFolder(folderName);
+                                          }}
+                                          className={`p-1 rounded transition-colors cursor-pointer ${
+                                            isSelected ? "text-indigo-100 hover:bg-white/20" : "text-slate-400 hover:text-indigo-500"
+                                          }`}
+                                          title="ویرایش پوشه"
+                                        >
+                                          <FileEdit className="w-3 h-3" />
+                                        </button>
+
+                                        {/* Delete Folder button */}
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (window.confirm(`آیا مطمئن هستید که می‌خواهید پوشه «${folderName}» را حذف کنید؟ اسناد این پوشه حذف نمی‌شوند و فقط به حالت بدون پوشه برمی‌گردند.`)) {
+                                              setUserDefinedFolders(prev => prev.filter(f => (typeof f === 'string' ? f : f.name) !== folderName));
+                                              setPreviousScans(prev => prev.map(s => s.folder === folderName ? { ...s, folder: undefined } : s));
+                                              if (selectedFolderFilter === folderName) {
+                                                setSelectedFolderFilter("all");
+                                              }
+                                              logEvent("حذف پوشه", `کاربر پوشه «${folderName}» را حذف کرد.`);
+                                              showNotification(`پوشه «${folderName}» حذف شد.`, "info");
                                             }
-                                            logEvent("حذف پوشه", `کاربر پوشه «${folder}» را حذف کرد.`);
-                                            showNotification(`پوشه «${folder}» حذف شد.`, "info");
-                                          }
-                                        }}
-                                        className={`p-1 rounded transition-colors ${
-                                          isDarkMode ? "hover:bg-slate-800 text-slate-500 hover:text-rose-400" : "hover:bg-slate-200 text-slate-400 hover:text-rose-600"
-                                        }`}
-                                        title="حذف پوشه"
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
+                                          }}
+                                          className={`p-1 rounded transition-colors cursor-pointer ${
+                                            isDarkMode ? "hover:bg-slate-800 text-slate-500 hover:text-rose-400" : "hover:bg-slate-200 text-slate-400 hover:text-rose-600"
+                                          }`}
+                                          title="حذف پوشه"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
                                 );
                               })}
                             </div>
-
-                            {/* AI Auto Categorize Button */}
-                            <button
-                              onClick={handleAiAutoCategorize}
-                              disabled={isAutoCategorizing}
-                              className={`w-full mt-3 px-3 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-sm border ${
-                                isAutoCategorizing
-                                  ? "bg-slate-850 border-slate-850 text-slate-500 cursor-not-allowed"
-                                  : isDarkMode
-                                    ? "bg-indigo-950/40 hover:bg-indigo-900/40 text-indigo-400 border-indigo-900/30 hover:border-indigo-800/40 cursor-pointer"
-                                    : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-100 hover:border-indigo-200 cursor-pointer"
-                              }`}
-                            >
-                              <Sparkles className={`w-4 h-4 ${isAutoCategorizing ? "animate-spin" : "text-indigo-500 animate-pulse"}`} />
-                              <span>{isAutoCategorizing ? "در حال دسته‌بندی هوشمند..." : "دسته‌بندی هوشمند با AI"}</span>
-                            </button>
                           </div>
 
                           <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
@@ -7956,9 +8183,12 @@ export default function App() {
                                 >
                                   <option value="choose">انتقال گروهی به پوشه...</option>
                                   <option value="none">بدون پوشه (دسته‌بندی نشده)</option>
-                                  {userDefinedFolders.map(f => (
-                                    <option key={f} value={f}>{f}</option>
-                                  ))}
+                                  {userDefinedFolders.map(f => {
+                                    const folderName = typeof f === "string" ? f : f.name;
+                                    return (
+                                      <option key={folderName} value={folderName}>{folderName}</option>
+                                    );
+                                  })}
                                 </select>
                                 <Folder className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-indigo-500 pointer-events-none" />
                               </div>
@@ -8140,9 +8370,12 @@ export default function App() {
                                             }`}
                                           >
                                             <option value="">دسته‌بندی نشده</option>
-                                            {userDefinedFolders.map(folder => (
-                                              <option key={folder} value={folder}>{folder}</option>
-                                            ))}
+                                            {userDefinedFolders.map(folder => {
+                                              const folderName = typeof folder === "string" ? folder : folder.name;
+                                              return (
+                                                <option key={folderName} value={folderName}>{folderName}</option>
+                                              );
+                                            })}
                                           </select>
                                           <Folder className="w-2.5 h-2.5 absolute left-1.5 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none" />
                                         </div>

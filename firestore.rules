@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net (Pillar 1)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Check if the user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Check if the user is accessing their own document
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Check if user is ID format valid (Pillar 3)
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Helper for incoming document data
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // Helper for user validation schema (Pillar 2)
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'role', 'status'])
+        && data.id is string
+        && data.name is string
+        && data.name.size() <= 128
+        && data.email is string
+        && data.email.size() <= 128
+        && data.role in ['admin', 'user']
+        && data.status in ['active', 'suspended'];
+    }
+
+    // User Profile Rules (Pillar 4 and 6)
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      
+      // Let's allow list only for admins
+      allow list: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+      // Creating own user document is allowed upon first sign-in
+      allow create: if isSignedIn() 
+        && isOwner(userId) 
+        && isValidUser(incoming())
+        // Block privilege escalation: newly registered users cannot set their own role as admin (Pillar 3)
+        && (incoming().role == 'user' || incoming().email == 'alizerehsaz2001@gmail.com');
+
+      // Modifying profiles: Users can update non-privileged fields, but admins can change everything
+      allow update: if isSignedIn() 
+        && (
+          (isOwner(userId) && incoming().role == resource.data.role && incoming().status == resource.data.status && incoming().extraStorage == resource.data.extraStorage && isValidUser(incoming())) 
+          || (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' && isValidUser(incoming()))
+        );
+
+      allow delete: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Simple test connection rules
+    match /test/connection {
+      allow read: if isSignedIn();
+    }
+  }
+}
