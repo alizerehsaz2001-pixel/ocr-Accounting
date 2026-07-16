@@ -20,12 +20,65 @@
         "isOnboarded": { "type": "boolean", "description": "Whether the user completed registration onboarding" }
       },
       "required": ["id", "name", "email", "role", "status"]
+    },
+    "Folder": {
+      "title": "Folder",
+      "description": "User folder for organizing scans and files",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the folder" },
+        "color": { "type": "string", "description": "Color tag theme of the folder" },
+        "description": { "type": "string", "description": "Description of the folder content" },
+        "createdAt": { "type": "string", "description": "Folder creation ISO timestamp" }
+      },
+      "required": ["name", "color", "createdAt"]
+    },
+    "Scan": {
+      "title": "Scan",
+      "description": "Processed financial document with extracted transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique scan ID" },
+        "timestamp": { "type": "number", "description": "Epoch timestamp of upload" },
+        "folder": { "type": "string", "description": "Folder classification name" },
+        "file": {
+          "type": "object",
+          "description": "Uploaded file details",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "size": { "type": "number" },
+            "preview": { "type": "string", "description": "Base64 preview of document" },
+            "status": { "type": "string" },
+            "error": { "type": "string" },
+            "documentType": { "type": "string" },
+            "mimeType": { "type": "string" },
+            "documentAnalysis": { "type": "string" },
+            "tokensUsed": { "type": "number" }
+          },
+          "required": ["id", "name", "size", "preview", "status"]
+        },
+        "transactions": {
+          "type": "array",
+          "description": "Extracted transaction ledger items",
+          "items": { "type": "object" }
+        }
+      },
+      "required": ["id", "timestamp", "file", "transactions"]
     }
   },
   "firestore": {
     "users/{userId}": {
       "schema": "User",
       "description": "Collection of all users registered in the system"
+    },
+    "users/{userId}/folders/{folderId}": {
+      "schema": "Folder",
+      "description": "Subcollection of custom folder categories"
+    },
+    "users/{userId}/scans/{scanId}": {
+      "schema": "Scan",
+      "description": "Subcollection of processed financial documents and invoices"
     }
   }
 }

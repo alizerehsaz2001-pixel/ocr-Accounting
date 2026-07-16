@@ -91,9 +91,9 @@ import OnboardingModal from "./components/OnboardingModal";
 import OnboardingProfileModal from "./components/OnboardingProfileModal";
 import AuditLogsModal from "./components/AuditLogsModal";
 import LoginScreen from "./components/LoginScreen";
-import { auth, db } from "./lib/firebase";
+import { auth, db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
@@ -135,6 +135,82 @@ const FOLDER_COLORS: { [key: string]: { text: string; bg: string; border: string
 };
 
 export default function App() {
+  const [users, setUsers] = useState<any[]>(() => {
+    const initial = [
+      { 
+        id: 1, 
+        name: "سمانه رسولی", 
+        firstName: "سمانه",
+        lastName: "رسولی",
+        companyName: "بازرگانی دریا",
+        phone: "09121111111",
+        jobTitle: "مدیر مالی",
+        email: "samaneh.rasouli@example.com",
+        role: "admin", 
+        status: "active", 
+        apiUsage: 45000, 
+        extraStorage: 0,
+        isOnboarded: true
+      },
+      { 
+        id: 2, 
+        name: "محمد کریمی", 
+        firstName: "محمد",
+        lastName: "کریمی",
+        companyName: "پارس الوان",
+        phone: "09122222222",
+        jobTitle: "حسابدار ارشد",
+        email: "m.karimi@example.com",
+        role: "user", 
+        status: "active", 
+        apiUsage: 12400, 
+        extraStorage: 0,
+        isOnboarded: true
+      },
+      { 
+        id: 3, 
+        name: "حسابدار پاره‌وقت", 
+        firstName: "حسابدار",
+        lastName: "پاره‌وقت",
+        companyName: "صنایع نوین",
+        phone: "09123333333",
+        jobTitle: "حسابدار مستقل",
+        email: "parttime@example.com",
+        role: "user", 
+        status: "suspended", 
+        apiUsage: 850, 
+        extraStorage: 0,
+        isOnboarded: true
+      }
+    ];
+    try {
+      const stored = localStorage.getItem("system_users");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.map((u: any) => {
+          const matched = initial.find(init => String(init.id) === String(u.id));
+          if (matched && !u.firstName) {
+            return { ...u, ...matched };
+          }
+          return u;
+        });
+      }
+      return initial;
+    } catch {
+      return initial;
+    }
+  });
+
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+     try {
+       const stored = localStorage.getItem("current_user");
+       return stored ? JSON.parse(stored) : null;
+     } catch {
+       return null;
+     }
+  });
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
+
   // Main data states
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const savedTheme = localStorage.getItem("theme");
@@ -272,6 +348,136 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("user_defined_folders", JSON.stringify(userDefinedFolders));
   }, [userDefinedFolders]);
+
+  // Refs to track synced states and prevent infinite write-back loops
+  const lastSyncedScansRef = useRef<string>("");
+  const lastSyncedFoldersRef = useRef<string>("");
+
+  const saveScanToCloud = async (scan: PreviousScan) => {
+    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
+    try {
+      const scanDocRef = doc(db, "users", auth.currentUser.uid, "scans", scan.id);
+      const scanData = {
+        id: scan.id,
+        timestamp: scan.timestamp,
+        folder: scan.folder || "",
+        file: {
+          id: scan.file.id,
+          name: scan.file.name,
+          size: scan.file.size,
+          preview: scan.file.preview,
+          status: scan.file.status,
+          error: scan.file.error || null,
+          documentType: scan.file.documentType || null,
+          mimeType: scan.file.mimeType || null,
+          documentAnalysis: scan.file.documentAnalysis || null,
+          tokensUsed: scan.file.tokensUsed || null
+        },
+        transactions: scan.transactions || []
+      };
+      await setDoc(scanDocRef, scanData).catch(err => handleFirestoreError(err, OperationType.WRITE, scanDocRef.path));
+    } catch (e) {
+      console.error("Error saving scan to cloud:", e);
+    }
+  };
+
+  const deleteScanFromCloud = async (scanId: string) => {
+    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
+    try {
+      const scanDocRef = doc(db, "users", auth.currentUser.uid, "scans", scanId);
+      await deleteDoc(scanDocRef).catch(err => handleFirestoreError(err, OperationType.DELETE, scanDocRef.path));
+    } catch (e) {
+      console.error("Error deleting scan from cloud:", e);
+    }
+  };
+
+  const saveFolderToCloud = async (folder: any) => {
+    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
+    try {
+      const folderId = folder.name.replace(/[^a-zA-Z0-9_\-]/g, "_") || "folder_" + Date.now();
+      const folderDocRef = doc(db, "users", auth.currentUser.uid, "folders", folderId);
+      const folderData = {
+        name: folder.name,
+        color: folder.color,
+        description: folder.description || "",
+        createdAt: folder.createdAt || new Date().toISOString()
+      };
+      await setDoc(folderDocRef, folderData).catch(err => handleFirestoreError(err, OperationType.WRITE, folderDocRef.path));
+    } catch (e) {
+      console.error("Error saving folder to cloud:", e);
+    }
+  };
+
+  const deleteFolderFromCloud = async (folderName: string) => {
+    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
+    try {
+      const folderId = folderName.replace(/[^a-zA-Z0-9_\-]/g, "_");
+      const folderDocRef = doc(db, "users", auth.currentUser.uid, "folders", folderId);
+      await deleteDoc(folderDocRef).catch(err => handleFirestoreError(err, OperationType.DELETE, folderDocRef.path));
+    } catch (e) {
+      console.error("Error deleting folder from cloud:", e);
+    }
+  };
+
+  // Smart Sync effect for previousScans
+  useEffect(() => {
+    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
+    
+    const serializeScans = (scansList: PreviousScan[]) => {
+      return scansList.map(s => `${s.id}:${s.file?.status || ""}:${s.transactions?.length || 0}:${s.folder || ""}:${s.file?.name || ""}`).join("|");
+    };
+
+    const currentFingerprint = serializeScans(previousScans);
+    if (currentFingerprint === lastSyncedScansRef.current) return;
+
+    // Save additions and updates
+    previousScans.forEach((scan) => {
+      saveScanToCloud(scan);
+    });
+
+    // Handle deleted scans
+    if (lastSyncedScansRef.current) {
+      const prevIds = lastSyncedScansRef.current.split("|").map(item => item.split(":")[0]).filter(Boolean);
+      const currentIds = new Set(previousScans.map(s => s.id));
+      prevIds.forEach((id) => {
+        if (!currentIds.has(id)) {
+          deleteScanFromCloud(id);
+        }
+      });
+    }
+
+    lastSyncedScansRef.current = currentFingerprint;
+  }, [previousScans, currentUser]);
+
+  // Smart Sync effect for userDefinedFolders
+  useEffect(() => {
+    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
+
+    const serializeFolders = (foldersList: any[]) => {
+      return foldersList.map(f => `${f.name}:${f.color}:${f.description || ""}`).join("|");
+    };
+
+    const currentFingerprint = serializeFolders(userDefinedFolders);
+    if (currentFingerprint === lastSyncedFoldersRef.current) return;
+
+    // Save additions and updates
+    userDefinedFolders.forEach((folder) => {
+      saveFolderToCloud(folder);
+    });
+
+    // Handle deleted folders
+    if (lastSyncedFoldersRef.current) {
+      const prevNames = lastSyncedFoldersRef.current.split("|").map(item => item.split(":")[0]).filter(Boolean);
+      const currentNames = new Set(userDefinedFolders.map(f => f.name));
+      prevNames.forEach((name) => {
+        if (!currentNames.has(name)) {
+          deleteFolderFromCloud(name);
+        }
+      });
+    }
+
+    lastSyncedFoldersRef.current = currentFingerprint;
+  }, [userDefinedFolders, currentUser]);
 
   const [selectedFolderFilter, setSelectedFolderFilter] = useState<string>("all");
   const [fileManagerSearchQuery, setFileManagerSearchQuery] = useState<string>("");
@@ -1041,81 +1247,6 @@ export default function App() {
   const [adminPanelTab, setAdminPanelTab] = useState<"users" | "data" | "system" | "danger">("users");
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false);
-  const [users, setUsers] = useState<any[]>(() => {
-    const initial = [
-      { 
-        id: 1, 
-        name: "سمانه رسولی", 
-        firstName: "سمانه",
-        lastName: "رسولی",
-        companyName: "بازرگانی دریا",
-        phone: "09121111111",
-        jobTitle: "مدیر مالی",
-        email: "samaneh.rasouli@example.com",
-        role: "admin", 
-        status: "active", 
-        apiUsage: 45000, 
-        extraStorage: 0,
-        isOnboarded: true
-      },
-      { 
-        id: 2, 
-        name: "محمد کریمی", 
-        firstName: "محمد",
-        lastName: "کریمی",
-        companyName: "پارس الوان",
-        phone: "09122222222",
-        jobTitle: "حسابدار ارشد",
-        email: "m.karimi@example.com",
-        role: "user", 
-        status: "active", 
-        apiUsage: 12400, 
-        extraStorage: 0,
-        isOnboarded: true
-      },
-      { 
-        id: 3, 
-        name: "حسابدار پاره‌وقت", 
-        firstName: "حسابدار",
-        lastName: "پاره‌وقت",
-        companyName: "صنایع نوین",
-        phone: "09123333333",
-        jobTitle: "حسابدار مستقل",
-        email: "parttime@example.com",
-        role: "user", 
-        status: "suspended", 
-        apiUsage: 850, 
-        extraStorage: 0,
-        isOnboarded: true
-      }
-    ];
-    try {
-      const stored = localStorage.getItem("system_users");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return parsed.map((u: any) => {
-          const matched = initial.find(init => String(init.id) === String(u.id));
-          if (matched && !u.firstName) {
-            return { ...u, ...matched };
-          }
-          return u;
-        });
-      }
-      return initial;
-    } catch {
-      return initial;
-    }
-  });
-
-  const [currentUser, setCurrentUser] = useState<any>(() => {
-     try {
-       const stored = localStorage.getItem("current_user");
-       return stored ? JSON.parse(stored) : null;
-     } catch {
-       return null;
-     }
-  });
-  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -1150,6 +1281,100 @@ export default function App() {
           
           setCurrentUser(dbUser);
           localStorage.setItem("is_demo_mode", "false");
+
+          // Load & Sync folders/scans from cloud
+          const foldersRef = collection(db, "users", firebaseUser.uid, "folders");
+          let foldersSnap;
+          try {
+            foldersSnap = await getDocs(foldersRef);
+          } catch (err) {
+            handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}/folders`);
+            return;
+          }
+          let dbFolders: any[] = [];
+          foldersSnap.forEach((docSnap) => {
+            dbFolders.push(docSnap.data());
+          });
+
+          const scansRef = collection(db, "users", firebaseUser.uid, "scans");
+          let scansSnap;
+          try {
+            scansSnap = await getDocs(scansRef);
+          } catch (err) {
+            handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}/scans`);
+            return;
+          }
+          let dbScans: PreviousScan[] = [];
+          scansSnap.forEach((docSnap) => {
+            dbScans.push(docSnap.data() as PreviousScan);
+          });
+
+          // Perform cloud-migration if Firestore is completely empty but local is populated
+          if (dbFolders.length === 0 && dbScans.length === 0) {
+            const localFoldersRaw = localStorage.getItem("user_defined_folders");
+            const localScansRaw = localStorage.getItem("previous_scans");
+            
+            let localFolders: any[] = [];
+            let localScans: PreviousScan[] = [];
+            
+            try {
+              if (localFoldersRaw) localFolders = JSON.parse(localFoldersRaw);
+              if (localScansRaw) localScans = JSON.parse(localScansRaw);
+            } catch (e) {
+              console.warn("Error parsing local state:", e);
+            }
+
+            if (localFolders.length > 0) {
+              for (const folder of localFolders) {
+                const folderId = folder.name.replace(/[^a-zA-Z0-9_\-]/g, "_") || "folder_" + Date.now();
+                const folderDocRef = doc(db, "users", firebaseUser.uid, "folders", folderId);
+                const folderData = {
+                  name: folder.name || "پوشه جدید",
+                  color: folder.color || "indigo",
+                  description: folder.description || "",
+                  createdAt: folder.createdAt || new Date().toISOString()
+                };
+                await setDoc(folderDocRef, folderData).catch(err => handleFirestoreError(err, OperationType.WRITE, folderDocRef.path));
+                dbFolders.push(folderData);
+              }
+            }
+
+            if (localScans.length > 0) {
+              for (const scan of localScans) {
+                const scanId = scan.id || "scan_" + Date.now();
+                const scanDocRef = doc(db, "users", firebaseUser.uid, "scans", scanId);
+                const scanData = {
+                  id: scan.id,
+                  timestamp: scan.timestamp,
+                  folder: scan.folder || "",
+                  file: {
+                    id: scan.file.id,
+                    name: scan.file.name,
+                    size: scan.file.size,
+                    preview: scan.file.preview,
+                    status: scan.file.status,
+                    error: scan.file.error || null,
+                    documentType: scan.file.documentType || null,
+                    mimeType: scan.file.mimeType || null,
+                    documentAnalysis: scan.file.documentAnalysis || null,
+                    tokensUsed: scan.file.tokensUsed || null
+                  },
+                  transactions: scan.transactions || []
+                };
+                await setDoc(scanDocRef, scanData).catch(err => handleFirestoreError(err, OperationType.WRITE, scanDocRef.path));
+                dbScans.push(scanData);
+              }
+            }
+          }
+
+          dbScans.sort((a, b) => b.timestamp - a.timestamp);
+
+          // Update tracking refs to prevent re-upload of loaded items
+          lastSyncedFoldersRef.current = dbFolders.map(f => `${f.name}:${f.color}:${f.description || ""}`).join("|");
+          lastSyncedScansRef.current = dbScans.map(s => `${s.id}:${s.file?.status || ""}:${s.transactions?.length || 0}:${s.folder || ""}:${s.file?.name || ""}`).join("|");
+
+          setUserDefinedFolders(dbFolders);
+          setPreviousScans(dbScans);
         } catch (err: any) {
           console.error("Firestore sync warning:", err);
           const localUser = {

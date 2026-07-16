@@ -45,6 +45,35 @@ service cloud.firestore {
         && (!data.keys().contains('isOnboarded') || (data.isOnboarded is bool));
     }
 
+    // Helper for folder validation schema
+    function isValidFolder(data) {
+      return data.keys().hasAll(['name', 'color', 'createdAt'])
+        && (data.keys().size() == 3 || (data.keys().size() == 4 && data.keys().contains('description')))
+        && data.name is string
+        && data.name.size() <= 100
+        && data.color is string
+        && data.color.size() <= 50
+        && data.createdAt is string
+        && (!data.keys().contains('description') || (data.description is string && data.description.size() <= 500));
+    }
+
+    // Helper for scan validation schema
+    function isValidScan(data) {
+      return data.keys().hasAll(['id', 'timestamp', 'file', 'transactions'])
+        && data.id is string
+        && data.id.size() <= 128
+        && data.timestamp is int
+        && (!data.keys().contains('folder') || (data.folder is string && data.folder.size() <= 100))
+        && data.file is map
+        && data.file.id is string
+        && data.file.name is string
+        && data.file.name.size() <= 256
+        && data.file.size is int
+        && data.file.preview is string
+        && data.file.status is string
+        && data.transactions is list;
+    }
+
     // User Profile Rules (Pillar 4 and 6)
     match /users/{userId} {
       allow get: if isSignedIn() && (request.auth.uid == userId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
@@ -67,6 +96,20 @@ service cloud.firestore {
         );
 
       allow delete: if isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+      // Subcollections of users for custom folders (Pillar 4, 8)
+      match /folders/{folderId} {
+        allow read, list: if isSignedIn() && isOwner(userId);
+        allow create, update: if isSignedIn() && isOwner(userId) && isValidId(folderId) && isValidFolder(incoming());
+        allow delete: if isSignedIn() && isOwner(userId) && isValidId(folderId);
+      }
+
+      // Subcollections of users for scanned documents (Pillar 4, 8)
+      match /scans/{scanId} {
+        allow read, list: if isSignedIn() && isOwner(userId);
+        allow create, update: if isSignedIn() && isOwner(userId) && isValidId(scanId) && isValidScan(incoming());
+        allow delete: if isSignedIn() && isOwner(userId) && isValidId(scanId);
+      }
     }
 
     // Simple test connection rules
