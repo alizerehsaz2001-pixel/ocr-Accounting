@@ -3383,9 +3383,9 @@ export default function App() {
                         {/* Guide Navigation Sub-Tabs */}
                         <div className="flex items-center gap-1.5 p-1 rounded-lg bg-slate-100 dark:bg-slate-900" dir="rtl">
                           {[
-                            { id: "general", label: "اصول کلی استخراج" },
-                            { id: "bypass", label: "انتقال خودکار (Bypass)" },
-                            { id: "advanced", label: "تکنیک‌های حرفه‌ای" }
+                            { id: "general", label: "اصول کلی" },
+                            { id: "bypass", label: "انتقال خودکار" },
+                            { id: "advanced", label: "تکنیک‌ها" }
                           ].map((tab) => (
                             <button
                               key={tab.id}
@@ -3409,61 +3409,35 @@ export default function App() {
                         {/* Guide Content Area */}
                         <div className="text-right text-[11px] leading-relaxed" dir="rtl">
                           {activeGuideTab === "general" && (
-                            <div className="flex flex-col gap-2">
-                              <p className={`${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-                                سامانه هوش مصنوعی جمنی، ساختار اسناد حسابداری و فاکتورها را تحلیل کرده و آن‌ها را موازنه می‌کند:
-                              </p>
-                              <ul className="list-disc pr-4 space-y-1 text-slate-400 dark:text-slate-400 text-[10.5px]">
-                                <li>
-                                  <strong className={isDarkMode ? "text-slate-200" : "text-slate-700"}>تطابق حساب‌ها:</strong> فیلدهای بستانکار و بدهکار با تراز کل در انتهای سند صحت‌سنجی می‌شوند.
-                                </li>
-                                <li>
-                                  <strong className={isDarkMode ? "text-slate-200" : "text-slate-700"}>تفکیک اقلام:</strong> کدهای پیگیری، نام مشتری، مبالغ جزئی و ارزهای خارجی به دقت تفکیک می‌گردند.
-                                </li>
-                              </ul>
-                            </div>
+                            <p className={`${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                              موازنه خودکار بدهکار/بستانکار، تفکیک اقلام، کدهای پیگیری، و مالیات ارزش افزوده (VAT) توسط هسته پردازش هوشمند انجام می‌شود.
+                            </p>
                           )}
 
                           {activeGuideTab === "bypass" && (
-                            <div className="flex flex-col gap-2">
-                              <p className={`${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-                                با فعال‌سازی <span className="font-bold text-blue-400">انتقال مستقیم</span>، فرآیند تایید دستی حذف می‌شود:
-                              </p>
-                              <ul className="list-disc pr-4 space-y-1 text-slate-400 dark:text-slate-400 text-[10.5px]">
-                                <li>خروجی‌های ساختاریافته فورا پس از استخراج به تب خام JSON فرستاده می‌شوند.</li>
-                                <li>نیاز به بررسی تک‌تک تیک‌های سبز نبوده و برای واردات دسته‌ای اسناد مالی فوق‌العاده کاربردی است.</li>
-                              </ul>
-                            </div>
+                            <p className={`${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                              با فعال‌سازی <span className="font-bold text-blue-400">انتقال مستقیم</span>، فرآیند تایید دستی حذف شده و اسناد بلافاصله به صورت ساختاریافته به تب JSON و دیتابیس ابری ارسال می‌شوند.
+                            </p>
                           )}
 
                           {activeGuideTab === "advanced" && (
-                            <div className="flex flex-col gap-2">
-                              <p className={`${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-                                نحوه بهبود نتایج استخراج با پرامپت‌های تخصصی:
-                              </p>
-                              <ul className="list-disc pr-4 space-y-1 text-slate-400 dark:text-slate-400 text-[10.5px]">
-                                <li>
-                                  <strong className={isDarkMode ? "text-slate-200" : "text-slate-700"}>تصحیح مقادیر دست‌نویس:</strong> مدل <span className="text-purple-400 font-bold">Pro</span> توانایی ویژه‌ای در کشف ارقام مخدوش فاکتورهای فیزیکی دارد.
-                                </li>
-                                <li>
-                                  <strong className={isDarkMode ? "text-slate-200" : "text-slate-700"}>افزودن فیلد دلخواه:</strong> در گفتگو بنویسید <span className="font-mono text-blue-500 bg-blue-500/5 px-1 py-0.5 rounded text-[9.5px]">«یک ستون به نام شماره پیگیری اضافه کن»</span> تا خروجی JSON فورا با ساختار درخواستی همگام شود.
-                                </li>
-                              </ul>
-                            </div>
+                            <p className={`${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                              برای بهبود نتایج فاکتورهای ناخوانا یا اضافه کردن فیلدهای دلخواه، در گفتگو درخواست خود را بنویسید (مثال: «یک ستون شماره پیگیری اضافه کن»).
+                            </p>
                           )}
                         </div>
 
                         {/* Interactive Preset Prompts for instant injection */}
                         <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/60" dir="rtl">
                           <span className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                            الگوهای سریع آماده‌سازی سند (برای اعمال کلیک کنید):
+                            الگوهای آماده گفتگو (بارگذاری با کلیک):
                           </span>
                           <div className="flex flex-wrap gap-1.5">
                             {[
-                              { label: "🧾 فاکتور خرید", text: "این یک فاکتور خرید رسمی است؛ اقلام فاکتور، کد کالا، تعداد، مبلغ واحد و تخفیف‌ها را به طور دقیق در ساختار فیلدها استخراج کن." },
-                              { label: "💳 رسید بانکی", text: "این یک رسید پرداخت مالی است؛ شماره پیگیری، تاریخ دقیق، نام بانک فرستنده و گیرنده، شماره کارت و مبلغ کل را تفکیک کن." },
-                              { label: "✍️ سند دست‌نویس", text: "این یک فاکتور یا برگه حسابداری دست‌نویس است. با دقت بالایی فیلدهای متنی و ارقامی که ممکن است ناخوانا باشند را پردازش کرده و تطبیق بده." },
-                              { label: "🌐 فاکتور ارزی", text: "این فاکتور دارای مبادلات ارزی است. دقت کن که ستون نوع ارز و مبالغ معادل دقیقاً طبق واحد پول درج شده ثبت شوند." }
+                              { label: "🧾 فاکتور خرید", text: "این یک فاکتور خرید رسمی است؛ اقلام فاکتور، تعداد، مبلغ واحد و تخفیف‌ها را استخراج کن." },
+                              { label: "💳 رسید بانکی", text: "این یک رسید پرداخت مالی است؛ شماره پیگیری، تاریخ، بانک مبدا/مقصد و مبلغ کل را تفکیک کن." },
+                              { label: "✍️ سند دست‌نویس", text: "این یک برگه حسابداری دست‌نویس است؛ با دقت بالا فیلدهای عددی ناخوانا را پردازش کن." },
+                              { label: "🌐 فاکتور ارزی", text: "این فاکتور دارای مبادلات ارزی است؛ ستون نوع ارز و مبالغ معادل را بر اساس واحد ارز ثبت کن." }
                             ].map((preset, idx) => (
                               <button
                                 key={idx}
