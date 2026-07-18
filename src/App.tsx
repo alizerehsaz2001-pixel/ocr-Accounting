@@ -2690,64 +2690,95 @@ export default function App() {
       )}
 
       {/* Right Sidebar - ERP Style */}
-      <aside className={`w-60 flex-shrink-0 flex flex-col select-none border-l transition-all duration-300 ${
+      <aside className={`w-64 flex-shrink-0 flex flex-col select-none border-l transition-all duration-300 ${
         isDarkMode 
-          ? "bg-[#090D16] border-slate-900" 
-          : "bg-slate-900 border-slate-950 text-slate-100"
+          ? "bg-gradient-to-b from-[#090E17] to-[#04070B] border-slate-900/80 text-slate-100" 
+          : "bg-gradient-to-b from-slate-50 to-slate-100/90 border-slate-200 text-slate-800"
       }`}>
-        <header className="p-4 flex items-center justify-between border-b border-slate-800/80">
-           <div className="flex items-center gap-3">
-             <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-[0_2px_8px_rgba(59,130,246,0.25)]">
-               AI
+        <header className={`p-4 flex items-center justify-between border-b transition-colors ${
+          isDarkMode ? "border-slate-800/60" : "border-slate-200"
+        }`}>
+           <div className="flex items-center gap-2.5">
+             <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 via-indigo-650 to-indigo-600 rounded-xl flex items-center justify-center text-white font-extrabold shadow-[0_2px_10px_rgba(59,130,246,0.3)] relative group overflow-hidden">
+               <span className="relative z-10 text-xs tracking-wider">AI</span>
+               <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
              </div>
-             <span className="text-white font-black text-sm tracking-tight" dir="ltr">ocr Accounting</span>
+             <div className="flex flex-col text-right">
+               <span className={`font-black text-xs tracking-tight uppercase ${isDarkMode ? "text-white" : "text-slate-900"}`} dir="ltr">ocr Accounting</span>
+               <span className="text-[8px] font-bold text-emerald-500 flex items-center gap-1">
+                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
+                 سامانه فعال است
+               </span>
+             </div>
            </div>
            <ThemeSwitcher isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />
         </header>
 
         <nav className="flex-1 py-4 space-y-1 overflow-y-auto">
-          <div className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-            دستورات و ابزارها
+          <div className={`px-4 py-2 text-[9px] font-black uppercase tracking-wider flex items-center justify-between ${
+            isDarkMode ? "text-slate-500" : "text-slate-400"
+          }`}>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1 h-3 rounded-full bg-indigo-500" />
+              دستورات و ابزارها
+            </span>
           </div>
           
           <button
             onClick={() => setShowOnboarding(true)}
-            className={`w-full flex items-center px-4 py-2.5 transition-all text-right ${
+            className={`w-full flex items-center px-4 py-2 transition-all duration-200 text-right ${
               showOnboarding 
-                ? "bg-blue-600/15 text-blue-400 border-r-4 border-blue-500 font-bold" 
-                : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
+                ? isDarkMode 
+                  ? "bg-blue-500/10 text-blue-400 border-r-2 border-blue-500 font-bold" 
+                  : "bg-blue-50 text-blue-600 border-r-2 border-blue-600 font-bold" 
+                : isDarkMode 
+                  ? "text-slate-400 hover:bg-slate-800/40 hover:text-white" 
+                  : "text-slate-600 hover:bg-slate-200/50 hover:text-slate-900"
             }`}
           >
-            <HelpCircle className="h-4 w-4 ml-2.5 shrink-0 text-blue-450" />
-            <span className="text-xs">راهنمای هوشمند</span>
+            <HelpCircle className={`h-4 w-4 ml-2.5 shrink-0 transition-colors ${showOnboarding ? "text-blue-500" : isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
+            <span className="text-[11.5px]">راهنمای هوشمند سیستم</span>
           </button>
 
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
-            className={`w-full flex items-center px-4 py-2.5 transition-all text-right ${
+            className={`w-full flex items-center px-4 py-2 transition-all duration-200 text-right ${
               isChatOpen 
-                ? "bg-indigo-600/15 text-indigo-400 border-r-4 border-indigo-500 font-bold" 
-                : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
+                ? isDarkMode 
+                  ? "bg-indigo-500/10 text-indigo-400 border-r-2 border-indigo-500 font-bold" 
+                  : "bg-indigo-50 text-indigo-600 border-r-2 border-indigo-600 font-bold"
+                : isDarkMode 
+                  ? "text-slate-400 hover:bg-slate-800/40 hover:text-white" 
+                  : "text-slate-600 hover:bg-slate-200/50 hover:text-slate-900"
             }`}
           >
-            <Headphones className="h-4 w-4 ml-2.5 shrink-0 text-indigo-400" />
-            <span className="text-xs">پشتیبان آنلاین مهرآیین</span>
-            <span className="mr-auto w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <Headphones className={`h-4 w-4 ml-2.5 shrink-0 transition-colors ${isChatOpen ? "text-indigo-550" : isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
+            <span className="text-[11.5px]">پشتیبان آنلاین مهرآیین</span>
+            <span className="mr-auto w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
           </button>
 
           {activeFile && (
             <button
               onClick={clearCurrentFile}
-              className="w-full flex items-center px-4 py-2.5 text-rose-400 hover:bg-rose-950/20 hover:text-rose-300 transition-all text-right"
+              className={`w-full flex items-center px-4 py-2 transition-all duration-200 text-right ${
+                isDarkMode 
+                  ? "text-rose-450 hover:bg-rose-950/20 hover:text-rose-400" 
+                  : "text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+              }`}
             >
-              <Trash2 className="h-4 w-4 ml-2.5 shrink-0 text-rose-400/80" />
-              <span className="text-xs">حذف داده و پرونده فعلی</span>
+              <Trash2 className="h-4 w-4 ml-2.5 shrink-0 opacity-85" />
+              <span className="text-[11.5px]">حذف داده و پرونده فعلی</span>
             </button>
           )}
 
           {/* ERP Modules */}
-          <div className="px-4 pt-4 pb-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-t border-slate-800/80 mt-4">
-            ماژول‌های هوشمند ERP
+          <div className={`px-4 pt-4 pb-2 text-[9px] font-black uppercase tracking-wider flex items-center justify-between border-t mt-4 ${
+            isDarkMode ? "text-slate-500 border-slate-800/60" : "text-slate-400 border-slate-200"
+          }`}>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1 h-3 rounded-full bg-purple-500" />
+              ماژول‌های هوشمند ERP
+            </span>
           </div>
           <div className="space-y-1 px-2 max-h-[280px] overflow-y-auto">
             {ERP_MODULES.map((module) => {
@@ -2767,17 +2798,21 @@ export default function App() {
                   whileHover={{ scale: 1.015 }}
                   whileTap={{ scale: 0.985 }}
                   animate={isActive ? {
-                    backgroundColor: "rgba(99, 102, 241, 0.12)",
-                    borderColor: "rgba(99, 102, 241, 0.35)",
+                    backgroundColor: isDarkMode ? "rgba(99, 102, 241, 0.12)" : "rgba(79, 70, 229, 0.08)",
+                    borderColor: isDarkMode ? "rgba(99, 102, 241, 0.35)" : "rgba(79, 70, 229, 0.25)",
                   } : {
-                    backgroundColor: "rgba(99, 102, 241, 0)",
-                    borderColor: "rgba(0,0,0,0)",
+                    backgroundColor: "rgba(0, 0, 0, 0)",
+                    borderColor: "rgba(0, 0, 0, 0)",
                   }}
-                  transition={{ duration: 0.25, ease: "easeInOut" }}
-                  className={`relative w-full flex items-center justify-between px-2.5 py-2.5 rounded-lg border text-right group transition-all duration-300 ${
+                  transition={{ duration: 0.2 }}
+                  className={`relative w-full flex items-center justify-between px-3 py-2 rounded-xl border text-right group transition-all duration-200 ${
                     isActive
-                      ? "text-indigo-300 ring-1 ring-indigo-500/10 shadow-[0_0_12px_rgba(99,102,241,0.12)] font-semibold"
-                      : "border-transparent text-slate-400 hover:bg-slate-800/40 hover:text-white"
+                      ? isDarkMode 
+                        ? "text-indigo-300 ring-1 ring-indigo-500/10 shadow-[0_0_12px_rgba(99,102,241,0.08)] font-bold"
+                        : "text-indigo-700 ring-1 ring-indigo-600/5 shadow-[0_0_12px_rgba(79,70,229,0.05)] font-bold"
+                      : isDarkMode
+                        ? "border-transparent text-slate-400 hover:bg-slate-800/40 hover:text-white"
+                        : "border-transparent text-slate-600 hover:bg-slate-200/40 hover:text-slate-900"
                   }`}
                 >
                   {/* Subtle Tooltip */}
@@ -2789,23 +2824,31 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <IconComponent className={`h-3.5 w-3.5 shrink-0 transition-colors ${isActive ? "text-indigo-450" : "text-slate-500 group-hover:text-indigo-400"}`} />
-                    <span className={`text-[11px] truncate leading-normal transition-colors ${isActive ? "text-slate-100 font-bold" : "group-hover:text-white"}`} title={module.name}>
+                    <IconComponent className={`h-4 w-4 shrink-0 transition-colors ${isActive ? "text-indigo-500" : isDarkMode ? "text-slate-500 group-hover:text-indigo-400" : "text-slate-400 group-hover:text-indigo-600"}`} />
+                    <span className={`text-[11px] truncate leading-normal transition-colors ${isActive ? isDarkMode ? "text-slate-100" : "text-slate-900" : "group-hover:text-slate-900 dark:group-hover:text-white"}`} title={module.name}>
                       {module.name}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 ml-1">
                     {module.isLive ? (
-                      <span className={`text-[8px] border px-1.5 py-0.5 rounded transition-all font-bold bg-emerald-500/15 text-emerald-400 border-emerald-500/35 shadow-[0_0_8px_rgba(16,185,129,0.25)]`}>
+                      <span className={`text-[8.5px] border px-1.5 py-0.5 rounded transition-all font-bold ${
+                        isDarkMode
+                          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/35 shadow-[0_0_8px_rgba(16,185,129,0.15)]"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-250 shadow-[0_0_8px_rgba(16,185,129,0.05)]"
+                      }`}>
                         فعال
                       </span>
                     ) : (
                       <>
                         <Construction className={`h-3.5 w-3.5 text-amber-500 transition-all duration-300 ${isActive ? "opacity-100 animate-bounce" : "opacity-0 group-hover:opacity-100"}`} />
-                        <span className={`text-[8px] border px-1 py-0.5 rounded transition-all font-bold ${
+                        <span className={`text-[8.5px] border px-1 py-0.5 rounded transition-all font-bold ${
                           isActive 
-                            ? "bg-amber-500/20 text-amber-400 border-amber-500/45 shadow-[0_0_8px_rgba(245,158,11,0.25)] animate-pulse" 
-                            : "bg-slate-800/80 text-amber-500/90 border-amber-500/20 scale-90 group-hover:scale-100"
+                            ? isDarkMode
+                              ? "bg-amber-500/20 text-amber-400 border-amber-500/45 shadow-[0_0_8px_rgba(245,158,11,0.15)] animate-pulse" 
+                              : "bg-amber-50 text-amber-700 border-amber-250 shadow-[0_0_8px_rgba(245,158,11,0.05)] animate-pulse"
+                            : isDarkMode
+                              ? "bg-slate-800/85 text-amber-500/90 border-amber-500/20 scale-90 group-hover:scale-100"
+                              : "bg-slate-150 text-slate-500 border-slate-250 scale-90 group-hover:scale-100"
                         }`}>
                           بزودی
                         </span>
@@ -2818,9 +2861,14 @@ export default function App() {
           </div>
 
           {/* Recent successful extractions */}
-          <div className="px-4 pt-6 pb-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-t border-slate-800/80 mt-4 flex items-center justify-between">
-            <span>تاریخچه اسکن‌های اخیر</span>
-            <History className="h-3.5 w-3.5 text-slate-500" />
+          <div className={`px-4 pt-5 pb-2 text-[9px] font-black uppercase tracking-wider flex items-center justify-between border-t mt-4 ${
+            isDarkMode ? "text-slate-500 border-slate-800/60" : "text-slate-400 border-slate-200"
+          }`}>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1 h-3 rounded-full bg-emerald-500" />
+              تاریخچه اسکن‌های اخیر
+            </span>
+            <History className="h-3.5 w-3.5 opacity-60" />
           </div>
 
           {/* Search & Filters for History */}
@@ -2828,13 +2876,17 @@ export default function App() {
             <div className="px-4 mb-3 space-y-2">
               {/* Search input with search icon */}
               <div className="relative flex items-center">
-                <Search className="absolute right-2.5 h-3.5 w-3.5 text-slate-500 pointer-events-none" />
+                <Search className={`absolute right-2.5 h-3.5 w-3.5 pointer-events-none ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
                 <input
                   type="text"
                   placeholder="جستجو در نام یا نوع سند..."
                   value={historySearchQuery}
                   onChange={(e) => setHistorySearchQuery(e.target.value)}
-                  className="w-full bg-slate-900/60 border border-slate-800/80 rounded-lg py-1.5 pr-8 pl-6 text-[10px] text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-colors text-right"
+                  className={`w-full border rounded-lg py-1.5 pr-8 pl-6 text-[10px] transition-colors text-right outline-none focus:ring-1 focus:ring-indigo-500/50 ${
+                    isDarkMode 
+                      ? "bg-slate-950/40 border-slate-850 text-slate-200 placeholder-slate-600 focus:border-indigo-500/40" 
+                      : "bg-white border-slate-250 text-slate-800 placeholder-slate-400 focus:border-indigo-400"
+                  }`}
                   dir="rtl"
                 />
                 {historySearchQuery && (
@@ -2854,7 +2906,11 @@ export default function App() {
                   <select
                     value={historyDocType}
                     onChange={(e) => setHistoryDocType(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800/80 rounded-lg px-1.5 py-1 text-[9.5px] text-slate-300 focus:outline-none focus:border-indigo-500/50 transition-colors text-right cursor-pointer"
+                    className={`w-full border rounded-lg px-1.5 py-1 text-[9.5px] transition-colors text-right cursor-pointer outline-none ${
+                      isDarkMode 
+                        ? "bg-slate-950/60 border-slate-850 text-slate-300 focus:border-indigo-500/40" 
+                        : "bg-white border-slate-250 text-slate-700 focus:border-indigo-450"
+                    }`}
                     dir="rtl"
                   >
                     <option value="all">همه نوع سند</option>
@@ -2871,14 +2927,18 @@ export default function App() {
                   <select
                     value={historyDateRange}
                     onChange={(e) => setHistoryDateRange(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800/80 rounded-lg px-1.5 py-1 text-[9.5px] text-slate-300 focus:outline-none focus:border-indigo-500/50 transition-colors text-right cursor-pointer"
+                    className={`w-full border rounded-lg px-1.5 py-1 text-[9.5px] transition-colors text-right cursor-pointer outline-none ${
+                      isDarkMode 
+                        ? "bg-slate-950/60 border-slate-850 text-slate-300 focus:border-indigo-500/40" 
+                        : "bg-white border-slate-250 text-slate-700 focus:border-indigo-450"
+                    }`}
                     dir="rtl"
                   >
                     <option value="all">همه زمان‌ها</option>
                     <option value="today">امروز</option>
                     <option value="yesterday">دیروز</option>
                     <option value="week">۷ روز اخیر</option>
-                    <option value="month">۳۰ روز اخیر</option>
+                    <option value="month">۳0 روز اخیر</option>
                   </select>
                 </div>
               </div>
@@ -2886,7 +2946,7 @@ export default function App() {
               {/* Reset Active Filters badge if any are filtered */}
               {(historySearchQuery !== "" || historyDocType !== "all" || historyDateRange !== "all") && (
                 <div className="flex justify-between items-center text-[9px] text-indigo-400 font-medium px-0.5">
-                  <span className="text-slate-500">
+                  <span className={isDarkMode ? "text-slate-500" : "text-slate-400"}>
                     یافت شده: {filteredPreviousScans.length} مورد
                   </span>
                   <button
@@ -2907,7 +2967,9 @@ export default function App() {
 
           <div className="px-2 space-y-1 overflow-y-auto max-h-[220px]">
             {previousScans.length === 0 ? (
-              <div className="px-3 py-4 text-center rounded-xl border border-dashed border-slate-800/40 text-[10px] text-slate-500 italic">
+              <div className={`px-3 py-4 text-center rounded-xl border border-dashed text-[10px] italic ${
+                isDarkMode ? "border-slate-800/60 text-slate-500" : "border-slate-250 text-slate-400"
+              }`}>
                 سندی اخیراً اسکن نشده است.
               </div>
             ) : filteredPreviousScans.length > 0 ? (
@@ -2917,32 +2979,54 @@ export default function App() {
                   hour: "2-digit",
                   minute: "2-digit",
                 });
+                const isPdf = scan.file?.name?.toLowerCase().endsWith(".pdf") || scan.file?.preview?.startsWith("data:application/pdf");
                 return (
                   <motion.div
                     key={scan.id}
                     whileHover={{ x: -2 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => selectPreviousScan(scan)}
-                    className={`group relative flex items-center justify-between p-2 rounded-xl cursor-pointer transition select-none ${
+                    className={`group relative flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all duration-200 select-none border ${
                       isActive
-                        ? "bg-gradient-to-l from-blue-600/10 to-indigo-600/10 text-blue-300 border-r-4 border-blue-500 font-bold"
-                        : "text-slate-400 hover:bg-slate-800/40 hover:text-white"
+                        ? isDarkMode
+                          ? "bg-indigo-500/10 text-indigo-300 border-indigo-500/40 font-bold shadow-md shadow-indigo-500/2"
+                          : "bg-indigo-50 text-indigo-700 border-indigo-200/80 font-bold"
+                        : isDarkMode
+                          ? "border-transparent text-slate-400 hover:bg-slate-800/40 hover:text-white"
+                          : "border-transparent text-slate-600 hover:bg-slate-200/40 hover:text-slate-900"
                     }`}
                   >
-                    <div className="flex items-center gap-2 overflow-hidden min-w-0 flex-1">
-                      <FileText className={`h-3.5 w-3.5 shrink-0 ${isActive ? "text-blue-400" : "text-slate-500"}`} />
+                    <div className="flex items-center gap-2.5 overflow-hidden min-w-0 flex-1">
+                      {/* Thumbnail Container */}
+                      <div className="w-7 h-7 rounded-lg overflow-hidden bg-slate-950/20 border border-slate-800/45 flex items-center justify-center shrink-0 relative shadow-inner">
+                        {isPdf && scan.file?.preview ? (
+                          <PdfThumbnail base64={scan.file.preview.split(",")[1]} className="w-full h-full object-cover" isDarkMode={true} />
+                        ) : scan.file?.preview ? (
+                          <img src={scan.file.preview} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <FileText className={`h-4 w-4 shrink-0 ${isActive ? "text-indigo-400" : isDarkMode ? "text-slate-500" : "text-slate-450"}`} />
+                        )}
+                      </div>
+
                       <div className="flex flex-col text-right truncate min-w-0 flex-1">
-                        <span className="text-[11px] font-bold truncate leading-tight" title={scan.file.name}>
+                        <span className={`text-[11px] font-bold truncate leading-tight ${isActive ? isDarkMode ? "text-slate-100" : "text-slate-900" : ""}`} title={scan.file.name}>
                           {scan.file.name}
                         </span>
                         <div className="flex items-center justify-between gap-1 mt-1 font-mono text-[8.5px]">
                           <div className="flex gap-1.5 items-center text-slate-500">
-                            <span className="text-emerald-500 font-bold">{scan.transactions.length} ردیف</span>
+                            <span className="text-emerald-500 font-black flex items-center gap-0.5">
+                              <Database className="w-2.5 h-2.5" />
+                              <span>{scan.transactions.length} ردیف</span>
+                            </span>
                             <span>•</span>
                             <span>{timeStr}</span>
                           </div>
                           {scan.file.documentType && (
-                            <span className="bg-slate-800 text-indigo-400 border border-slate-700/60 rounded px-1 text-[8px] font-bold shrink-0 max-w-[70px] truncate" title={scan.file.documentType}>
+                            <span className={`border rounded px-1 text-[8px] font-bold shrink-0 max-w-[70px] truncate ${
+                              isDarkMode 
+                                ? "bg-slate-950/60 text-indigo-400 border-slate-850" 
+                                : "bg-slate-200/50 text-indigo-700 border-slate-300/40"
+                            }`} title={scan.file.documentType}>
                               {scan.file.documentType}
                             </span>
                           )}
@@ -2955,16 +3039,22 @@ export default function App() {
                         e.stopPropagation();
                         deletePreviousScan(scan.id);
                       }}
-                      className="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-700/60 rounded-lg transition opacity-0 group-hover:opacity-100 shrink-0 ml-1"
+                      className={`p-1 rounded-lg transition-opacity duration-250 opacity-0 group-hover:opacity-100 shrink-0 ml-1 hover:scale-105 ${
+                        isDarkMode
+                          ? "text-slate-500 hover:text-rose-400 hover:bg-slate-800"
+                          : "text-slate-450 hover:text-rose-600 hover:bg-slate-200"
+                      }`}
                       title="حذف از تاریخچه"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-3.5 w-3.5" />
                     </button>
                   </motion.div>
                 );
               })
             ) : (
-              <div className="px-3 py-4 text-center rounded-xl border border-dashed border-slate-800/40 text-[10px] text-slate-500">
+              <div className={`px-3 py-4 text-center rounded-xl border border-dashed text-[10px] ${
+                isDarkMode ? "border-slate-800/60 text-slate-500" : "border-slate-250 text-slate-400"
+              }`}>
                 <p className="mb-2">سندی با این مشخصات یافت نشد.</p>
                 <button
                   onClick={() => {
@@ -2972,7 +3062,11 @@ export default function App() {
                     setHistoryDocType("all");
                     setHistoryDateRange("all");
                   }}
-                  className="px-2 py-1 text-[9px] bg-slate-850 hover:bg-slate-800 hover:text-white text-slate-300 rounded transition"
+                  className={`px-2 py-1 text-[9px] rounded transition font-bold ${
+                    isDarkMode 
+                      ? "bg-slate-850 hover:bg-slate-800 hover:text-white text-slate-300" 
+                      : "bg-slate-200 hover:bg-slate-300 hover:text-slate-950 text-slate-700"
+                  }`}
                 >
                   پاک کردن فیلترها
                 </button>
@@ -2980,8 +3074,13 @@ export default function App() {
             )}
           </div>
 
-          <div className="px-4 pt-6 pb-2 text-[10px] font-black text-slate-500 uppercase tracking-widest border-t border-slate-800/80 mt-4">
-            تنظیم موتور هوش مصنوعی (مدل)
+          <div className={`px-4 pt-5 pb-2 text-[9px] font-black uppercase tracking-wider flex items-center justify-between border-t mt-4 ${
+            isDarkMode ? "text-slate-500 border-slate-800/60" : "text-slate-400 border-slate-200"
+          }`}>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1 h-3 rounded-full bg-amber-500" />
+              تنظیم موتور هوش مصنوعی (مدل)
+            </span>
           </div>
 
           <div className="px-3 py-1 space-y-2">
@@ -2993,7 +3092,7 @@ export default function App() {
                 tokenLimit: "سند تا ۲۵MB",
                 costPerRequest: "حدود ۱,۲۰۰ توکن",
                 desc: "پردازش فوق‌سریع و هوشمند فاکتورها.",
-                badgeClass: "bg-blue-500/20 text-blue-300",
+                badgeClass: isDarkMode ? "bg-blue-500/20 text-blue-300 border-blue-900/30" : "bg-blue-50 text-blue-700 border-blue-200",
               },
               {
                 id: "gemini-3.1-pro-preview",
@@ -3002,7 +3101,7 @@ export default function App() {
                 tokenLimit: "سند تا ۱۰۰MB",
                 costPerRequest: "حدود ۱,۸۰۰ توکن",
                 desc: "استدلال عمیق و مناسب دست‌خط نامنظم.",
-                badgeClass: "bg-purple-500/20 text-purple-300",
+                badgeClass: isDarkMode ? "bg-purple-500/20 text-purple-300 border-purple-900/30" : "bg-purple-50 text-purple-700 border-purple-200",
               },
             ].map((m) => {
               const quota = modelQuotas[m.id] || { limit: 100, used: 0, lastReset: Date.now() };
@@ -3023,39 +3122,56 @@ export default function App() {
                   onClick={() => {
                     if (!isExhausted) setSelectedModel(m.id);
                   }}
-                  className={`p-3 rounded-xl transition-all border text-right select-none ${
+                  className={`p-3.5 rounded-2xl transition-all border text-right select-none relative overflow-hidden ${
                     isExhausted
-                      ? "bg-rose-950/20 border-rose-900/40 cursor-not-allowed opacity-80"
+                      ? isDarkMode
+                        ? "bg-rose-950/15 border-rose-900/30 cursor-not-allowed opacity-80"
+                        : "bg-rose-50/50 border-rose-200 cursor-not-allowed opacity-80 text-rose-800"
                       : isSelected
-                      ? "bg-slate-800 border-blue-500 cursor-pointer text-white shadow-md shadow-blue-500/5"
-                      : "bg-slate-900/30 border-slate-800 cursor-pointer hover:bg-slate-800/40 text-slate-300"
+                      ? isDarkMode
+                        ? "bg-slate-900/80 border-blue-500 cursor-pointer text-white shadow-md shadow-blue-500/5 ring-1 ring-blue-500/20"
+                        : "bg-white border-blue-600 cursor-pointer text-slate-800 shadow-md shadow-blue-600/5 ring-1 ring-blue-600/15"
+                      : isDarkMode
+                      ? "bg-slate-950/20 border-slate-850 cursor-pointer hover:bg-slate-850/40 text-slate-300"
+                      : "bg-white/80 border-slate-200 cursor-pointer hover:bg-slate-50 text-slate-600 hover:text-slate-800 shadow-sm"
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-1 mb-1.5">
-                    <span className={`text-xs font-bold font-mono ${isExhausted ? "text-rose-400" : "text-slate-100"}`}>
+                  {/* Subtle active light reflection in card */}
+                  {isSelected && (
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-500/10 to-transparent rounded-full -mr-6 -mt-6 pointer-events-none" />
+                  )}
+
+                  <div className="flex items-center justify-between gap-1 mb-2">
+                    <span className={`text-[11.5px] font-black ${isExhausted ? "text-rose-400" : isDarkMode ? "text-slate-100" : "text-slate-900"}`}>
                       {m.name}
                     </span>
-                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${isExhausted ? "bg-rose-500/20 text-rose-300" : m.badgeClass}`}>
+                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border ${m.badgeClass}`}>
                       {isExhausted ? "پایان شارژ" : m.badge}
                     </span>
                   </div>
                   
-                  <p className={`text-[10px] leading-relaxed mb-2.5 ${isExhausted ? "text-rose-400/70" : "text-slate-400"}`}>
+                  <p className={`text-[10px] leading-relaxed mb-3 ${isExhausted ? "text-rose-400/70" : isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
                     {m.desc}
                   </p>
 
-                  <div className={`space-y-1.5 border-t pt-2 text-[9px] ${isExhausted ? "border-rose-900/40 text-rose-300/70" : "border-slate-800/80 text-slate-400"}`}>
-                    <div className={`flex justify-between items-center ${isExhausted ? "" : "text-slate-300"}`}>
+                  <div className={`space-y-1.5 border-t pt-2.5 text-[9px] ${
+                    isExhausted 
+                      ? "border-rose-900/40 text-rose-300/70" 
+                      : isDarkMode 
+                        ? "border-slate-800/80 text-slate-400" 
+                        : "border-slate-150 text-slate-500"
+                  }`}>
+                    <div className={`flex justify-between items-center ${isExhausted ? "" : isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
                       <span className="font-bold text-[8px] opacity-80">مصرف تخمینی هر اسکن:</span>
-                      <span className={`font-mono ${isExhausted ? "text-rose-400" : "text-blue-400"}`} dir="ltr">{m.costPerRequest}</span>
+                      <span className={`font-mono ${isExhausted ? "text-rose-400" : isDarkMode ? "text-blue-400" : "text-blue-600 font-bold"}`} dir="ltr">{m.costPerRequest}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className={isExhausted ? "" : "text-slate-500"}>حداکثر ظرفیت:</span>
-                      <span className={`font-medium ${isExhausted ? "" : "text-slate-300"}`}>{m.tokenLimit}</span>
+                      <span className={isExhausted ? "" : "opacity-80"}>حداکثر ظرفیت:</span>
+                      <span className={`font-medium ${isExhausted ? "" : isDarkMode ? "text-slate-300" : "text-slate-700"}`}>{m.tokenLimit}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className={`font-bold ${isExhausted ? "" : "text-slate-500"}`}>سهمیه روزانه:</span>
-                      <span className="font-mono font-medium" dir="ltr">{quota.limit.toLocaleString("fa-IR")} بار</span>
+                      <span className={`font-bold ${isExhausted ? "" : "opacity-80"}`}>سهمیه روزانه:</span>
+                      <span className="font-mono font-bold" dir="ltr">{quota.limit.toLocaleString("fa-IR")} بار</span>
                     </div>
                     
                     {isExhausted ? (
@@ -3065,14 +3181,14 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-500">سهم باقی‌مانده:</span>
-                        <span className="font-mono font-bold text-emerald-400" dir="ltr">{remaining.toLocaleString("fa-IR")} بار</span>
+                        <span className="opacity-85">سهم باقی‌مانده:</span>
+                        <span className="font-mono font-bold text-emerald-500" dir="ltr">{remaining.toLocaleString("fa-IR")} بار</span>
                       </div>
                     )}
                   </div>
 
                   {/* Visual limit bar graph */}
-                  <div className={`w-full rounded-full h-1 mt-2 overflow-hidden ${isExhausted ? "bg-rose-950" : "bg-slate-800"}`}>
+                  <div className={`w-full rounded-full h-1 mt-2.5 overflow-hidden ${isExhausted ? "bg-rose-950" : isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
                     <div
                       className={`h-full transition-all duration-300 ${
                         percentUsed >= 100 ? "bg-rose-600" : percentUsed > 85 ? "bg-rose-500" : percentUsed > 50 ? "bg-amber-400" : "bg-blue-500"
@@ -3085,7 +3201,7 @@ export default function App() {
             })}
           </div>
 
-          <div className="px-3 py-1 mt-2 pb-6">
+          <div className="px-3 py-1 mt-3 pb-6">
             <button
               onClick={() => {
                 setModelQuotas({
@@ -3094,7 +3210,11 @@ export default function App() {
                 });
                 showNotification("سهمیه استفاده روزانه مدل‌ها ریست گردید.", "success");
               }}
-              className="w-full flex items-center justify-center gap-2 py-1.5 border border-dashed border-slate-700 hover:border-slate-500 text-slate-400 hover:text-slate-300 rounded-lg text-[10px] transition-colors"
+              className={`w-full flex items-center justify-center gap-2 py-2 border border-dashed rounded-xl text-[10px] transition-all cursor-pointer font-bold ${
+                isDarkMode 
+                  ? "border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-900/40" 
+                  : "border-slate-300 hover:border-slate-400 text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+              }`}
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>ریست محدودیت و ظرفیت‌ها</span>
