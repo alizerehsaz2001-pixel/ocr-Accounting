@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Activity, X, Search, Trash2, Download, Filter, Calendar } from "lucide-react";
+import { Activity, X, Search, Trash2, Download, Filter, Calendar, Info, CheckCircle, AlertTriangle, XCircle, Shield, User } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { AuditLogEntry } from "../types";
 
@@ -20,6 +20,7 @@ export default function AuditLogsModal({
 }: AuditLogsModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterAction, setFilterAction] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
 
   const uniqueActions = useMemo(() => {
     const actions = new Set(auditLogs.map(log => log.action));
@@ -29,22 +30,27 @@ export default function AuditLogsModal({
   const filteredLogs = useMemo(() => {
     return auditLogs.filter(log => {
       const matchesSearch = log.action.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            log.details.toLowerCase().includes(searchQuery.toLowerCase());
+                            log.details.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (log.user?.name && log.user.name.toLowerCase().includes(searchQuery.toLowerCase()));
       const matchesAction = filterAction === "all" || log.action === filterAction;
+      const matchesType = filterType === "all" || (log.type || 'info') === filterType;
       
-      return matchesSearch && matchesAction;
+      return matchesSearch && matchesAction && matchesType;
     });
-  }, [auditLogs, searchQuery, filterAction]);
+  }, [auditLogs, searchQuery, filterAction, filterType]);
 
   const handleExportCSV = () => {
     if (filteredLogs.length === 0) return;
     
     // Simple CSV export
-    const headers = ["ID", "Timestamp", "Action", "Details"];
+    const headers = ["ID", "Timestamp", "Type", "Action", "User", "Role", "Details"];
     const rows = filteredLogs.map(log => [
       log.id,
       new Date(log.timestamp).toLocaleString("fa-IR"),
+      log.type || "info",
       `"${log.action.replace(/"/g, '""')}"`,
+      `"${(log.user?.name || "سیستم").replace(/"/g, '""')}"`,
+      `"${(log.user?.role || "system").replace(/"/g, '""')}"`,
       `"${log.details.replace(/"/g, '""')}"`
     ]);
     
@@ -57,6 +63,52 @@ export default function AuditLogsModal({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const getTypeStyles = (type?: string) => {
+    switch (type) {
+      case 'success':
+        return {
+          icon: <CheckCircle className="w-3.5 h-3.5" />,
+          light: "bg-emerald-100 text-emerald-600 ring-1 ring-emerald-200 border-slate-50",
+          dark: "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/50 border-slate-900",
+          titleLight: "text-emerald-700",
+          titleDark: "text-emerald-400"
+        };
+      case 'warning':
+        return {
+          icon: <AlertTriangle className="w-3.5 h-3.5" />,
+          light: "bg-amber-100 text-amber-600 ring-1 ring-amber-200 border-slate-50",
+          dark: "bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/50 border-slate-900",
+          titleLight: "text-amber-700",
+          titleDark: "text-amber-400"
+        };
+      case 'error':
+        return {
+          icon: <XCircle className="w-3.5 h-3.5" />,
+          light: "bg-red-100 text-red-600 ring-1 ring-red-200 border-slate-50",
+          dark: "bg-red-500/20 text-red-400 ring-1 ring-red-500/50 border-slate-900",
+          titleLight: "text-red-700",
+          titleDark: "text-red-400"
+        };
+      case 'auth':
+        return {
+          icon: <Shield className="w-3.5 h-3.5" />,
+          light: "bg-purple-100 text-purple-600 ring-1 ring-purple-200 border-slate-50",
+          dark: "bg-purple-500/20 text-purple-400 ring-1 ring-purple-500/50 border-slate-900",
+          titleLight: "text-purple-700",
+          titleDark: "text-purple-400"
+        };
+      case 'info':
+      default:
+        return {
+          icon: <Info className="w-3.5 h-3.5" />,
+          light: "bg-indigo-100 text-indigo-600 ring-1 ring-indigo-200 border-slate-50",
+          dark: "bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/50 border-slate-900",
+          titleLight: "text-indigo-700",
+          titleDark: "text-indigo-400"
+        };
+    }
   };
 
   if (!isOpen) return null;
@@ -156,22 +208,44 @@ export default function AuditLogsModal({
               />
             </div>
             
-            <div className="relative sm:w-64">
-              <Filter className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
-              <select 
-                value={filterAction}
-                onChange={(e) => setFilterAction(e.target.value)}
-                className={`w-full text-sm py-2 pr-9 pl-4 rounded-lg border outline-none appearance-none transition-all ${
-                  isDarkMode 
-                    ? "bg-slate-900 border-slate-700 text-white focus:border-indigo-500" 
-                    : "bg-white border-slate-300 text-slate-900 focus:border-indigo-500"
-                }`}
-              >
-                <option value="all">همه رویدادها</option>
-                {uniqueActions.map(action => (
-                  <option key={action} value={action}>{action}</option>
-                ))}
-              </select>
+            <div className="flex gap-3 sm:w-80">
+              <div className="relative flex-1">
+                <Filter className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
+                <select 
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className={`w-full text-sm py-2 pr-9 pl-2 rounded-lg border outline-none appearance-none transition-all ${
+                    isDarkMode 
+                      ? "bg-slate-900 border-slate-700 text-white focus:border-indigo-500" 
+                      : "bg-white border-slate-300 text-slate-900 focus:border-indigo-500"
+                  }`}
+                >
+                  <option value="all">همه انواع</option>
+                  <option value="info">اطلاعات</option>
+                  <option value="success">موفق</option>
+                  <option value="warning">هشدار</option>
+                  <option value="error">خطا</option>
+                  <option value="auth">امنیتی</option>
+                </select>
+              </div>
+
+              <div className="relative flex-1">
+                <Filter className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
+                <select 
+                  value={filterAction}
+                  onChange={(e) => setFilterAction(e.target.value)}
+                  className={`w-full text-sm py-2 pr-9 pl-2 rounded-lg border outline-none appearance-none transition-all ${
+                    isDarkMode 
+                      ? "bg-slate-900 border-slate-700 text-white focus:border-indigo-500" 
+                      : "bg-white border-slate-300 text-slate-900 focus:border-indigo-500"
+                  }`}
+                >
+                  <option value="all">همه رویدادها</option>
+                  {uniqueActions.map(action => (
+                    <option key={action} value={action}>{action}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -194,7 +268,8 @@ export default function AuditLogsModal({
                   {filteredLogs.map((log) => {
                      const d = new Date(log.timestamp);
                      const timeStr = d.toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                     const dateStr = d.toLocaleDateString("fa-IR", { year: 'numeric', month: 'long', day: 'numeric' });
+                     const dateStr = d.toLocaleDateString("fa-IR", { year: "numeric", month: "long", day: "numeric" });
+                     const styles = getTypeStyles(log.type);
                      
                      return (
                        <motion.div 
@@ -204,12 +279,8 @@ export default function AuditLogsModal({
                          exit={{ opacity: 0, scale: 0.95 }}
                          className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active"
                        >
-                          <div className={`flex items-center justify-center w-8 h-8 rounded-full border-4 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10 ${
-                            isDarkMode 
-                              ? "border-slate-900 bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500/50" 
-                              : "border-slate-50 bg-indigo-100 text-indigo-600 ring-1 ring-indigo-200"
-                          }`}>
-                             <Activity className="w-3.5 h-3.5" />
+                          <div className={`flex items-center justify-center w-8 h-8 rounded-full border-4 shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm z-10 ${isDarkMode ? styles.dark : styles.light}`}>
+                             {styles.icon}
                           </div>
                           
                           <div className={`w-[calc(100%-3rem)] md:w-[calc(50%-2rem)] p-4 rounded-xl border shadow-sm transition-all hover:shadow-md hover:-translate-y-1 ${
@@ -218,7 +289,7 @@ export default function AuditLogsModal({
                               : "border-slate-200 bg-white"
                           }`}>
                              <div className="flex flex-wrap items-start justify-between gap-2 mb-2 border-b pb-2 border-slate-200/50 dark:border-slate-700/50">
-                                <h4 className={`font-bold text-sm ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}>
+                                <h4 className={`font-bold text-sm ${isDarkMode ? styles.titleDark : styles.titleLight}`}>
                                   {log.action}
                                 </h4>
                                 <div className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400">
@@ -226,9 +297,23 @@ export default function AuditLogsModal({
                                   <time dir="ltr">{dateStr} {timeStr}</time>
                                 </div>
                              </div>
-                             <p className={`text-xs leading-loose ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                             
+                             <p className={`text-xs leading-loose mb-3 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
                                {log.details}
                              </p>
+                             
+                             <div className={`flex items-center justify-between pt-2 border-t text-[10px] ${isDarkMode ? "border-slate-700/50" : "border-slate-100"}`}>
+                               <div className={`flex items-center gap-1.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                 <User className="w-3 h-3" />
+                                 <span>{log.user?.name || 'سیستم'}</span>
+                                 <span className={`px-1.5 py-0.5 rounded opacity-80 ${isDarkMode ? "bg-slate-700" : "bg-slate-200"}`}>
+                                   {log.user?.role === 'admin' ? 'مدیر' : log.user?.role === 'user' ? 'کاربر' : 'سیستم'}
+                                 </span>
+                               </div>
+                               <span className={`font-mono text-[9px] uppercase tracking-wider ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+                                 ID: {log.id}
+                               </span>
+                             </div>
                           </div>
                        </motion.div>
                      );

@@ -788,12 +788,17 @@ export default function App() {
     localStorage.setItem("document_audit_logs", JSON.stringify(auditLogs));
   }, [auditLogs]);
 
-  const logEvent = (action: string, details: string) => {
+  const logEvent = (action: string, details: string, type: 'info' | 'success' | 'warning' | 'error' | 'auth' = 'info') => {
     const newLog: import('./types').AuditLogEntry = {
       id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
       timestamp: new Date().toISOString(),
       action,
-      details
+      details,
+      type,
+      user: currentUser ? {
+        name: currentUser.name || currentUser.firstName + ' ' + currentUser.lastName,
+        role: currentUser.role
+      } : undefined
     };
     setAuditLogs(prev => [newLog, ...prev]);
   };
@@ -956,7 +961,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    logEvent("ورود به سامانه", "کاربر وارد صفحه اصلی سامانه شد و جلسه شروع شد.");
+    logEvent("ورود به سامانه", "کاربر وارد صفحه اصلی سامانه شد و جلسه شروع شد.", "auth");
   }, []);
   const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
   const [editingRowData, setEditingRowData] = useState<TransactionItem | null>(null);
@@ -2088,12 +2093,12 @@ export default function App() {
         ].slice(0, 50);
       });
 
-      logEvent("پایان موفقیت‌آمیز استخراج", `هوش مصنوعی اطلاعات سند ${fileName} را استخراج کرد. (تعداد ${extractedItems.length} ردیف)`);
+      logEvent("پایان موفقیت‌آمیز استخراج", `هوش مصنوعی اطلاعات سند ${fileName} را استخراج کرد. (تعداد ${extractedItems.length} ردیف)`, "success");
       showNotification("داده‌های مالی با موفقیت استخراج و خروجی صادر شد!", "success");
     } catch (err: any) {
       console.error(err);
       const errorMsg = err.message || "برقراری ارتباط با مدل هوش مصنوعی امکان‌پذیر نبود.";
-      logEvent("خطا در پردازش هوش مصنوعی", `در زمان پردازش سند خطایی رخ داد: ${errorMsg}`);
+      logEvent("خطا در پردازش هوش مصنوعی", `در زمان پردازش سند خطایی رخ داد: ${errorMsg}`, "error");
       setActiveFile({
         ...newFile,
         status: "error",
@@ -2452,7 +2457,7 @@ export default function App() {
             console.error(e);
           }
           showNotification("ممیزی هوش مصنوعی کامل شد! مقادیر مالیاتی و مغایرت‌ها اصلاح شدند.", "success");
-          logEvent("پایان ممیزی هوش مصنوعی", "ممیز هوشمند مغایرت‌های ریاضی را با موفقیت برطرف کرد.");
+          logEvent("پایان ممیزی هوش مصنوعی", "ممیز هوشمند مغایرت‌های ریاضی را با موفقیت برطرف کرد.", "success");
         } else {
           throw new Error("داده‌ای معتبر دریافت نشد.");
         }
@@ -2567,7 +2572,7 @@ export default function App() {
   };
 
   const handleDeleteRow = (index: number) => {
-    logEvent("حذف ردیف", `کاربر ردیف شماره ${index + 1} را حذف کرد.`);
+    logEvent("حذف ردیف", `کاربر ردیف شماره ${index + 1} را حذف کرد.`, "warning");
     const updated = transactions.filter((_, i) => i !== index);
     setTransactions(updated);
     try {
@@ -4448,7 +4453,7 @@ export default function App() {
                               
                               XLSX.writeFile(workbook, `JSON-to-Excel-${new Date().toISOString().split('T')[0]}.xlsx`);
                               
-                              logEvent("تولید فایل اکسل", "کاربر اطلاعات استخراج شده را در قالب یک فایل اکسل دانلود کرد.");
+                              logEvent("تولید فایل اکسل", "کاربر اطلاعات استخراج شده را در قالب یک فایل اکسل دانلود کرد.", "success");
                               setNotification({ text: "فایل اکسل با موفقیت از JSON تولید شد.", type: "success" });
                               
                               setShowExcelSuccess(true);
@@ -8063,7 +8068,7 @@ export default function App() {
                     if (activeFile && selectedScanIds.includes(activeFile.id)) {
                       clearCurrentFile();
                     }
-                    logEvent("حذف دسته‌جمعی اسناد", `کاربر تعداد ${selectedScanIds.length} سند را به صورت گروهی حذف کرد.`);
+                    logEvent("حذف دسته‌جمعی اسناد", `کاربر تعداد ${selectedScanIds.length} سند را به صورت گروهی حذف کرد.`, "warning");
                     showNotification("اسناد انتخاب‌شده با موفقیت حذف گردیدند.", "success");
                     setSelectedScanIds([]);
                   }
@@ -8465,7 +8470,7 @@ export default function App() {
                                               if (selectedFolderFilter === folderName) {
                                                 setSelectedFolderFilter("all");
                                               }
-                                              logEvent("حذف پوشه", `کاربر پوشه «${folderName}» را حذف کرد.`);
+                                              logEvent("حذف پوشه", `کاربر پوشه «${folderName}» را حذف کرد.`, "warning");
                                               showNotification(`پوشه «${folderName}» حذف شد.`, "info");
                                             }
                                           }}
@@ -8937,7 +8942,7 @@ export default function App() {
                                         if (window.confirm(`آیا مطمئن هستید که می‌خواهید سند «${scan.file?.name}» را حذف کنید؟`)) {
                                           setPreviousScans(prev => prev.filter(s => s.id !== scan.id));
                                           if (activeFile?.id === scan.id) clearCurrentFile();
-                                          logEvent("حذف فاکتور", `کاربر فاکتور «${scan.file?.name}» را حذف نمود.`);
+                                          logEvent("حذف فاکتور", `کاربر فاکتور «${scan.file?.name}» را حذف نمود.`, "warning");
                                           showNotification("سند با موفقیت حذف شد.", "success");
                                         }
                                       }}

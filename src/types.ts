@@ -61,6 +61,11 @@ export interface AuditLogEntry {
   timestamp: string;
   action: string;
   details: string;
+  type?: 'info' | 'success' | 'warning' | 'error' | 'auth';
+  user?: {
+    name: string;
+    role: string;
+  };
 }
 
 export interface PreviousScan {
