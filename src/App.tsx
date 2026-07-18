@@ -91,6 +91,7 @@ import OnboardingModal from "./components/OnboardingModal";
 import OnboardingProfileModal from "./components/OnboardingProfileModal";
 import AuditLogsModal from "./components/AuditLogsModal";
 import LoginScreen from "./components/LoginScreen";
+import PdfThumbnail from "./components/PdfThumbnail";
 import { auth, db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
@@ -3248,7 +3249,7 @@ export default function App() {
                         isDarkMode ? "bg-slate-950/60 border-slate-800" : "bg-slate-50 border-slate-250/50"
                       }`}>
                         {pendingFile.mimeType === "application/pdf" ? (
-                          <FileText className="w-4 h-4 text-rose-500 shrink-0" />
+                          <PdfThumbnail base64={pendingFile.base64} className="w-5 h-5 rounded-md shrink-0 border border-slate-300/30" isDarkMode={isDarkMode} />
                         ) : (
                           <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 border border-slate-300/30">
                             <img 
@@ -3948,10 +3949,9 @@ export default function App() {
                            <span className="text-[11px] opacity-70">سند دیجیتال (بدون تصویر فیزیکی)</span>
                         </div>
                       ) : activeFile.preview.startsWith("data:application/pdf") ? (
-                        <div className="flex flex-col items-center justify-center p-8 text-center text-slate-500">
-                           <FileText className="h-16 w-16 mb-3 opacity-60 text-blue-400" />
-                           <span className="text-sm font-semibold mb-1 truncate max-w-[200px]">{activeFile.name}</span>
-                           <span className="text-[11px] opacity-70">فایل PDF با موفقیت بارگذاری شد</span>
+                        <div className="flex flex-col items-center justify-center p-4 text-center text-slate-500 w-full h-full relative">
+                           <PdfThumbnail base64={activeFile.preview.split(",")[1]} className="w-full max-h-[260px] object-contain rounded-lg shadow-sm border border-slate-200 dark:border-slate-800" isDarkMode={isDarkMode} />
+                           <span className="text-[11px] opacity-70 mt-2">فایل PDF با موفقیت بارگذاری شد</span>
                         </div>
                       ) : (
                         <img
@@ -4143,17 +4143,18 @@ export default function App() {
                                <span className="text-[10px] opacity-70">سند دیجیتال (بدون تصویر فیزیکی)</span>
                             </div>
                           ) : activeFile.preview.startsWith("data:application/pdf") ? (
-                            <div className="flex flex-col items-center justify-center text-center text-slate-500 py-6">
-                               <FileText className="h-12 w-12 mb-2 opacity-55 text-blue-400" />
-                               <span className="text-xs font-semibold truncate max-w-[200px]">{activeFile?.name}</span>
-                               <span className="text-[10px] opacity-70">فایل PDF بارگذاری شده است</span>
-                               <a 
-                                 href={activeFile.preview} 
-                                 download={activeFile.name}
-                                 className="mt-3 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[9px] font-bold inline-flex items-center gap-1"
-                               >
-                                 <Download className="w-3 h-3" /> دانلود فایل PDF
-                               </a>
+                            <div className="flex flex-col items-center justify-center text-center text-slate-500 pb-4">
+                               <PdfThumbnail base64={activeFile.preview.split(",")[1]} className="w-full max-h-[260px] object-contain rounded-lg shadow-sm border border-slate-200 dark:border-slate-800" isDarkMode={isDarkMode} />
+                               <div className="flex items-center gap-2 mt-3">
+                                 <span className="text-[10px] opacity-70">فایل PDF بارگذاری شده است</span>
+                                 <a 
+                                   href={activeFile.preview} 
+                                   download={activeFile.name}
+                                   className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[9px] font-bold inline-flex items-center gap-1"
+                                 >
+                                   <Download className="w-3 h-3" /> دانلود فایل PDF
+                                 </a>
+                               </div>
                             </div>
                           ) : (
                             <div className="relative group max-h-[300px]">
@@ -8903,7 +8904,9 @@ export default function App() {
                                         <td className="p-3">
                                           <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 shrink-0 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-950 flex items-center justify-center relative border border-slate-200 dark:border-slate-800">
-                                              {isPdf ? (
+                                              {isPdf && scan.file?.preview ? (
+                                                <PdfThumbnail base64={scan.file.preview.split(",")[1]} className="w-full h-full" isDarkMode={isDarkMode} />
+                                              ) : isPdf ? (
                                                 <div className="w-full h-full bg-rose-50 dark:bg-rose-950/20 flex flex-col items-center justify-center">
                                                   <FileText className="w-4 h-4 text-rose-500" />
                                                 </div>
@@ -9024,7 +9027,9 @@ export default function App() {
                                   <div className="flex items-start gap-3 mb-3">
                                     {/* Thumbnail */}
                                     <div className="w-11 h-11 shrink-0 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-center relative shadow-inner">
-                                      {isPdf ? (
+                                      {isPdf && scan.file?.preview ? (
+                                        <PdfThumbnail base64={scan.file.preview.split(",")[1]} className="w-full h-full transition-transform duration-300 group-hover/card:scale-110" isDarkMode={isDarkMode} />
+                                      ) : isPdf ? (
                                         <div className="w-full h-full bg-rose-50 dark:bg-rose-950/20 flex flex-col items-center justify-center">
                                           <FileText className="w-5 h-5 text-rose-500" />
                                           <span className="text-[7px] font-black text-rose-600 uppercase mt-0.5">PDF</span>
@@ -9237,11 +9242,11 @@ export default function App() {
                 isDarkMode ? "bg-slate-950/30 border-slate-800" : "bg-slate-50/50 border-slate-150"
               }`}>
                 {activePreviewScan.file?.name?.toLowerCase().endsWith(".pdf") || activePreviewScan.file?.preview?.startsWith("data:application/pdf") ? (
-                  <div className="flex flex-col items-center justify-center p-8 text-center max-w-sm rounded-2xl border border-dashed border-rose-200 dark:border-rose-900/30 bg-rose-50/30 dark:bg-rose-950/10">
-                    <FileText className="w-16 h-16 text-rose-500 mb-3" />
-                    <h5 className="font-black text-xs text-rose-600 dark:text-rose-400">سند با قالب PDF</h5>
+                  <div className="flex flex-col items-center justify-center p-4 text-center max-w-sm rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/30 relative w-full h-full">
+                    <PdfThumbnail base64={activePreviewScan.file.preview?.split(",")[1] || ""} className="w-full max-h-[50vh] object-contain rounded-lg shadow-sm border border-slate-200 dark:border-slate-800" isDarkMode={isDarkMode} />
+                    <h5 className="font-black text-xs text-indigo-600 dark:text-indigo-400 mt-4">سند با قالب PDF</h5>
                     <p className="text-[10px] mt-2 leading-relaxed text-slate-400">
-                      این فایل به صورت PDF بارگذاری شده است. برای مشاهده کامل و تعامل با سند می‌توانید روی دکمه دانلود یا دکمه باز کردن سند کلیک کنید.
+                      این فایل به صورت PDF بارگذاری شده است.
                     </p>
                   </div>
                 ) : activePreviewScan.file?.preview ? (
