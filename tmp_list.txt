@@ -1,0 +1,201 @@
+                                >
+                                  <option value="choose">انتقال گروهی به پوشه...</option>
+                                  <option value="none">بدون پوشه (دسته‌بندی نشده)</option>
+                                  {userDefinedFolders.map(f => {
+                                    const folderName = typeof f === "string" ? f : f.name;
+                                    return (
+                                      <option key={folderName} value={folderName}>{folderName}</option>
+                                    );
+                                  })}
+                                </select>
+                                <Folder className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-indigo-500 pointer-events-none" />
+                              </div>
+
+                              {/* Download Selected */}
+                              <button
+                                onClick={handleBulkDownload}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1 transition-all"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>دانلود گروهی</span>
+                              </button>
+
+                              {/* Export Excel Selected */}
+                              <button
+                                onClick={() => {
+                                  let worksheetData: any[] = [];
+                                  let colWidths: any[] = [];
+                                  previousScans.forEach(scan => {
+                                    if (selectedScanIds.includes(scan.id) && scan.transactions) {
+                                      scan.transactions.forEach((t: any, idx: number) => {
+                                        worksheetData.push({
+                                          "فاکتور": scan.file?.name || "نامشخص",
+                                          "ردیف": idx + 1,
+                                          "تاریخ": t.تاریخ,
+                                          "شماره_سند": t.شماره_سند,
+                                          "نام_طرف_حساب": t.نام_طرف_حساب,
+                                          "مبلغ_بدهکار": t.مبلغ_بدهکار || 0,
+                                          "مبلغ_بستانکار": t.مبلغ_بستانکار || 0,
+                                          "شرح": t.شرح
+                                        });
+                                      });
+                                    }
+                                  });
+                                  if (worksheetData.length === 0) {
+                                    setNotification({ text: "تراکنشی برای خروجی اکسل یافت نشد.", type: "error" });
+                                    return;
+                                  }
+                                  colWidths = [{ wch: 25 }, { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 40 }];
+                                  const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+                                  worksheet["!cols"] = colWidths;
+                                  if (!worksheet["!views"]) worksheet["!views"] = [];
+                                  worksheet["!views"].push({ rightToLeft: true });
+                                  const workbook = XLSX.utils.book_new();
+                                  XLSX.utils.book_append_sheet(workbook, worksheet, "تراکنش‌های منتخب");
+                                  XLSX.writeFile(workbook, `Selected-Export-${new Date().toISOString().split("T")[0]}.xlsx`);
+                                  setNotification({ text: "فایل اکسل اسناد منتخب با موفقیت دانلود شد.", type: "success" });
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 transition-all"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>اکسل یکپارچه</span>
+                              </button>
+
+                              {/* Delete Selected */}
+                              <button
+                                onClick={handleBulkDelete}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-rose-500 hover:bg-rose-600 text-white flex items-center gap-1 transition-all"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>حذف گروهی</span>
+                              </button>
+
+                              {/* Cancel Selection */}
+                              <button
+                                onClick={() => setSelectedScanIds([])}
+                                className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
+                                  isDarkMode ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                                }`}
+                              >
+                                انصراف
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Documents Grid */}
+                        {fileManagerFilteredScans.length === 0 ? (
+                          <div className={`py-16 flex flex-col items-center justify-center border border-dashed rounded-xl ${isDarkMode ? "border-slate-800 text-slate-500" : "border-slate-200 text-slate-400"}`}>
+                            <Folder className="w-14 h-14 mb-3 opacity-20" />
+                            <span className="text-sm font-extrabold mb-1">هیچ سندی پیدا نشد.</span>
+                            <span className="text-xs text-slate-400 text-center px-4">
+                              {previousScans.length === 0 
+                                ? "شما هنوز هیچ سندی را بارگذاری نکرده‌اید. یک تصویر یا فاکتور آپلود کنید." 
+                                : "هیچ فایلی با این مشخصات فیلتر، پوشه یا واژه جستجو مطابقت ندارد."}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className={`grid gap-4 ${fileManagerViewMode === "grid" ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"}`}>
+                            {fileManagerFilteredScans.map((scan) => {
+                              const isSelected = selectedScanIds.includes(scan.id);
+                              const isPdf = scan.file?.name?.toLowerCase().endsWith(".pdf") || scan.file?.preview?.startsWith("data:application/pdf");
+                              return (
+                                <div 
+                                  key={scan.id} 
+                                  className={`group/card p-4 rounded-xl border ${fileManagerViewMode === "list" ? "flex flex-col sm:flex-row sm:items-center justify-between gap-4" : "flex flex-col justify-between"} transition-all relative hover:shadow-md ${
+                                    isSelected
+                                      ? "border-indigo-500 ring-1 ring-indigo-500/30 bg-indigo-50/5 dark:bg-indigo-950/5"
+                                      : isDarkMode 
+                                        ? "bg-slate-800/40 border-slate-750 hover:border-slate-650" 
+                                        : "bg-white border-slate-200 hover:border-slate-300"
+                                  }`}
+                                >
+                                  {/* Select Checkbox on Hover */}
+                                  <button
+                                    onClick={() => {
+                                      if (isSelected) {
+                                        setSelectedScanIds(prev => prev.filter(id => id !== scan.id));
+                                      } else {
+                                        setSelectedScanIds(prev => [...prev, scan.id]);
+                                      }
+                                    }}
+                                    className={`absolute top-3 left-3 z-10 p-1 rounded-lg transition-all ${
+                                      isSelected 
+                                        ? "bg-indigo-600 text-white scale-100" 
+                                        : "bg-slate-100 dark:bg-slate-950 text-slate-400 scale-90 opacity-60 group-hover/card:opacity-100 group-hover/card:scale-100 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                                    }`}
+                                  >
+                                    {isSelected ? (
+                                      <CheckSquare className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <Square className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+
+                                  <div className="flex items-start gap-3 mb-3">
+                                    {/* Thumbnail */}
+                                    <div className="w-11 h-11 shrink-0 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-center relative shadow-inner">
+                                      {isPdf ? (
+                                        <div className="w-full h-full bg-rose-50 dark:bg-rose-950/20 flex flex-col items-center justify-center">
+                                          <FileText className="w-5 h-5 text-rose-500" />
+                                          <span className="text-[7px] font-black text-rose-600 uppercase mt-0.5">PDF</span>
+                                        </div>
+                                      ) : scan.file?.preview ? (
+                                        <img src={scan.file.preview} alt="" className="w-full h-full object-cover transition-transform duration-300 group-hover/card:scale-110" referrerPolicy="no-referrer" />
+                                      ) : (
+                                        <FileText className="w-5 h-5 text-indigo-400" />
+                                      )}
+                                    </div>
+                                    
+                                    {/* Details */}
+                                    <div className="flex-1 min-w-0 pr-0.5 text-right">
+                                      <div className="flex items-center gap-1">
+                                        <h5 className="font-extrabold text-xs truncate flex-1" title={scan.file?.name}>
+                                          {scan.file?.name}
+                                        </h5>
+                                        {/* Rename button */}
+                                        <button
+                                          onClick={() => renamePreviousScan(scan.id, scan.file?.name || "")}
+                                          className="p-1 rounded opacity-0 group-hover/card:opacity-100 text-slate-400 hover:text-indigo-500 transition-opacity"
+                                          title="تغییر نام فاکتور"
+                                        >
+                                          <FileEdit className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                      
+                                      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-1 text-[10px] text-slate-500" dir="rtl">
+                                        <span dir="ltr" className="font-semibold">{formatBytes(scan.file?.size || 0)}</span>
+                                        <span className="opacity-40">•</span>
+                                        <span>{new Date(scan.timestamp).toLocaleDateString("fa-IR")}</span>
+                                      </div>
+                                      
+                                      {/* Folder quick move inside card */}
+                                      <div className="flex items-center gap-1.5 mt-2.5">
+                                        <span className={`text-[9px] font-bold shrink-0 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>انتقال پوشه:</span>
+                                        <div className="relative flex-1">
+                                          <select
+                                            value={scan.folder || ""}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              setPreviousScans(prev => prev.map(s => s.id === scan.id ? { ...s, folder: val || undefined } : s));
+                                              showNotification(`سند «${scan.file?.name}» به پوشه «${val || "دسته‌بندی نشده"}» انتقال یافت.`, "success");
+                                              logEvent("انتقال پوشه سند", `کاربر پوشه سند «${scan.file?.name}» را به «${val || "دسته‌بندی نشده"}» تغییر داد.`);
+                                            }}
+                                            className={`w-full text-[9px] font-bold py-0.5 pr-1.5 pl-5 rounded-md border outline-none appearance-none transition-all cursor-pointer text-right ${
+                                              isDarkMode 
+                                                ? "bg-slate-900 border-slate-750 text-slate-300 hover:border-indigo-500 focus:border-indigo-500" 
+                                                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-white hover:border-indigo-500 focus:border-indigo-500"
+                                            }`}
+                                          >
+                                            <option value="">دسته‌بندی نشده</option>
+                                            {userDefinedFolders.map(folder => {
+                                              const folderName = typeof folder === "string" ? folder : folder.name;
+                                              return (
+                                                <option key={folderName} value={folderName}>{folderName}</option>
+                                              );
+                                            })}
+                                          </select>
+                                          <Folder className="w-2.5 h-2.5 absolute left-1.5 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none" />
+                                        </div>
+                                      </div>
+                                    </div>

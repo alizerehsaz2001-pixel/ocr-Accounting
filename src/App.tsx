@@ -8177,35 +8177,132 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Storage progress details */}
-                    <div className={`p-4 rounded-xl border ${isDarkMode ? "bg-slate-800/30 border-slate-800" : "bg-slate-50/50 border-slate-200"}`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className={`text-xs font-bold flex items-center gap-2 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                          <HardDrive className="w-4 h-4 text-indigo-500" />
-                          وضعیت مصرف حافظه ابری کاربر
-                        </span>
-                        <span className="text-xs font-bold text-indigo-500" dir="ltr">
-                          {formatBytes(usedStorage)} / {(5 + (currentUser?.extraStorage || 0)).toLocaleString("fa-IR")} GB
-                        </span>
-                      </div>
-                      <div className={`w-full h-3 rounded-full overflow-hidden p-0.5 ${isDarkMode ? "bg-slate-800" : "bg-slate-200"}`}>
-                        <div className={`h-full rounded-full transition-all duration-500 bg-gradient-to-l ${
-                          percentUsed > 90 
-                            ? "from-rose-500 to-red-600" 
-                            : percentUsed > 75 
-                              ? "from-amber-400 to-amber-500" 
-                              : "from-indigo-500 to-violet-600"
-                        }`} style={{width: `${percentUsed}%`}}></div>
-                      </div>
-                      <div className="flex items-center justify-between mt-2.5">
-                        <p className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                          سهم مصرف شده: <span className="font-bold">{percentUsed.toFixed(2)}%</span> از کل ظرفیت فعال
-                        </p>
-                        {(currentUser?.extraStorage || 0) > 0 && (
-                          <span className="text-[9px] font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded">
-                            فضای اختصاصی ارتقا یافته توسط ادمین فعال است (+{currentUser.extraStorage.toLocaleString("fa-IR")} گیگ اضافه)
+                    {/* Storage progress & analytics */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className={`p-4 rounded-xl border md:col-span-2 flex flex-col justify-center ${isDarkMode ? "bg-slate-800/30 border-slate-800" : "bg-slate-50/50 border-slate-200"}`}>
+                        <div className="flex items-center justify-between mb-4">
+                          <span className={`text-xs font-bold flex items-center gap-2 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                            <HardDrive className="w-4 h-4 text-indigo-500" />
+                            وضعیت مصرف حافظه ابری کاربر
                           </span>
-                        )}
+                          <span className="text-xs font-bold text-indigo-500" dir="ltr">
+                            {formatBytes(usedStorage)} / {(5 + (currentUser?.extraStorage || 0)).toLocaleString("fa-IR")} GB
+                          </span>
+                        </div>
+                        <div className={`w-full h-4 rounded-full overflow-hidden p-0.5 mb-2 ${isDarkMode ? "bg-slate-800" : "bg-slate-200"}`}>
+                          <div className={`h-full rounded-full transition-all duration-500 bg-gradient-to-l ${
+                            percentUsed > 90 
+                              ? "from-rose-500 to-red-600" 
+                              : percentUsed > 75 
+                                ? "from-amber-400 to-amber-500" 
+                                : "from-indigo-500 to-violet-600"
+                          }`} style={{width: `${Math.max(2, percentUsed)}%`}}></div>
+                        </div>
+                        <div className="flex items-center justify-between mt-1">
+                          <p className={`text-[10px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            سهم مصرف شده: <span className="font-bold text-indigo-500">{percentUsed.toFixed(2)}%</span> از کل ظرفیت فعال
+                          </p>
+                          {(currentUser?.extraStorage || 0) > 0 && (
+                            <span className="text-[9px] font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/50">
+                              فضای ارتقا یافته فعال است (+{currentUser?.extraStorage?.toLocaleString("fa-IR")} گیگ)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className={`p-4 rounded-xl border flex items-center gap-4 ${isDarkMode ? "bg-slate-800/30 border-slate-800" : "bg-slate-50/50 border-slate-200"}`}>
+                        <div className="w-24 h-24 shrink-0 relative">
+                          {(() => {
+                            const folderStats = [
+                              { name: 'دسته‌بندی نشده', value: previousScans.filter(s => !s.folder).reduce((acc, s) => acc + (s.file?.size || 0), 0), color: isDarkMode ? '#4f46e5' : '#6366f1' },
+                              ...userDefinedFolders.map(folder => {
+                                 const fname = typeof folder === 'string' ? folder : folder.name;
+                                 const fcolor = typeof folder === 'string' ? 'indigo' : (folder.color || 'indigo');
+                                 const colorHex = {
+                                    rose: '#f43f5e',
+                                    emerald: '#10b981',
+                                    amber: '#f59e0b',
+                                    blue: '#3b82f6',
+                                    purple: '#a855f7',
+                                    cyan: '#06b6d4',
+                                    indigo: '#6366f1'
+                                 }[fcolor] || '#6366f1';
+                                 return {
+                                   name: fname,
+                                   value: previousScans.filter(s => s.folder === fname).reduce((acc, s) => acc + (s.file?.size || 0), 0),
+                                   color: colorHex
+                                 }
+                              })
+                            ].filter(d => d.value > 0);
+                            
+                            const chartData = folderStats.length > 0 ? folderStats : [{ name: 'خالی', value: 1, color: isDarkMode ? '#334155' : '#e2e8f0' }];
+                            
+                            return (
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                  <Pie
+                                    data={chartData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={28}
+                                    outerRadius={40}
+                                    paddingAngle={2}
+                                    dataKey="value"
+                                    stroke="none"
+                                  >
+                                    {chartData.map((entry, index) => (
+                                      <Cell key={`cell-${index}`} fill={entry.color} />
+                                    ))}
+                                  </Pie>
+                                  <Tooltip 
+                                    formatter={(value: number) => folderStats.length > 0 ? formatBytes(value) : '0 Bytes'}
+                                    contentStyle={{ 
+                                      backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+                                      borderColor: isDarkMode ? '#334155' : '#e2e8f0',
+                                      borderRadius: '8px',
+                                      fontSize: '10px',
+                                      direction: 'rtl',
+                                      textAlign: 'right'
+                                    }}
+                                    itemStyle={{ color: isDarkMode ? '#cbd5e1' : '#475569' }}
+                                  />
+                                </PieChart>
+                              </ResponsiveContainer>
+                            );
+                          })()}
+                        </div>
+                        <div className="flex-1 flex flex-col justify-center">
+                          <span className={`text-[10px] font-bold mb-2 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>توزیع حافظه</span>
+                          <div className="space-y-1.5 max-h-[70px] overflow-y-auto pr-1">
+                            {userDefinedFolders.length === 0 && previousScans.length === 0 ? (
+                               <div className="text-[9px] text-slate-400">فضای ابری خالی است</div>
+                            ) : (
+                              <>
+                                <div className="flex items-center justify-between text-[9px]">
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0"></span>
+                                    <span className="truncate" title="دسته‌بندی نشده">دسته‌بندی نشده</span>
+                                  </div>
+                                </div>
+                                {userDefinedFolders.map(folder => {
+                                   const fname = typeof folder === 'string' ? folder : folder.name;
+                                   const fcolor = typeof folder === 'string' ? 'indigo' : (folder.color || 'indigo');
+                                   const colorConfig = FOLDER_COLORS[fcolor] || FOLDER_COLORS.indigo;
+                                   const size = previousScans.filter(s => s.folder === fname).reduce((acc, s) => acc + (s.file?.size || 0), 0);
+                                   if (size === 0) return null;
+                                   return (
+                                     <div key={fname} className="flex items-center justify-between text-[9px]">
+                                       <div className="flex items-center gap-1.5 truncate">
+                                         <span className={`w-2 h-2 rounded-full ${colorConfig.dot} shrink-0`}></span>
+                                         <span className="truncate" title={fname}>{fname}</span>
+                                       </div>
+                                     </div>
+                                   );
+                                })}
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -8757,14 +8854,144 @@ export default function App() {
                             </span>
                           </div>
                         ) : (
-                          <div className={`grid gap-4 ${fileManagerViewMode === "grid" ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"}`}>
-                            {fileManagerFilteredScans.map((scan) => {
+                          <div className={fileManagerViewMode === "grid" ? "grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "w-full overflow-x-auto"}>
+                            {fileManagerViewMode === "list" && (
+                              <table className={`w-full text-right ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                                <thead>
+                                  <tr className={`text-[10px] uppercase font-bold border-b ${isDarkMode ? "border-slate-750 text-slate-400" : "border-slate-200 text-slate-500"}`}>
+                                    <th className="p-3 w-10 text-center">
+                                      <button
+                                        onClick={() => {
+                                          if (selectedScanIds.length === fileManagerFilteredScans.length) {
+                                            setSelectedScanIds([]);
+                                          } else {
+                                            setSelectedScanIds(fileManagerFilteredScans.map(s => s.id));
+                                          }
+                                        }}
+                                      >
+                                        {selectedScanIds.length === fileManagerFilteredScans.length && fileManagerFilteredScans.length > 0 ? <CheckSquare className="w-3.5 h-3.5 text-indigo-500" /> : <Square className="w-3.5 h-3.5 opacity-50" />}
+                                      </button>
+                                    </th>
+                                    <th className="p-3">نام سند</th>
+                                    <th className="p-3 w-32">حجم / نوع</th>
+                                    <th className="p-3 w-32">پوشه</th>
+                                    <th className="p-3 w-32">تاریخ / وضعیت</th>
+                                    <th className="p-3 w-40 text-left">عملیات</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {fileManagerFilteredScans.map((scan) => {
+                                    const isSelected = selectedScanIds.includes(scan.id);
+                                    const isPdf = scan.file?.name?.toLowerCase().endsWith(".pdf") || scan.file?.preview?.startsWith("data:application/pdf");
+                                    return (
+                                      <tr key={scan.id} className={`border-b transition-colors group/row hover:shadow-sm ${
+                                        isSelected 
+                                          ? isDarkMode ? "bg-indigo-900/20 border-indigo-500/30" : "bg-indigo-50/50 border-indigo-200" 
+                                          : isDarkMode ? "border-slate-800 hover:bg-slate-800/40" : "border-slate-100 hover:bg-slate-50"
+                                      }`}>
+                                        <td className="p-3 text-center">
+                                          <button
+                                            onClick={() => {
+                                              if (isSelected) setSelectedScanIds(prev => prev.filter(id => id !== scan.id));
+                                              else setSelectedScanIds(prev => [...prev, scan.id]);
+                                            }}
+                                            className={`transition-all ${isSelected ? "text-indigo-600" : "text-slate-400 opacity-60 group-hover/row:opacity-100"}`}
+                                          >
+                                            {isSelected ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                                          </button>
+                                        </td>
+                                        <td className="p-3">
+                                          <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 shrink-0 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-950 flex items-center justify-center relative border border-slate-200 dark:border-slate-800">
+                                              {isPdf ? (
+                                                <div className="w-full h-full bg-rose-50 dark:bg-rose-950/20 flex flex-col items-center justify-center">
+                                                  <FileText className="w-4 h-4 text-rose-500" />
+                                                </div>
+                                              ) : scan.file?.preview ? (
+                                                <img src={scan.file.preview} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                              ) : (
+                                                <FileText className="w-4 h-4 text-indigo-400" />
+                                              )}
+                                            </div>
+                                            <div className="flex flex-col max-w-[200px]">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="font-extrabold text-xs truncate" title={scan.file?.name}>{scan.file?.name}</span>
+                                                <button
+                                                  onClick={() => renamePreviousScan(scan.id, scan.file?.name || "")}
+                                                  className="opacity-0 group-hover/row:opacity-100 text-slate-400 hover:text-indigo-500 transition-opacity"
+                                                  title="تغییر نام"
+                                                >
+                                                  <FileEdit className="w-3 h-3" />
+                                                </button>
+                                              </div>
+                                              <span className="text-[9px] opacity-60">ID: {scan.id.substring(0,6)}...</span>
+                                            </div>
+                                          </div>
+                                        </td>
+                                        <td className="p-3 text-[10px]">
+                                          <div className="flex flex-col">
+                                            <span className="font-semibold" dir="ltr">{formatBytes(scan.file?.size || 0)}</span>
+                                            <span className="opacity-60">{isPdf ? 'PDF Document' : 'Image File'}</span>
+                                          </div>
+                                        </td>
+                                        <td className="p-3">
+                                          <select
+                                            value={scan.folder || ""}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              setPreviousScans(prev => prev.map(s => s.id === scan.id ? { ...s, folder: val || undefined } : s));
+                                              showNotification(`سند «${scan.file?.name}» انتقال یافت.`, "success");
+                                              logEvent("انتقال پوشه سند", `کاربر پوشه سند «${scan.file?.name}» را به «${val || "دسته‌بندی نشده"}» تغییر داد.`);
+                                            }}
+                                            className={`w-full text-[10px] font-bold py-1 pr-1 pl-4 rounded-md border outline-none appearance-none transition-all cursor-pointer text-right ${
+                                              isDarkMode 
+                                                ? "bg-slate-900 border-slate-750 hover:border-indigo-500" 
+                                                : "bg-slate-50 border-slate-200 hover:border-indigo-500"
+                                            }`}
+                                          >
+                                            <option value="">بدون پوشه</option>
+                                            {userDefinedFolders.map(folder => {
+                                              const folderName = typeof folder === "string" ? folder : folder.name;
+                                              return <option key={folderName} value={folderName}>{folderName}</option>;
+                                            })}
+                                          </select>
+                                        </td>
+                                        <td className="p-3 text-[10px]">
+                                          <div className="flex flex-col">
+                                            <span>{new Date(scan.timestamp).toLocaleDateString("fa-IR")}</span>
+                                            {scan.file?.status === "idle" ? (
+                                              <span className="text-amber-500 font-bold flex items-center gap-1 mt-0.5 animate-pulse"><Cpu className="w-3 h-3" /> منتظر پردازش</span>
+                                            ) : (
+                                              <span className="text-indigo-500 font-bold mt-0.5">{scan.transactions?.length || 0} ردیف داده</span>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="p-3 text-left">
+                                          <div className="flex justify-end items-center gap-1.5 opacity-60 group-hover/row:opacity-100 transition-opacity">
+                                            {scan.file?.status === "idle" ? (
+                                              <button onClick={() => handleProcessUnscannedFile(scan)} className="px-2 py-1 rounded bg-amber-500 text-white text-[9px] font-bold">پردازش</button>
+                                            ) : (
+                                              <button onClick={() => { selectPreviousScan(scan); setIsFileManagerOpen(false); }} className="px-2 py-1 rounded bg-indigo-500 text-white text-[9px] font-bold">باز کردن</button>
+                                            )}
+                                            <button onClick={() => setActivePreviewScan(scan)} className={`p-1.5 rounded-lg border ${isDarkMode ? "hover:bg-slate-800 border-slate-700" : "hover:bg-slate-100 border-slate-200"}`} title="پیش‌نمایش"><Eye className="w-3 h-3" /></button>
+                                            <button onClick={() => downloadBase64File(scan)} className={`p-1.5 rounded-lg border ${isDarkMode ? "hover:bg-slate-800 border-slate-700" : "hover:bg-slate-100 border-slate-200"}`} title="دانلود"><Download className="w-3 h-3" /></button>
+                                            <button onClick={() => { if(window.confirm('حذف شود؟')){ setPreviousScans(prev => prev.filter(s => s.id !== scan.id)); } }} className="p-1.5 rounded-lg text-rose-500 border border-transparent hover:bg-rose-500/10" title="حذف"><Trash2 className="w-3 h-3" /></button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+
+                            {fileManagerViewMode === "grid" && fileManagerFilteredScans.map((scan) => {
                               const isSelected = selectedScanIds.includes(scan.id);
                               const isPdf = scan.file?.name?.toLowerCase().endsWith(".pdf") || scan.file?.preview?.startsWith("data:application/pdf");
                               return (
                                 <div 
                                   key={scan.id} 
-                                  className={`group/card p-4 rounded-xl border ${fileManagerViewMode === "list" ? "flex flex-col sm:flex-row sm:items-center justify-between gap-4" : "flex flex-col justify-between"} transition-all relative hover:shadow-md ${
+                                  className={`group/card p-4 rounded-xl border flex flex-col justify-between transition-all relative hover:shadow-md ${
                                     isSelected
                                       ? "border-indigo-500 ring-1 ring-indigo-500/30 bg-indigo-50/5 dark:bg-indigo-950/5"
                                       : isDarkMode 
@@ -8863,97 +9090,97 @@ export default function App() {
                                     </div>
                                   </div>
 
-                                  <div className={fileManagerViewMode === "list" ? "flex flex-col sm:flex-row sm:items-center gap-4 w-full sm:w-auto mt-4 sm:mt-0 shrink-0" : ""}>
-                                  {/* Meta Data stats inside card */}
-                                  <div className={`p-2 rounded-lg mb-3 flex items-center justify-between text-[9px] font-bold ${
-                                    isDarkMode ? "bg-slate-900/40 text-slate-400" : "bg-slate-50 text-slate-500"
-                                  }`}>
-                                    {scan.file?.status === "idle" ? (
-                                      <span className="text-amber-500 font-extrabold flex items-center gap-1 animate-pulse">
-                                        <Cpu className="w-3 h-3 text-amber-500 animate-spin" />
-                                        آماده پردازش هوشمند
-                                      </span>
-                                    ) : (
-                                      <span>تراکنش‌های فاکتور: <span className="text-indigo-500 font-extrabold">{scan.transactions?.length.toLocaleString("fa-IR") || 0} ردیف</span></span>
-                                    )}
-                                    {scan.file?.tokensUsed ? (
-                                      <span>توکن‌ها: <span className="text-emerald-500 font-extrabold">{scan.file.tokensUsed.toLocaleString("fa-IR")}</span></span>
-                                    ) : (
-                                      <span>حجم: {formatBytes(scan.file?.size || 0)}</span>
-                                    )}
-                                  </div>
+                                  <div>
+                                    {/* Meta Data stats inside card */}
+                                    <div className={`p-2 rounded-lg mb-3 flex items-center justify-between text-[9px] font-bold ${
+                                      isDarkMode ? "bg-slate-900/40 text-slate-400" : "bg-slate-50 text-slate-500"
+                                    }`}>
+                                      {scan.file?.status === "idle" ? (
+                                        <span className="text-amber-500 font-extrabold flex items-center gap-1 animate-pulse">
+                                          <Cpu className="w-3 h-3 text-amber-500 animate-spin" />
+                                          آماده پردازش هوشمند
+                                        </span>
+                                      ) : (
+                                        <span>تراکنش‌های فاکتور: <span className="text-indigo-500 font-extrabold">{scan.transactions?.length.toLocaleString("fa-IR") || 0} ردیف</span></span>
+                                      )}
+                                      {scan.file?.tokensUsed ? (
+                                        <span>توکن‌ها: <span className="text-emerald-500 font-extrabold">{scan.file.tokensUsed.toLocaleString("fa-IR")}</span></span>
+                                      ) : (
+                                        <span>حجم: {formatBytes(scan.file?.size || 0)}</span>
+                                      )}
+                                    </div>
 
-                                  {/* Card Action Buttons */}
-                                  <div className="flex items-center gap-1.5 pt-2.5 border-t border-slate-100 dark:border-slate-850 mt-auto">
-                                    {scan.file?.status === "idle" ? (
-                                      <button
-                                        onClick={() => handleProcessUnscannedFile(scan)}
-                                        className="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all shadow-md bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white animate-pulse cursor-pointer"
-                                      >
-                                        پردازش با هوش مصنوعی
-                                      </button>
-                                    ) : (
+                                    {/* Card Action Buttons */}
+                                    <div className="flex items-center gap-1.5 pt-2.5 border-t border-slate-100 dark:border-slate-850 mt-auto">
+                                      {scan.file?.status === "idle" ? (
+                                        <button
+                                          onClick={() => handleProcessUnscannedFile(scan)}
+                                          className="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all shadow-md bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white animate-pulse cursor-pointer"
+                                        >
+                                          پردازش با هوش مصنوعی
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => {
+                                            selectPreviousScan(scan);
+                                            setIsFileManagerOpen(false);
+                                          }}
+                                          className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm cursor-pointer ${
+                                            isDarkMode 
+                                              ? "bg-indigo-600/20 text-indigo-400 hover:bg-indigo-650/30" 
+                                              : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                          }`}
+                                        >
+                                          باز کردن فاکتور
+                                        </button>
+                                      )}
+
+                                      {/* Quick Preview Button */}
                                       <button
                                         onClick={() => {
-                                          selectPreviousScan(scan);
-                                          setIsFileManagerOpen(false);
+                                          setActivePreviewScan(scan);
                                         }}
-                                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm cursor-pointer ${
+                                        className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
                                           isDarkMode 
-                                            ? "bg-indigo-600/20 text-indigo-400 hover:bg-indigo-650/30" 
-                                            : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                            ? "border-slate-700 hover:bg-slate-750 text-indigo-400" 
+                                            : "border-slate-200 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-750"
                                         }`}
+                                        title="پیش‌نمایش اطلاعات"
                                       >
-                                        باز کردن فاکتور
+                                        <Eye className="w-3.5 h-3.5" />
                                       </button>
-                                    )}
+                                      
+                                      {/* Download individual */}
+                                      <button
+                                        onClick={() => downloadBase64File(scan)}
+                                        className={`p-1.5 rounded-lg transition-colors border ${
+                                          isDarkMode 
+                                            ? "border-slate-700 hover:bg-slate-750 text-slate-300" 
+                                            : "border-slate-200 hover:bg-slate-100 text-slate-600"
+                                        }`}
+                                        title="دانلود فایل فاکتور"
+                                      >
+                                        <Download className="w-3.5 h-3.5" />
+                                      </button>
 
-                                    {/* Quick Preview Button */}
-                                    <button
-                                      onClick={() => {
-                                        setActivePreviewScan(scan);
-                                      }}
-                                      className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
-                                        isDarkMode 
-                                          ? "border-slate-700 hover:bg-slate-750 text-indigo-400" 
-                                          : "border-slate-200 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-750"
-                                      }`}
-                                      title="پیش‌نمایش اطلاعات"
-                                    >
-                                      <Eye className="w-3.5 h-3.5" />
-                                    </button>
-                                    
-                                    {/* Download individual */}
-                                    <button
-                                      onClick={() => downloadBase64File(scan)}
-                                      className={`p-1.5 rounded-lg transition-colors border ${
-                                        isDarkMode 
-                                          ? "border-slate-700 hover:bg-slate-750 text-slate-300" 
-                                          : "border-slate-200 hover:bg-slate-100 text-slate-600"
-                                      }`}
-                                      title="دانلود فایل فاکتور"
-                                    >
-                                      <Download className="w-3.5 h-3.5" />
-                                    </button>
-
-                                    {/* Delete individual */}
-                                    <button
-                                      onClick={() => {
-                                        if (window.confirm(`آیا مطمئن هستید که می‌خواهید سند «${scan.file?.name}» را حذف کنید؟`)) {
-                                          setPreviousScans(prev => prev.filter(s => s.id !== scan.id));
-                                          if (activeFile?.id === scan.id) clearCurrentFile();
-                                          logEvent("حذف فاکتور", `کاربر فاکتور «${scan.file?.name}» را حذف نمود.`, "warning");
-                                          showNotification("سند با موفقیت حذف شد.", "success");
-                                        }
-                                      }}
-                                      className={`p-1.5 rounded-lg transition-all ${
-                                        isDarkMode ? "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" : "bg-rose-50 text-rose-600 hover:bg-rose-100"
-                                      }`}
-                                      title="حذف فاکتور"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
+                                      {/* Delete individual */}
+                                      <button
+                                        onClick={() => {
+                                          if (window.confirm(`آیا مطمئن هستید که می‌خواهید سند «${scan.file?.name}» را حذف کنید؟`)) {
+                                            setPreviousScans(prev => prev.filter(s => s.id !== scan.id));
+                                            if (activeFile?.id === scan.id) clearCurrentFile();
+                                            logEvent("حذف فاکتور", `کاربر فاکتور «${scan.file?.name}» را حذف نمود.`, "warning");
+                                            showNotification("سند با موفقیت حذف شد.", "success");
+                                          }
+                                        }}
+                                        className={`p-1.5 rounded-lg transition-all ${
+                                          isDarkMode ? "bg-rose-500/10 text-rose-400 hover:bg-rose-500/20" : "bg-rose-50 text-rose-600 hover:bg-rose-100"
+                                        }`}
+                                        title="حذف فاکتور"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
 
                                   </div>
                                 </div>
