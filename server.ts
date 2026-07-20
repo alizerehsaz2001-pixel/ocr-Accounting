@@ -45,9 +45,11 @@ async function generateContentWithRetry(
     originalModel,
     "gemini-3.5-flash",
     "gemini-flash-latest",
-    "gemini-3.1-flash-lite",
-    "gemini-3.1-pro-preview"
+    "gemini-3.1-flash-lite"
   ];
+  if (originalModel && originalModel.includes("pro")) {
+    candidateModels.push("gemini-3.1-pro-preview");
+  }
   
   // Filter out duplicates and null/undefined values
   const uniqueCandidates = Array.from(new Set(candidateModels.filter(Boolean)));
@@ -70,6 +72,17 @@ async function generateContentWithRetry(
             thinkingLevel: ThinkingLevel.HIGH,
           };
           currentConfig.config = configCopy;
+        } else if (currentModel === "gemini-3.5-flash") {
+          const configCopy = { ...(currentConfig.config || {}) };
+          if (!configCopy.tools) {
+             configCopy.tools = [];
+          }
+          // Avoid adding multiple googleSearch tools
+          const hasSearch = configCopy.tools.some((t: any) => t.googleSearch);
+          if (!hasSearch) {
+             configCopy.tools.push({ googleSearch: {} });
+          }
+          currentConfig.config = configCopy;
         }
 
         const response = await ai.models.generateContent({
@@ -89,6 +102,36 @@ async function generateContentWithRetry(
         const errorMessage = (apiError.message || "").toLowerCase();
         const apiStatus = apiError.status || apiError.statusCode || (apiError.error && apiError.error.code);
         
+        const isPermanentZeroLimit =
+          errorMessage.includes("limit: 0") ||
+          errorMessage.includes("limit:0") ||
+          (errorMessage.includes("quota exceeded") && (errorMessage.includes("limit") || errorMessage.includes("free_tier")));
+
+        if (isPermanentZeroLimit) {
+          console.warn(
+            `[Gemini API] Model "${currentModel}" has 0 quota or is unavailable on this key. Instantly falling back to the next model...`
+          );
+          // Set lastError so we have context if all fail, then break immediately to move to next model
+          lastError = apiError;
+          break;
+        }
+
+        const isQuotaExceeded =
+          apiStatus === 429 ||
+          apiStatus === "RESOURCE_EXHAUSTED" ||
+          errorMessage.includes("quota exceeded") ||
+          errorMessage.includes("limit") ||
+          errorMessage.includes("rate limit") ||
+          errorMessage.includes("exhausted");
+
+        if (isQuotaExceeded && currentModel.includes("pro")) {
+          console.warn(
+            `[Gemini API] Pro model "${currentModel}" is rate-limited (429/quota). Bypassing retries and falling back to Flash immediately...`
+          );
+          lastError = apiError;
+          break; // Break the retry loop for the pro model and try the next candidate model (Flash) immediately
+        }
+
         const isTransient =
           apiStatus === "RESOURCE_EXHAUSTED" ||
           apiStatus === 429 ||
@@ -218,12 +261,17 @@ app.post("/api/extract", async (req, res) => {
    - کشیدگی‌ها و الگوهای متصل: کلماتی نظیر "بابت"، "چک"، "نقدی"، "تنخواه"، "علی‌الحساب"، "مساعده"، "بدهکار"، "بستانکار" و واحدهای پولی اغلب با کشیدگی ممتد یا چسباندن حروف نوشته می‌شوند. در خوانش این الگوها دقت مضاعف داشته باشید.
    - اعداد دست‌نویس سریع و صفرهای متوالی: در نوشتار سریع، صفرهای متوالی اغلب به صورت یک خط موج‌دار یا ممتد کشیده می‌شوند. همچنین ابهام بین اعداد ۲ و ۳ یا ۲ و ۴ رایج است. در مواجهه با این موارد، حتماً از طریق موازنه ریاضی و جمع کل فاکتور (مهندسی معکوس)، رقم صحیح و تعداد صفرها را قطعی کنید.
 
-قوانین مطلق و غیرقابل تخطی OCR:
+قوانین مطلق و غیرقابل تخطی برای تضمین حداکثر دقت و صحت (OCR Maximum Accuracy & Precision Rules):
 ۱. صد در صد داده‌های استخراج شده و تحلیل‌ها باید مستند به سند و فایل آپلود شده باشند. باید دقیقاً مطابق با چیزی که در تصویر می‌بینید تحلیل کنید و جیسون تحویل دهید. از گمانه‌زنی، فرضیه‌سازی یا تولید مقادیر خیالی خودداری نمایید (Anti-Hallucination). اگر فایلی ارسال نشده یا عاری از دیتای مالی است، فقط یک آبجکت پایه برگردانید.
 ۲. خروجی فقط و فقط یک آبجکت ساختار یافته JSON است. شرح متنی مجزا ارائه ندهید.
 ۳. در مواجهه با دست‌خط تند، شکسته یا مخدوش، ابتدا تا حد ممکن به قواعد کلمه، موقعیت سطر و موازنه مبالغ رجوع کنید. کلمات کاملاً ناخوانا به شکل "[ناخوانا]" ذخیره شوند.
 ۴. فرمت پاسخ برگشتی حتماً باید یک ساختار JSON معتبر منطبق بر سرفصل‌های معین باشد. آبجکت اصلی شامل کلیدهای "نوع_سند"، "تحلیل_سند" و "اقلام_تراکنش" باشد.
-۵. تشخیص خودکار هزینه‌های غیرقابل قبول مالیاتی: چنانچه در فاکتور یا صورتحساب، ردیفی با عنوان «جریمه دیرکرد»، «خسارت تاخیر» یا موارد مشابه وجود داشت، این مبالغ را شناسایی کرده و فیلد "هزینه_غیرقابل_قبول" را برای آن سطر معادل true قرار دهید.`;
+۵. تشخیص خودکار هزینه‌های غیرقابل قبول مالیاتی: چنانچه در فاکتور یا صورتحساب، ردیفی با عنوان «جریمه دیرکرد»، «خسارت تاخیر» یا موارد مشابه وجود داشت، این مبالغ را شناسایی کرده و فیلد "هزینه_غیرقابل_قبول" را برای آن سطر معادل true قرار دهید.
+۶. تبدیل و نرمال‌سازی تمامی اعداد به ارقام انگلیسی (Digit Normalization): کلیه اعداد فارسی و عربی (مانند ۱، ۲، ۳، ۴، ۵، ۶، ۷، ۸، ۹، ۰) باید بدون استثنا به ارقام استاندارد انگلیسی (1, 2, 3, 4, 5, 6, 7, 8, 9, 0) تبدیل شوند.
+۷. حذف ممیزها و جداکننده‌ها در مبالغ مالی: تمام مبالغ پولی و ارقام محاسباتی باید به صورت عددی خالص و فاقد هرگونه ویرگول، نقطه، اسپیس یا کامای جداکننده سه رقمی (مانند تبدیل 12,500,000 یا ۱۲٬۵۰۰٬۰۰۰ به 12500000) ذخیره شوند تا در محاسبات سیستم تداخل ایجاد نشود.
+۸. تراز دقیق ریاضی سطرها و ستون‌ها (Mathematical Consistency & Alignment): برای تمامی سطرها بررسی کنید که حاصل‌ضرب «تعداد/مقدار» در «فی/قیمت واحد» دقیقاً برابر با «مبلغ کل/قیمت کل» آن ردیف باشد. در صورت بروز هرگونه خطای چاپی یا محاسباتی در فاکتور فیزیکی، مقدار واقعی ریاضی را استخراج کرده و خطا یا مغایرت را در فیلد «تحلیل_سند» گزارش دهید.
+۹. تمایز هوشمند بین ریال و تومان (Currency Distinction): با بررسی ابعاد مالی و منطق ارقام فاکتور، واحد پولی پایه را تشخیص دهید. اگر در ستونی ریال ذکر شده اما در ستون دیگری همان مقادیر به تومان است، مقادیر را یکپارچه‌سازی کرده و ترجیحاً بر اساس واحد رسمی کشور (ریال) نرمال‌سازی کنید مگر اینکه سند صریحاً تومان باشد.
+۱۰. استخراج بدون پیشوند شناسه‌ها و کدهای ملی/مالیاتی: شماره‌های کارت بانکی، شماره‌های شبا، شناسه ملی شرکت‌ها، کد ملی اشخاص و شناسه صیادی چک‌ها را کاملاً تمیز و عاری از هرگونه حرف اضافه فارسی یا کولون (مانند "شناسه ملی:" یا "کد ملی:") و فقط به صورت عدد خالص استخراج کنید.`;
 
     let promptText = `لطفاً داده‌های موجود در تصویر یا سند پیوست شده را به دقت تحلیل کرده و نوع سند و محتوای آن‌را مطابق آن‌چه دقیقاً در تصویر می‌بینید در یک آبجکت JSON استخراج کنید و هیچ متنی خارج از JSON تولید نکنید.`;
 
@@ -355,17 +403,23 @@ app.post("/api/extract", async (req, res) => {
     if (tokenSettings && tokenSettings.highAccuracyDualPass === true) {
       console.info("[Dual-Pass AI Audit] Initiating second pass audit and validation...");
       
-      const auditInstruction = `You are an expert CPA, senior auditor and OCR reconciliation system. Your task is to perform an exhaustive audit and self-correction on the extracted JSON financial data against the original document.
-      Ensure complete mathematical correctness:
-      1. Recalculate row totals (quantity * unit_price = total_price) or sum credits/debits.
-      2. Verify tax/VAT calculations.
-      3. Repair any OCR misreads of digits, especially trailing zeros or Persian numbers.
-      4. Reconcile any currency differences (Rial vs Toman) based on context.
-      
-      Review the initially extracted JSON:
-      ${JSON.stringify(parsedData)}
-      
-      Produce the final, highly accurate and corrected JSON strictly conforming to the original schema structure. Only return valid JSON matching the schema.`;
+      const auditInstruction = `شما یک حسابرس ارشد رسمی (Senior Auditor)، کارشناس ارشد ممیزی مالیاتی و ناظر ارشد موازنه اسناد هستید.
+وظیفه شما اجرای یک ممیزی و بازبینی موشکافانه دو مرحله‌ای (Dual-Pass Audit) بر روی اطلاعات استخراج‌شده اولیه در قالب فاکتور یا سند مالی است.
+
+شما باید اطلاعات استخراج شده قبلی را خط به خط با تصویر اصلی سند تطبیق داده و تمام ایرادات و انحرافات محاسباتی را اصلاح کنید.
+
+قوانین ممیزی ریاضی و اعتبارسنجی ارقام (برای اصلاح و افزایش فوق‌العاده دقت و صحت):
+۱. بررسی صحت ضرب و محاسبات افقی: برای تمام سطرها فرمول ریاضی (تعداد × قیمت واحد = قیمت کل) یا (quantity * unit_price = total_price) را دوباره حساب کنید. اگر مغایرتی به دلیل اشتباه خوانده شدن ارقام یا صفرهای اضافی وجود دارد، آن را اصلاح کنید.
+۲. موازنه دوطرفه و تراز مالی: جمع کل مبالغ سطرها باید با مبلغ نهایی یا کل مندرج در انتهای فاکتور کاملاً همخوانی داشته باشد. در صورت بروز اختلاف، با بررسی دقیق تصویر سند و شمارش صفرها، مقدار صحیح را بازنویسی کنید.
+۳. تفکیک دقیق ریال و تومان (تبدیل ۱ به ۱۰): مطمئن شوید که ریال و تومان جابجا ثبت نشده باشند. اگر تمام مبالغ در تصویر بر حسب تومان هستند، ترجیحاً بر اساس قواعد دفاتر رسمی آنها را به ریال (۱۰ برابر مبلغ تومان) تبدیل و استانداردسازی کنید مگر اینکه فاکتور صریحاً اصرار بر تومان داشته باشد.
+۴. تضمین صد در صدی عدم حذف اقلام (No Dropped Rows): ممیزی نباید هیچ سطری را حذف کند یا نادیده بگیرد. تمامی ردیف‌های استخراج شده اولیه باید با مقادیر اصلاح شده و ضریب اطمینان بروزرسانی شده به ۱۰۰٪ یا نزدیک آن ارائه شوند.
+۵. حذف کاماها، فواصل و تبدیل اعداد به ارقام انگلیسی: کلیه کاراکترهای جداکننده سه رقمی پولی باید حذف گردند و تمام ارقام فارسی به معادل انگلیسی تبدیل شوند.
+۶. بررسی مالیات و عوارض ارزش افزوده (۹٪ یا ۱۰٪): بررسی کنید مالیات به درستی روی مبالغ مشمول محاسبه شده باشد و اگر به عنوان ردیف مجزا در سند فیزیکی آمده، حتما استخراج و در سطر مربوطه اعمال شود.
+
+متن جی‌سان اولیه استخراج شده جهت بازبینی و ممیزی عمیق:
+${JSON.stringify(parsedData)}
+
+پاسخ نهایی را دقیقاً در قالب ساختار جی‌سان اولیه (Response Schema) برگردانید. هیچ متنی خارج از JSON تولید نکنید.`;
 
       const auditConfig = {
         model: selectedModel,
