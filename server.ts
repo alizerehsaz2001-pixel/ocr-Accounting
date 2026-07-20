@@ -335,26 +335,25 @@ app.post("/api/extract", async (req, res) => {
             },
             ستون_ها: {
               type: Type.ARRAY,
-              description: "لیست ستون‌های متناسب با این نوع سند. این ستون‌ها کاملا داینامیک هستند و بر اساس نوع سند (مثلا فاکتور نیاز به نام کالا، تعداد، فی، و مالیات دارد اما فیش واریزی نیاز به تاریخ، مبلغ، شماره پیگیری، مبدا و مقصد دارد) ساخته می‌شوند.",
+              description: "لیست ستون‌های پویای این سند که استخراج شده‌اند. هر ستون باید دارای یک کلید انگلیسی (مانند item_name, quantity, unit_price, total_price, tax, description) و یک عنوان خوانای فارسی باشد.",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  کلید: { type: Type.STRING, description: "کلید انگلیسی یکتا برای این ستون (مانند quantity, item_name, date, amount, debit, credit)" },
-                  عنوان: { type: Type.STRING, description: "عنوان فارسی برای نمایش به کاربر در جدول (مانند تعداد/مقدار, نام کالا, مبلغ کل, بدهکار)" },
-                  نوع_داده: { type: Type.STRING, description: "نوع داده این ستون: number یا string" }
+                  کلید: { type: Type.STRING, description: "کلید انگلیسی یکتای ستون (مثلا quantity)" },
+                  عنوان: { type: Type.STRING, description: "عنوان فارسی ستون (مثلا تعداد)" }
                 },
-                required: ["کلید", "عنوان", "نوع_داده"]
+                required: ["کلید", "عنوان"]
               }
             },
             ردیف_ها: {
               type: Type.ARRAY,
-              description: "لیست اقلام و داده‌های استخراج شده متناسب با ستون‌های تعریف شده.",
+              description: "لیست ردیف‌های استخراج شده منطبق بر ستون‌ها.",
               items: {
                 type: Type.OBJECT,
                 properties: {
                   ضریب_اطمینان: {
                     type: Type.INTEGER,
-                    description: "درصد اطمینان از صحت استخراج این ردیف (بین 0 تا 100) براساس وضوح تصویر.",
+                    description: "میزان اطمینان از صحت استخراج این ردیف (بین 0 تا 100) براساس وضوح تصویر.",
                   },
                   فیلد_ها: {
                     type: Type.ARRAY,
@@ -470,6 +469,79 @@ ${JSON.stringify(parsedData)}
   }
 });
 
+// Pre-extraction chat endpoint
+app.post("/api/chat-pre-extract", async (req, res) => {
+  try {
+    const { messages, image, mimeType, model, customPrompt } = req.body;
+    
+    if (!messages || !Array.isArray(messages)) {
+       return res.status(400).json({ error: "لیست پیام‌ها ارسال نشده است." });
+    }
+    
+    const ai = getGeminiClient();
+    let systemInstruction = "شما یک دستیار حسابدار هوشمند هستید. کاربر تصویری از یک سند مالی (فاکتور، فیش، چک و ...) آپلود کرده است. شما باید به سوالات کاربر در مورد این سند پاسخ دهید و در صورت نیاز راهنمایی کنید که چه چیزهایی از این سند قابل استخراج است. پس از این چت، داده‌ها در فرمت JSON استخراج خواهند شد. همیشه مودبانه، تخصصی و به زبان فارسی پاسخ دهید. لطفاً اگر کاربر در مورد اعداد پرسید با دقت پاسخ دهید.";
+    
+    if (customPrompt && customPrompt.trim()) {
+       systemInstruction += "\n\nدستورالعمل خاص استخراج کاربر که باید در نظر بگیرید:\n" + customPrompt;
+    }
+    
+    const rawMessages = messages.map((msg: any, index: number) => {
+      const msgParts: any[] = [{ text: msg.text || "فایل ضمیمه شد." }];
+      
+      if (msg.files && Array.isArray(msg.files)) {
+         msg.files.forEach((f: any) => {
+            msgParts.push({
+               inlineData: {
+                  mimeType: f.mimeType || "application/pdf",
+                  data: f.base64
+               }
+            });
+         });
+      }
+
+      // Attach the image to the first user message
+      if (index === 0 && msg.role === "user" && image) {
+        msgParts.push({
+          inlineData: {
+            mimeType: mimeType || "image/png",
+            data: image,
+          },
+        });
+      }
+
+      return {
+        role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
+        parts: msgParts,
+      };
+    });
+    
+    const formattedMessages: any[] = [];
+    for (const msg of rawMessages) {
+      if (formattedMessages.length > 0 && formattedMessages[formattedMessages.length - 1].role === msg.role) {
+        formattedMessages[formattedMessages.length - 1].parts.push(...msg.parts);
+      } else {
+        formattedMessages.push(msg);
+      }
+    }
+
+    const selectedModel = ["gemini-3.5-flash", "gemini-3.1-pro-preview"].includes(model) ? model : "gemini-3.5-flash";
+
+    const response = await ai.models.generateContent({
+      model: selectedModel,
+      contents: formattedMessages,
+      config: {
+        systemInstruction: systemInstruction,
+      },
+    });
+
+    res.json({ success: true, text: response.text });
+  } catch (error: any) {
+    console.error("API Error in pre-extract chat:", error);
+    res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در گفتگوی پیش از استخراج" });
+  }
+});
+
+
 // Endpoint for explicit AI-driven Mathematical Audit and Self-Correction
 app.post("/api/audit-repair", async (req, res) => {
   try {
@@ -536,16 +608,32 @@ app.post("/api/audit-repair", async (req, res) => {
 // Pre-extraction chat endpoint
 app.post("/api/chat-pre-extract", async (req, res) => {
   try {
-    const { messages, image, mimeType, model } = req.body;
+    const { messages, image, mimeType, model, customPrompt } = req.body;
     
     if (!messages || !Array.isArray(messages)) {
        return res.status(400).json({ error: "لیست پیام‌ها ارسال نشده است." });
     }
     
     const ai = getGeminiClient();
-    const systemInstruction = "شما یک دستیار حسابدار هوشمند هستید. کاربر تصویری از یک سند مالی (فاکتور، فیش، چک و ...) آپلود کرده است. شما باید به سوالات کاربر در مورد این سند پاسخ دهید و در صورت نیاز راهنمایی کنید که چه چیزهایی از این سند قابل استخراج است. پس از این چت، داده‌ها در فرمت JSON استخراج خواهند شد. همیشه مودبانه، تخصصی و به زبان فارسی پاسخ دهید.";
     
-    const formattedMessages = messages.map((msg: any, index: number) => {
+    let systemInstruction = `شما یک دستیار حسابدار و بازرس مالی فوق‌العاده دقیق و هوشمند هستید.
+کاربر تصویری از یک سند مالی (مانند فاکتور، فیش واریزی، چک، سفته، قبض یا قرارداد) آپلود کرده است.
+
+وظایف اصلی شما در این گفتگوی پیش از استخراج:
+۱. تحلیل دقیق سند: محتوای سند را با دقت بالا بررسی کنید.
+۲. ممیزی و محاسبات ریاضی: اگر سند حاوی اقلام است، حاصل‌ضرب تعداد در قیمت واحد و جمع نهایی را فرمول‌بندی و کنترل کنید. هرگونه مغایرت محاسباتی یا ریاضی را فوراً به کاربر اطلاع دهید.
+۳. بررسی صحت شناسه‌ها: شناسه ملی شرکت‌ها (۱۰ رقمی یا ۱۱ رقمی)، شماره ملی افراد (۱۰ رقمی)، کد اقتصادی و شماره ثبت را با معیارهای استاندارد مطابقت دهید.
+۴. اعتبارسنجی مالیات و عوارض: بررسی کنید که آیا سهم مالیات بر ارزش افزوده (VAT) به درستی محاسبه شده است یا خیر (مثلاً نرخ ۹٪ یا ۱۰٪ سال‌های اخیر در ایران).
+۵. بررسی صحت تاریخ‌ها و مبالغ: به فرمت تاریخ‌های شمسی/میلادی و مبالغ به ریال/تومان دقت کنید و هرگونه ابهام را شفاف‌سازی کنید.
+۶. شنیدن و اعمال دقیق خواسته‌های کاربر: به دستورالعمل‌های کاربر گوش فرا داده و آنها را برای فرآیند نهایی استخراج داده ثبت کنید.
+
+همیشه مودبانه، تخصصی، کارشناسانه و به زبان فارسی پاسخ دهید.`;
+
+    if (customPrompt && customPrompt.trim()) {
+      systemInstruction += `\n\nدستورالعمل خاص و پرامپت اختصاصی کاربر که باید حتماً در تحلیل و پاسخ‌های خود لحاظ کنید:\n"""\n${customPrompt}\n"""`;
+    }
+    
+    const rawMessages = messages.map((msg: any, index: number) => {
       const msgParts: any[] = [{ text: msg.text || "فایل ضمیمه شد." }];
       
       if (msg.files && Array.isArray(msg.files)) {
@@ -559,8 +647,8 @@ app.post("/api/chat-pre-extract", async (req, res) => {
          });
       }
 
-      // Attach the image to the last user message
-      if (index === messages.length - 1 && msg.role === "user" && image) {
+      // Attach the image only to the first message or if it's the only one
+      if (index === 0 && image) {
         msgParts.push({
           inlineData: {
             mimeType: mimeType || "image/png",
@@ -568,11 +656,22 @@ app.post("/api/chat-pre-extract", async (req, res) => {
           },
         });
       }
+
       return {
         role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
         parts: msgParts,
       };
     });
+
+    // Merge consecutive messages of the same role to prevent Gemini API 400 errors
+    const formattedMessages: any[] = [];
+    for (const msg of rawMessages) {
+      if (formattedMessages.length > 0 && formattedMessages[formattedMessages.length - 1].role === msg.role) {
+        formattedMessages[formattedMessages.length - 1].parts.push(...msg.parts);
+      } else {
+        formattedMessages.push(msg);
+      }
+    }
 
     const selectedModel = model || "gemini-3.5-flash";
 

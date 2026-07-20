@@ -279,6 +279,7 @@ export default function App() {
   const [preExtractInput, setPreExtractInput] = useState<string>("");
   const [preExtractFiles, setPreExtractFiles] = useState<{ base64: string; name: string; mimeType: string; size: number }[]>([]);
   const [isPreExtractChatLoading, setIsPreExtractChatLoading] = useState<boolean>(false);
+  const [isAiUnderstandingConfirmed, setIsAiUnderstandingConfirmed] = useState<boolean>(false);
   const [verificationSummary, setVerificationSummary] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
@@ -298,12 +299,24 @@ export default function App() {
   const [chatInput, setChatInput] = useState<string>("");
   const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const preExtractChatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [chatMessages, isChatOpen]);
+
+  useEffect(() => {
+    if (preExtractChatEndRef.current) {
+      preExtractChatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [preExtractChat]);
+
+  useEffect(() => {
+    setIsAiUnderstandingConfirmed(false);
+    setVerificationSummary(null);
+  }, [pendingFile]);
 
   const [previousScans, setPreviousScans] = useState<PreviousScan[]>(() => {
     const saved = localStorage.getItem("previous_scans");
@@ -870,7 +883,8 @@ export default function App() {
           messages: newMessages,
           image: pendingFile.base64,
           mimeType: pendingFile.mimeType,
-          model: selectedModel
+          model: selectedModel,
+          customPrompt: customPrompt
         }),
       });
       const data = await response.json();
@@ -885,6 +899,35 @@ export default function App() {
     } finally {
       setIsPreExtractChatLoading(false);
     }
+  };
+
+  const handleApplyChatToPrompt = () => {
+    if (preExtractChat.length === 0) {
+      showNotification("هنوز گفتگویی انجام نشده است.", "info");
+      return;
+    }
+    
+    let additionalPrompt = "\n⚠️ نکات و توافقات گفتگوی پیش از استخراج (الزامات قطعی پردازش):\n";
+    preExtractChat.forEach((msg) => {
+      if (msg.role === 'user') {
+        additionalPrompt += `- خواسته کاربر: ${msg.text}\n`;
+      } else {
+        const cleanText = msg.text.replace(/[\r\n]+/g, ' ').substring(0, 150);
+        additionalPrompt += `  توضیح/تایید سیستم: ${cleanText}${msg.text.length > 150 ? '...' : ''}\n`;
+      }
+    });
+
+    setCustomPrompt(prev => {
+      const base = prev.trim();
+      return base ? `${base}\n${additionalPrompt}` : additionalPrompt.trim();
+    });
+    
+    showNotification("دستورالعمل‌های گفتگوی پیش از استخراج با موفقیت به پرامپت اختصاصی منتقل گردید!", "success");
+  };
+
+  const handleClearPreExtractChat = () => {
+    setPreExtractChat([]);
+    showNotification("گفتگوی پیش از استخراج پاکسازی شد.", "info");
   };
 
   const getCompiledAIInstructions = () => {
@@ -937,6 +980,10 @@ export default function App() {
 
   const handleDirectExtraction = async () => {
     if (!pendingFile) return;
+    if (!isAiUnderstandingConfirmed) {
+      showNotification("لطفاً ابتدا تاییدیه تفهیم و درک هوش مصنوعی را بررسی و علامت بزنید.", "info");
+      return;
+    }
     if (!customPrompt.trim()) {
        showNotification("لطفاً پرامپت (دستورالعمل) را وارد کنید. این فیلد الزامی است.", "error");
        return;
@@ -978,7 +1025,7 @@ export default function App() {
   };
 
   const handleVerifyInstructions = async () => {
-    if (!pendingFile || preExtractChat.length === 0) return;
+    if (!pendingFile) return;
     setIsVerifying(true);
     try {
       const response = await fetch("/api/chat-verification", {
@@ -2821,6 +2868,7 @@ export default function App() {
         onUploadClick={() => fileInputRef.current?.click()}
         handleDirectExtraction={handleDirectExtraction}
         isExtracting={isExtracting}
+        isAiUnderstandingConfirmed={isAiUnderstandingConfirmed}
       />
 
       <OnboardingProfileModal 
@@ -3646,49 +3694,239 @@ export default function App() {
                         </div>
 
                         {/* Chat before extraction */}
-                        <div className="flex flex-col gap-2 border-t pt-4 dark:border-slate-800/60 border-slate-200">
-                          <label className={`text-[11px] font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                             <MessageSquare className="w-3.5 h-3.5 text-blue-500" /> گفتگوی پیش از استخراج (اطمینان از درستی داده‌ها):
-                          </label>
-                          <div className={`flex flex-col gap-2 p-3 rounded-xl max-h-40 overflow-y-auto ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
+                        <div className="flex flex-col gap-3 border-t pt-4 dark:border-slate-800/60 border-slate-200">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <label className={`text-[11.5px] font-extrabold flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                               <MessageSquare className="w-4 h-4 text-blue-500 animate-pulse" /> گفتگوی پیش از استخراج (تضمین صددرصد دقت):
+                            </label>
+                            
+                            {preExtractChat.length > 0 && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleApplyChatToPrompt}
+                                  className={`px-2 py-1 rounded-lg text-[9.5px] font-black flex items-center gap-1 transition-all border ${
+                                    isDarkMode 
+                                      ? "bg-purple-500/10 border-purple-500/30 text-purple-300 hover:bg-purple-500/20" 
+                                      : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                                  } cursor-pointer`}
+                                  title="انتقال توافقات این گفتگو به فیلد پرامپت نهایی برای اعمال در سند استخراج شده"
+                                >
+                                  <span>📋 انتقال به پرامپت نهایی</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleClearPreExtractChat}
+                                  className={`p-1 rounded-lg transition-all border ${
+                                    isDarkMode 
+                                      ? "bg-slate-900 border-slate-800 text-slate-400 hover:text-rose-400" 
+                                      : "bg-slate-100 border-slate-200 text-slate-500 hover:text-rose-600"
+                                  } cursor-pointer`}
+                                  title="پاکسازی تاریخچه گفتگو"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <p className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            پیش از اجرای استخراج نهایی، می‌توانید سند را ممیزی کنید، از درستی مبالغ مطمئن شوید، و پس از تایید، آن را با دکمه بالا به پرامپت نهایی منتقل کنید تا به صورت فایل متنی یا جدول استخراج شود.
+                          </p>
+
+                          {/* Quick audit helper chips */}
+                          <div className="flex flex-col gap-1.5 mt-1">
+                            <span className={`text-[9.5px] font-bold ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>ابزارهای ممیزی و موازنه سریع پیش از استخراج:</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {[
+                                { text: "📊 تراز محاسباتی اقلام", query: "لطفاً موازنه ریاضی مبالغ این سند را دقیقاً بررسی کن. آیا حاصل ضرب تعداد در قیمت واحد در هر ردیف با جمع کل همخوانی دارد؟ جمع کل فاکتور چطور؟" },
+                                { text: "🏢 شناسه ملی و کد اقتصادی", query: "لطفاً مشخصات کامل خروجی شامل کدهای اقتصادی، شناسه‌های ملی، شماره‌های ثبت و آدرس‌های صادرکننده و خریدار در این سند را استخراج و بررسی کن." },
+                                { text: "📅 انطباق تقویمی تاریخ‌ها", query: "لطفاً تمام تاریخ‌های شمسی موجود در سند را پیدا کرده، با قالب دقیق میلادی YYYY-MM-DD معادل‌سازی کن و مهلت تسویه آن را گزارش بده." },
+                                { text: "⚠️ اقلام نامتعارف و ممیزی", query: "آیا در این سند هزینه غیرقابل قبول مالیاتی (مانند جرایمه‌ها) یا ارقام مخدوش، دست‌نویس مشکوک یا ابهامی در سطرها وجود دارد؟" },
+                                { text: "💡 پیشنهاد کدینگ معین", query: "با توجه به شرح تراکنش‌ها و اقلام موجود در سند، پیشنهاد می‌کنی هر سطر هزینه را در چه سرفصل، حساب معین یا حساب تفصیلی سیستم حسابداری ثبت کنم؟" }
+                              ].map((chip, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => handleSendPreExtractChat(chip.query)}
+                                  disabled={isPreExtractChatLoading}
+                                  className={`px-2 py-1 rounded-lg text-[9.5px] text-right font-bold transition-all border ${
+                                    isDarkMode 
+                                      ? "bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:border-blue-500/40 hover:text-blue-300" 
+                                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-blue-500/30 hover:text-blue-600"
+                                  } cursor-pointer disabled:opacity-50`}
+                                >
+                                  {chip.text}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Chat Messages Viewport */}
+                          <div className={`flex flex-col gap-2.5 p-3 rounded-xl h-56 max-h-56 overflow-y-auto border transition-all ${
+                            isDarkMode 
+                              ? "bg-slate-950/60 border-slate-850/80" 
+                              : "bg-slate-50/50 border-slate-150 shadow-inner"
+                          }`}>
                             {preExtractChat.length === 0 ? (
-                              <p className={`text-[10px] text-center ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>هنوز گفتگویی انجام نشده است. می‌توانید سوالات خود را درباره سند بپرسید.</p>
+                              <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                                <MessageSquare className={`w-8 h-8 mb-2 opacity-30 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`} />
+                                <p className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                  مکالمه هنوز شروع نشده است.
+                                </p>
+                                <p className={`text-[9px] mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                                  یکی از ابزارهای ممیزی بالا را فشار دهید یا سوال خود را در کادر زیر بنویسید.
+                                </p>
+                              </div>
                             ) : (
                               preExtractChat.map((msg, i) => (
-                                <div key={i} className={`p-2 rounded-lg text-[10px] ${msg.role === 'user' ? (isDarkMode ? 'bg-blue-900/30 text-blue-200 ml-4' : 'bg-blue-50 text-blue-800 ml-4') : (isDarkMode ? 'bg-slate-800 text-slate-300 mr-4' : 'bg-white border text-slate-700 mr-4')}`}>
-                                  <strong>{msg.role === 'user' ? 'شما' : 'هوش مصنوعی'}:</strong> {msg.text}
+                                <div 
+                                  key={i} 
+                                  className={`flex flex-col gap-1 max-w-[90%] rounded-2xl p-2.5 text-[10px] leading-relaxed transition-all ${
+                                    msg.role === 'user' 
+                                      ? (isDarkMode 
+                                          ? 'bg-blue-600/15 border border-blue-500/25 text-blue-200 ml-auto rounded-tr-none' 
+                                          : 'bg-blue-50/80 border border-blue-100 text-blue-800 ml-auto rounded-tr-none shadow-xs') 
+                                      : (isDarkMode 
+                                          ? 'bg-slate-900 border border-slate-800 text-slate-200 mr-auto rounded-tl-none' 
+                                          : 'bg-white border border-slate-200 text-slate-800 mr-auto rounded-tl-none shadow-xs')
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1 mb-0.5 opacity-60 font-black text-[9px]">
+                                    {msg.role === 'user' ? (
+                                      <>
+                                        <span>👤 شما</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>🤖 حسابدار هوشمند (ممیز)</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  <p className="whitespace-pre-wrap">{msg.text}</p>
                                 </div>
                               ))
                             )}
                             {isPreExtractChatLoading && (
-                              <div className="flex items-center gap-2 p-2">
+                              <div className="flex items-center gap-2 p-2 mr-auto bg-slate-900/40 rounded-xl border border-slate-800/50">
                                 <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                                <span className="text-[10px] text-slate-500">در حال پاسخگویی...</span>
+                                <span className="text-[9.5px] text-slate-400">حسابدار هوشمند در حال تحلیل سند است...</span>
                               </div>
                             )}
+                            <div ref={preExtractChatEndRef} />
                           </div>
+
+                          {/* Chat Input Bar */}
                           <div className="flex gap-2">
                             <input
                               type="text"
                               value={preExtractInput}
                               onChange={(e) => setPreExtractInput(e.target.value)}
-                              onKeyDown={(e) => { if(e.key === 'Enter') handleSendPreExtractChat(); }}
-                              placeholder="سوال خود را بپرسید..."
-                              className={`flex-1 p-2 rounded-lg border text-[11px] outline-none ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-200" : "bg-white border-slate-200 text-slate-800"}`}
+                              onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); handleSendPreExtractChat(); } }}
+                              placeholder="سوال خود یا نکته ممیزی جدید را بپرسید..."
+                              className={`flex-1 px-3 py-2 rounded-xl border text-[11px] outline-none transition-all ${
+                                isDarkMode 
+                                  ? "bg-slate-950 border-slate-850 text-slate-200 focus:border-blue-500/50" 
+                                  : "bg-white border-slate-200 text-slate-800 focus:border-blue-500/50 shadow-sm"
+                              }`}
                             />
                             <button
+                              type="button"
                               onClick={() => handleSendPreExtractChat()}
                               disabled={isPreExtractChatLoading || !preExtractInput.trim()}
-                              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all disabled:opacity-50"
+                              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-300 disabled:opacity-50 text-white rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
                             >
                               <Send className="w-3.5 h-3.5" />
                             </button>
+                          </div>
+
+                          {/* Verification and AI Comprehension Section */}
+                          <div className="flex flex-col gap-3 mt-2 pt-3 border-t border-dashed dark:border-slate-800/60 border-slate-200">
+                            {!verificationSummary ? (
+                              <button
+                                type="button"
+                                onClick={handleVerifyInstructions}
+                                disabled={isVerifying}
+                                className={`w-full py-3 px-4 rounded-xl text-xs font-extrabold transition-all border shadow-xs flex items-center justify-center gap-2 cursor-pointer ${
+                                  isDarkMode 
+                                    ? "bg-purple-600/10 border-purple-500/30 text-purple-300 hover:bg-purple-600/20" 
+                                    : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                                } disabled:opacity-50`}
+                              >
+                                {isVerifying ? (
+                                  <>
+                                    <div className="w-3.5 h-3.5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                                    <span>در حال تدوین گزارش ممیزی هوش مصنوعی...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Sparkles className="w-3.5 h-3.5 text-purple-500 animate-pulse" />
+                                    <span>📊 تولید گزارش ممیزی و تاییدیه درک هوش مصنوعی از سند (الزامی)</span>
+                                  </>
+                                )}
+                              </button>
+                            ) : (
+                              <div className={`p-4 rounded-xl border text-[11px] leading-relaxed transition-all ${
+                                isDarkMode 
+                                  ? "bg-purple-950/15 border-purple-900/40 text-slate-200" 
+                                  : "bg-purple-50/30 border-purple-100 text-slate-800"
+                              }`}>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 font-extrabold text-[12px]">
+                                    <Sparkles className="w-4 h-4 animate-bounce" />
+                                    <span>گزارش درک و ممیزی نهایی سند توسط هوش مصنوعی:</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={handleVerifyInstructions}
+                                    disabled={isVerifying}
+                                    className={`px-2 py-0.5 rounded text-[9px] font-black transition-all ${
+                                      isDarkMode 
+                                        ? "bg-slate-900 hover:bg-slate-800 text-slate-400" 
+                                        : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                                    } cursor-pointer disabled:opacity-50`}
+                                  >
+                                    {isVerifying ? "..." : "🔄 به‌روزرسانی"}
+                                  </button>
+                                </div>
+                                <div className={`whitespace-pre-wrap max-h-40 overflow-y-auto mb-2 p-2.5 rounded-lg border text-[10.5px] font-medium leading-relaxed ${
+                                  isDarkMode ? "bg-slate-950 border-slate-850/60" : "bg-white border-slate-150"
+                                }`}>
+                                  {verificationSummary}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Confirmation Checkbox */}
+                            <div className={`p-3.5 rounded-2xl border transition-all ${
+                              isAiUnderstandingConfirmed 
+                                ? (isDarkMode ? "bg-emerald-500/10 border-emerald-500/30" : "bg-emerald-50 border-emerald-200") 
+                                : (isDarkMode ? "bg-amber-500/5 border-amber-500/20" : "bg-amber-50/50 border-amber-200")
+                            }`}>
+                              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={isAiUnderstandingConfirmed}
+                                  onChange={(e) => setIsAiUnderstandingConfirmed(e.target.checked)}
+                                  className="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500/30 cursor-pointer"
+                                />
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={`text-[11px] font-extrabold ${isAiUnderstandingConfirmed ? (isDarkMode ? "text-emerald-300" : "text-emerald-800") : (isDarkMode ? "text-amber-500" : "text-amber-800")}`}>
+                                    تاییدیه قطعی ممیزی و فهم ۱۰۰٪ سند توسط هوش مصنوعی
+                                  </span>
+                                  <span className={`text-[9.5px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                    من تایید می‌کنم که هوش مصنوعی در تحلیل ممیزی فوق، اقلام، مبالغ، مالیات و الزامات این سند را کاملاً متوجه شده و مورد تایید اینجانب است.
+                                  </span>
+                                </div>
+                              </label>
+                            </div>
                           </div>
                         </div>
 
                         {/* Actions */}
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/60">
                           <button
+                            type="button"
                             onClick={() => {
                               setPendingFile(null);
                               setCustomPrompt("");
@@ -3697,13 +3935,26 @@ export default function App() {
                           >
                             انصراف
                           </button>
-                          <button
-                            onClick={handleDirectExtraction}
-                            className="px-6 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all bg-blue-600 hover:bg-blue-500 text-white shadow-md cursor-pointer hover:-translate-y-0.5"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 shrink-0 text-blue-200 animate-pulse" />
-                            <span>شروع استخراج</span>
-                          </button>
+                          <div className="flex flex-col items-end gap-1">
+                            <button
+                              type="button"
+                              onClick={handleDirectExtraction}
+                              disabled={!isAiUnderstandingConfirmed}
+                              className={`px-6 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                                isAiUnderstandingConfirmed 
+                                  ? "bg-blue-600 hover:bg-blue-500 text-white shadow-md cursor-pointer hover:-translate-y-0.5" 
+                                  : "bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-500 cursor-not-allowed opacity-60"
+                              }`}
+                            >
+                              <Sparkles className="w-3.5 h-3.5 shrink-0 text-blue-200 animate-pulse" />
+                              <span>شروع استخراج نهایی</span>
+                            </button>
+                            {!isAiUnderstandingConfirmed && (
+                              <span className={`text-[8.5px] font-black ${isDarkMode ? "text-amber-400/80" : "text-amber-600"}`}>
+                                ⚠️ تاییدیه تفهیم هوش مصنوعی را در بالا علامت بزنید.
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}

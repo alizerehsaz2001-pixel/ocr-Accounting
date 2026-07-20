@@ -37,6 +37,7 @@ interface AiSettingsModalProps {
   onUploadClick: () => void;
   handleDirectExtraction: () => void;
   isExtracting: boolean;
+  isAiUnderstandingConfirmed?: boolean;
 }
 
 export default function AiSettingsModal({
@@ -56,6 +57,7 @@ export default function AiSettingsModal({
   onUploadClick,
   handleDirectExtraction,
   isExtracting,
+  isAiUnderstandingConfirmed = false,
 }: AiSettingsModalProps) {
   if (!isOpen) return null;
 
@@ -312,17 +314,31 @@ export default function AiSettingsModal({
               </button>
 
               {pendingFile && (
-                <button
-                  onClick={() => {
-                    onClose();
-                    handleDirectExtraction();
-                  }}
-                  disabled={isExtracting}
-                  className="px-6 py-2.5 rounded-xl text-[11px] font-bold flex items-center gap-2 transition-all bg-emerald-600 hover:bg-emerald-500 text-white shadow-md disabled:opacity-50 cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-200 animate-pulse shrink-0" />
-                  <span>شروع استخراج هوشمند سند</span>
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    onClick={() => {
+                      if (!isAiUnderstandingConfirmed) {
+                        handleDirectExtraction(); // This will trigger the standard warning toast
+                        return;
+                      }
+                      onClose();
+                      handleDirectExtraction();
+                    }}
+                    className={`px-6 py-2.5 rounded-xl text-[11px] font-bold flex items-center gap-2 transition-all shadow-md cursor-pointer hover:-translate-y-0.5 active:translate-y-0 ${
+                      isAiUnderstandingConfirmed 
+                        ? "bg-emerald-600 hover:bg-emerald-500 text-white" 
+                        : "bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-500 opacity-60 cursor-not-allowed"
+                    }`}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-200 animate-pulse shrink-0" />
+                    <span>شروع استخراج هوشمند سند</span>
+                  </button>
+                  {!isAiUnderstandingConfirmed && (
+                    <span className="text-[8.5px] font-black text-amber-500">
+                      ⚠️ نیاز به تاییدیه تفهیم نهایی در پنل اصلی
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
