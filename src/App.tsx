@@ -888,14 +888,13 @@ export default function App() {
         }),
       });
       const data = await response.json();
-      if (data.success && data.text) {
-        setPreExtractChat((prev) => [...prev, { role: "assistant" as const, text: data.text }]);
-      } else {
-         showNotification("خطا در ارتباط با هوش مصنوعی در چت پیش از پردازش.", "error");
+      if (!response.ok || !data.success) {
+         throw new Error(data.error || "خطا در ارتباط با هوش مصنوعی در چت پیش از پردازش.");
       }
-    } catch (error) {
+      setPreExtractChat((prev) => [...prev, { role: "assistant" as const, text: data.text }]);
+    } catch (error: any) {
        console.error("Error sending pre-extract chat:", error);
-       showNotification("خطا در شبکه یا سرور. لطفاً دوباره تلاش کنید.", "error");
+       showNotification(error.message || "خطا در شبکه یا سرور. لطفاً دوباره تلاش کنید.", "error");
     } finally {
       setIsPreExtractChatLoading(false);
     }
@@ -1039,14 +1038,13 @@ export default function App() {
         }),
       });
       const data = await response.json();
-      if (data.success && data.text) {
-        setVerificationSummary(data.text);
-      } else {
-        showNotification("خطا در ایجاد خلاصه تاییدیه.", "error");
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "خطا در ایجاد خلاصه تاییدیه.");
       }
-    } catch (error) {
+      setVerificationSummary(data.text);
+    } catch (error: any) {
       console.error("Error creating verification summary:", error);
-      showNotification("خطا در شبکه. لطفاً دوباره تلاش کنید.", "error");
+      showNotification(error.message || "خطا در شبکه. لطفاً دوباره تلاش کنید.", "error");
     } finally {
       setIsVerifying(false);
     }
@@ -1085,16 +1083,15 @@ export default function App() {
       });
 
       const data = await res.json();
-      if (data.success) {
-        setChatMessages(prev => [...prev, {
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "خطایی رخ داد.");
+      }
+      setChatMessages(prev => [...prev, {
           id: Math.random().toString(36).substring(7),
           role: "assistant" as const,
           text: data.text,
           timestamp: new Date(),
         }]);
-      } else {
-        throw new Error(data.error || "خطایی رخ داد.");
-      }
     } catch (err: any) {
       setChatMessages(prev => [...prev, {
         id: Math.random().toString(36).substring(7),

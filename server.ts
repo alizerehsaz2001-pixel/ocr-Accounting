@@ -124,12 +124,29 @@ async function generateContentWithRetry(
           errorMessage.includes("rate limit") ||
           errorMessage.includes("exhausted");
 
-        if (isQuotaExceeded && currentModel.includes("pro")) {
+        if (isQuotaExceeded) {
           console.warn(
-            `[Gemini API] Pro model "${currentModel}" is rate-limited (429/quota). Bypassing retries and falling back to Flash immediately...`
+            `[Gemini API] Model "${currentModel}" is rate-limited or out of quota (429/quota). Bypassing retries and falling back to the next model immediately...`
           );
           lastError = apiError;
-          break; // Break the retry loop for the pro model and try the next candidate model (Flash) immediately
+          break; // Break the retry loop and immediately fall back to the next model
+        }
+
+        const isHighDemand =
+          apiStatus === 503 ||
+          apiStatus === "UNAVAILABLE" ||
+          errorMessage.includes("demand") ||
+          errorMessage.includes("temporary") ||
+          errorMessage.includes("overloaded") ||
+          errorMessage.includes("unavailable") ||
+          errorMessage.includes("503");
+
+        if (isHighDemand) {
+          console.warn(
+            `[Gemini API] Model "${currentModel}" is experiencing high demand or is unavailable (503/UNAVAILABLE). Bypassing retries and falling back to next model immediately...`
+          );
+          lastError = apiError;
+          break; // Break the retry loop and fall back immediately to prevent browser timeouts (Failed to fetch)
         }
 
         const isTransient =
@@ -170,7 +187,17 @@ async function generateContentWithRetry(
   }
 
   // If all candidate models failed, throw the last error
-  throw lastError || new Error("All Gemini API models failed during generation.");
+  const finalError = lastError || new Error("All Gemini API models failed during generation.");
+  const finalMessage = (finalError.message || "").toLowerCase();
+  const finalStatus = finalError.status || finalError.statusCode || (finalError.error && finalError.error.code);
+  
+  if (finalStatus === 429 || finalMessage.includes("quota") || finalMessage.includes("limit") || finalMessage.includes("rate limit") || finalMessage.includes("exhausted")) {
+    throw new Error("سهمیه یا محدودیت در تعداد درخواست‌های کلید API شما به پایان رسیده است (Quota Exceeded / Rate Limit). لطفا تنظیمات صورتحساب و سقف مصرف کلید خود را بررسی کنید یا چند دقیقه دیگر مجددا تلاش کنید.");
+  }
+  if (finalStatus === 503 || finalMessage.includes("demand") || finalMessage.includes("temporary") || finalMessage.includes("unavailable") || finalMessage.includes("503")) {
+    throw new Error("در حال حاضر ترافیک سرورهای گوگل بسیار بالا است و سرویس موقتاً در دسترس نیست (Service Unavailable / High Demand). لطفا مجدداً تلاش فرمایید.");
+  }
+  throw finalError;
 }
 
 // Persian/Farsi financial documents extraction endpoint
@@ -468,79 +495,6 @@ ${JSON.stringify(parsedData)}
     res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در پردازش فایل" });
   }
 });
-
-// Pre-extraction chat endpoint
-app.post("/api/chat-pre-extract", async (req, res) => {
-  try {
-    const { messages, image, mimeType, model, customPrompt } = req.body;
-    
-    if (!messages || !Array.isArray(messages)) {
-       return res.status(400).json({ error: "لیست پیام‌ها ارسال نشده است." });
-    }
-    
-    const ai = getGeminiClient();
-    let systemInstruction = "شما یک دستیار حسابدار هوشمند هستید. کاربر تصویری از یک سند مالی (فاکتور، فیش، چک و ...) آپلود کرده است. شما باید به سوالات کاربر در مورد این سند پاسخ دهید و در صورت نیاز راهنمایی کنید که چه چیزهایی از این سند قابل استخراج است. پس از این چت، داده‌ها در فرمت JSON استخراج خواهند شد. همیشه مودبانه، تخصصی و به زبان فارسی پاسخ دهید. لطفاً اگر کاربر در مورد اعداد پرسید با دقت پاسخ دهید.";
-    
-    if (customPrompt && customPrompt.trim()) {
-       systemInstruction += "\n\nدستورالعمل خاص استخراج کاربر که باید در نظر بگیرید:\n" + customPrompt;
-    }
-    
-    const rawMessages = messages.map((msg: any, index: number) => {
-      const msgParts: any[] = [{ text: msg.text || "فایل ضمیمه شد." }];
-      
-      if (msg.files && Array.isArray(msg.files)) {
-         msg.files.forEach((f: any) => {
-            msgParts.push({
-               inlineData: {
-                  mimeType: f.mimeType || "application/pdf",
-                  data: f.base64
-               }
-            });
-         });
-      }
-
-      // Attach the image to the first user message
-      if (index === 0 && msg.role === "user" && image) {
-        msgParts.push({
-          inlineData: {
-            mimeType: mimeType || "image/png",
-            data: image,
-          },
-        });
-      }
-
-      return {
-        role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
-        parts: msgParts,
-      };
-    });
-    
-    const formattedMessages: any[] = [];
-    for (const msg of rawMessages) {
-      if (formattedMessages.length > 0 && formattedMessages[formattedMessages.length - 1].role === msg.role) {
-        formattedMessages[formattedMessages.length - 1].parts.push(...msg.parts);
-      } else {
-        formattedMessages.push(msg);
-      }
-    }
-
-    const selectedModel = ["gemini-3.5-flash", "gemini-3.1-pro-preview"].includes(model) ? model : "gemini-3.5-flash";
-
-    const response = await ai.models.generateContent({
-      model: selectedModel,
-      contents: formattedMessages,
-      config: {
-        systemInstruction: systemInstruction,
-      },
-    });
-
-    res.json({ success: true, text: response.text });
-  } catch (error: any) {
-    console.error("API Error in pre-extract chat:", error);
-    res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در گفتگوی پیش از استخراج" });
-  }
-});
-
 
 // Endpoint for explicit AI-driven Mathematical Audit and Self-Correction
 app.post("/api/audit-repair", async (req, res) => {
