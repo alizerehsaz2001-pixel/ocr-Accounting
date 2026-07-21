@@ -683,13 +683,14 @@ export default function App() {
 
   // AI Model Selection & Daily Quota States
   const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return localStorage.getItem("selected_ai_model") || "gemini-3.5-flash";
+    const saved = localStorage.getItem("selected_ai_model");
+    if (saved && saved !== "gemini-3.1-pro-preview") return saved;
+    return "gemini-3.6-flash";
   });
 
   const [modelQuotas, setModelQuotas] = useState<{ [key: string]: { limit: number; used: number; lastReset: number } }>(() => {
     const defaultQuotas = {
-      "gemini-3.5-flash": { limit: 1500, used: 0, lastReset: Date.now() },
-      "gemini-3.1-pro-preview": { limit: 100, used: 0, lastReset: Date.now() },
+      "gemini-3.6-flash": { limit: 2000, used: 0, lastReset: Date.now() },
     };
 
     const saved = localStorage.getItem("ai_model_quotas");
@@ -3318,22 +3319,13 @@ export default function App() {
           <div className="px-3 py-1 space-y-2">
             {[
               {
-                id: "gemini-3.5-flash",
-                name: "Gemini 3.5 Flash",
-                badge: "پیشنهادی",
-                tokenLimit: "سند تا ۲۵MB",
-                costPerRequest: "حدود ۱,۲۰۰ توکن",
-                desc: "پردازش فوق‌سریع و هوشمند فاکتورها.",
-                badgeClass: isDarkMode ? "bg-blue-500/20 text-blue-300 border-blue-900/30" : "bg-blue-50 text-blue-700 border-blue-200",
-              },
-              {
-                id: "gemini-3.1-pro-preview",
-                name: "Gemini 3.1 Pro",
-                badge: "حسابرس ارشد",
-                tokenLimit: "سند تا ۱۰۰MB",
-                costPerRequest: "حدود ۱,۸۰۰ توکن",
-                desc: "استدلال عمیق و مناسب دست‌خط نامنظم.",
-                badgeClass: isDarkMode ? "bg-purple-500/20 text-purple-300 border-purple-900/30" : "bg-purple-50 text-purple-700 border-purple-200",
+                id: "gemini-3.6-flash",
+                name: "Gemini 3.6 Flash (آخرین آپدیت)",
+                badge: "موتور اصلی هوشمند",
+                tokenLimit: "سند تا ۵۰MB",
+                costPerRequest: "حدود ۱,۰۰۰ توکن",
+                desc: "پردازش فوق‌سریع و هوشمند فاکتورها با بالاترین دقت استخراج.",
+                badgeClass: isDarkMode ? "bg-emerald-500/20 text-emerald-300 border-emerald-900/30" : "bg-emerald-50 text-emerald-700 border-emerald-200",
               },
             ].map((m) => {
               const quota = modelQuotas[m.id] || { limit: 100, used: 0, lastReset: Date.now() };
@@ -3437,10 +3429,9 @@ export default function App() {
             <button
               onClick={() => {
                 setModelQuotas({
-                  "gemini-3.5-flash": { limit: 1500, used: 0, lastReset: Date.now() },
-                  "gemini-3.1-pro-preview": { limit: 100, used: 0, lastReset: Date.now() },
+                  "gemini-3.6-flash": { limit: 2000, used: 0, lastReset: Date.now() },
                 });
-                showNotification("سهمیه استفاده روزانه مدل‌ها ریست گردید.", "success");
+                showNotification("سهمیه استفاده روزانه مدل ریست گردید.", "success");
               }}
               className={`w-full flex items-center justify-center gap-2 py-2 border border-dashed rounded-xl text-[10px] transition-all cursor-pointer font-bold ${
                 isDarkMode 
@@ -3637,8 +3628,7 @@ export default function App() {
                              onChange={(e) => setSelectedModel(e.target.value)}
                              className={`w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none cursor-pointer ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"}`}
                           >
-                             <option value="gemini-3.5-flash">Gemini 3.5 Flash (سریع و اقتصادی)</option>
-                             <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (دقیق و تحلیلی)</option>
+                             <option value="gemini-3.6-flash">Gemini 3.6 Flash (آخرین آپدیت - سریع و هوشمند)</option>
                           </select>
                         </div>
 
@@ -5990,9 +5980,7 @@ export default function App() {
           <div className="flex w-full justify-between pb-1.5 mb-1 border-b border-slate-700 max-w-7xl">
             <div className="flex gap-4">
               <span>سیستم: آنلاین و امن</span>
-              <span>هسته مفسر: {
-                selectedModel === "gemini-3.1-pro-preview" ? "Gemini 3.1 Pro" : "Gemini 3.5 Flash"
-              }</span>
+              <span>هسته مفسر: Gemini 3.6 Flash (آخرین آپدیت)</span>
               {activeFile?.status === "success" && (
                 <div className="flex items-center gap-2">
                   <span className="text-amber-400 font-mono">

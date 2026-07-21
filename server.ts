@@ -43,13 +43,11 @@ async function generateContentWithRetry(
   // Construct the sequence of fallback models to try if the primary model fails or is overloaded
   const candidateModels = [
     originalModel,
+    "gemini-3.6-flash",
     "gemini-3.5-flash",
     "gemini-flash-latest",
     "gemini-3.1-flash-lite"
   ];
-  if (originalModel && originalModel.includes("pro")) {
-    candidateModels.push("gemini-3.1-pro-preview");
-  }
   
   // Filter out duplicates and null/undefined values
   const uniqueCandidates = Array.from(new Set(candidateModels.filter(Boolean)));
@@ -65,14 +63,7 @@ async function generateContentWithRetry(
     while (attempt <= maxRetries) {
       try {
         const currentConfig = { ...generateConfig };
-        if (currentModel === "gemini-3.1-pro-preview") {
-          const configCopy = { ...(currentConfig.config || {}) };
-          delete configCopy.maxOutputTokens;
-          configCopy.thinkingConfig = {
-            thinkingLevel: ThinkingLevel.HIGH,
-          };
-          currentConfig.config = configCopy;
-        } else if (currentModel === "gemini-3.5-flash") {
+        if (currentModel.includes("flash")) {
           const configCopy = { ...(currentConfig.config || {}) };
           if (!configCopy.tools) {
              configCopy.tools = [];
@@ -214,10 +205,11 @@ app.post("/api/extract", async (req, res) => {
 
     // Dynamically select target backend model based on user's selection panel
     const allowedModels = [
+      "gemini-3.6-flash",
       "gemini-3.5-flash",
-      "gemini-3.1-pro-preview"
+      "gemini-flash-latest"
     ];
-    let selectedModel = allowedModels.includes(model) ? model : "gemini-3.5-flash";
+    let selectedModel = allowedModels.includes(model) ? model : "gemini-3.6-flash";
 
     // Specific strict instructions tailored to Persian accounting standards and system instructions
     const systemInstruction = `شما یک حسابدار رسمی (CPA)، ممیز مالیاتی خبره، حسابرس ارشد و موتور هوش مصنوعی OCR هستید که با تمام اصول حسابداری عمومی پذیرفته شده (GAAP)، استانداردهای حسابداری ایران (مصوب سازمان حسابرسی)، ماهیت حساب‌ها (بدهکار/بستانکار) و فرآیندهای مالیاتی کشور آشنایی و تسلط کامل دارید.
@@ -506,7 +498,7 @@ app.post("/api/audit-repair", async (req, res) => {
     }
 
     const ai = getGeminiClient();
-    const selectedModel = ["gemini-3.5-flash", "gemini-3.1-pro-preview"].includes(model) ? model : "gemini-3.5-flash";
+    const selectedModel = ["gemini-3.6-flash", "gemini-3.5-flash"].includes(model) ? model : "gemini-3.6-flash";
 
     console.info("[API Audit Repair] Initiating on-demand mathematical alignment and OCR healing...");
 
@@ -636,7 +628,7 @@ app.post("/api/chat-pre-extract", async (req, res) => {
       }
     }
 
-    const selectedModel = model || "gemini-3.5-flash";
+    const selectedModel = model || "gemini-3.6-flash";
 
     const response = await generateContentWithRetry(ai, {
       model: selectedModel,
@@ -701,7 +693,7 @@ app.post("/api/chat-verification", async (req, res) => {
        ]
     });
 
-    const selectedModel = model || "gemini-3.5-flash";
+    const selectedModel = model || "gemini-3.6-flash";
 
     const response = await generateContentWithRetry(ai, {
       model: selectedModel,
@@ -754,7 +746,7 @@ app.post("/api/chat", async (req, res) => {
     }));
 
     const response = await generateContentWithRetry(ai, {
-      model: "gemini-3.5-flash",
+      model: "gemini-3.6-flash",
       contents: contents,
       config: {
         systemInstruction: systemInstruction,
@@ -888,7 +880,7 @@ ${JSON.stringify(files, null, 2)}
 هیچ متنی غیر از فایل خام JSON ننویسید. از نشانه‌گذاری markdown مانند \`\`\`json استفاده نکنید.`;
 
     const response = await generateContentWithRetry(ai, {
-      model: "gemini-3.5-flash",
+      model: "gemini-3.6-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json"

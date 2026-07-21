@@ -231,8 +231,7 @@ export default function AiSettingsModal({
                        : "bg-slate-50 border-slate-200 text-slate-800 focus:border-blue-500/40"
                    }`}
                 >
-                   <option value="gemini-3.5-flash">Gemini 3.5 Flash (سریع و اقتصادی)</option>
-                   <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (دقیق و تحلیلی)</option>
+                   <option value="gemini-3.6-flash">Gemini 3.6 Flash (آخرین نسخه - سریع و هوشمند)</option>
                 </select>
               </div>
 
