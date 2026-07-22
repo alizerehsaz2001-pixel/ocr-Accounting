@@ -141,23 +141,23 @@ export default function DynamicTable({
       <thead className={`text-[10px] uppercase font-black sticky top-0 z-30 transition-colors duration-300 ${isDarkMode ? "text-slate-350" : "text-slate-500"}`}>
         <tr>
           {hasSelectionSupport && (
-            <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none w-10`}>
+            <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-100/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none w-10`}>
               <button onClick={onToggleSelectAll} className="outline-none">
                 {allSelected ? <CheckSquare className="w-4 h-4 text-blue-500" /> : isIndeterminate ? <CheckSquare className="w-4 h-4 text-slate-400 opacity-60" /> : <Square className="w-4 h-4 opacity-40 hover:opacity-100" />}
               </button>
             </th>
           )}
-          <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none`}>
+          <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-100/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none`}>
             #
           </th>
-          <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none`}>
+          <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-100/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none`}>
             دقت
           </th>
           {columns.map(col => (
             <th 
               key={col.کلید}
               onClick={() => handleSort(col.کلید)}
-              className={`px-3 py-3 sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
+              className={`px-3 py-3 sticky top-0 z-30 bg-slate-100/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
               title={`مرتب‌سازی بر اساس ${col.عنوان}`}
             >
               <div className="flex items-center gap-1.5 font-bold">
@@ -171,7 +171,7 @@ export default function DynamicTable({
           </th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 relative">
+      <tbody className="divide-y divide-slate-200 dark:divide-slate-800 relative">
         <AnimatePresence mode="popLayout">
           {sortedTransactions.map((tr, index) => {
             const originalIndex = transactions.findIndex(t => t.id === tr.id);
@@ -186,7 +186,7 @@ export default function DynamicTable({
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className={`group hover:relative hover:z-10 hover:-translate-y-0.5 hover:scale-[1.006] ${isSelected ? (isDarkMode ? "bg-blue-900/20" : "bg-blue-50/50") : ""} ${
+                className={`group hover:relative hover:z-10 hover:-translate-y-0.5 hover:scale-[1.002] hover:shadow-lg ${isSelected ? (isDarkMode ? "bg-blue-900/20" : "bg-blue-50/50") : ""} ${
                   isHighlighted
                     ? isHighlighted === "new"
                       ? isDarkMode
