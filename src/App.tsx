@@ -5504,7 +5504,7 @@ export default function App() {
                       }`} dir="rtl">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           {/* Left layout with Quick search and metrics */}
-                          <div className="flex items-center gap-2 flex-1 min-w-[280px]">
+                          <div className="flex items-center gap-2 flex-1 min-w-[280px] flex-wrap">
                             <div className="relative flex-1">
                               <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
                                 <Search className="h-3.5 w-3.5" />
@@ -5630,7 +5630,7 @@ export default function App() {
                               onClick={handleAddNewRow}
                               className={`px-2.5 py-1.5 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all border shrink-0 ${
                                 isDarkMode
-                                  ? "bg-emerald-555/15 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+                                  ? "bg-emerald-500/15 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
                                   : "bg-emerald-50 hover:bg-emerald-100 border-emerald-150 text-emerald-700"
                               }`}
                               title="افزودن سطر محاسباتی یا سند تراکنش دستی خام"
@@ -5651,13 +5651,15 @@ export default function App() {
                           </div>
 
                           {/* Right layout indicating results found */}
-                          <div className="flex items-center gap-1.5 text-[10px]">
-                            <span className="text-slate-400 font-medium">ردیف‌های منطبق:</span>
-                            <span className="font-bold text-blue-600 font-mono">
+                          <div className={`flex items-center gap-1.5 text-[11px] shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg border shadow-xs ${
+                            isDarkMode ? "bg-slate-800/80 border-slate-700/80 text-slate-300" : "bg-slate-100/90 border-slate-200 text-slate-600"
+                          }`}>
+                            <span className="opacity-80 font-medium">ردیف‌های منطبق:</span>
+                            <span className="font-bold text-blue-600 dark:text-blue-400 font-mono text-xs">
                               {filteredTransactions.length.toLocaleString("fa-IR")}
                             </span>
-                            <span className="text-slate-300">از</span>
-                            <span className="font-semibold text-slate-500 font-mono">
+                            <span className="opacity-50">از</span>
+                            <span className="font-semibold text-slate-500 dark:text-slate-400 font-mono text-xs">
                               {transactions.length.toLocaleString("fa-IR")}
                             </span>
 
@@ -5670,9 +5672,9 @@ export default function App() {
                                   setFilterMaxAmount("");
                                   setFilterConfidence("all");
                                 }}
-                                className="mr-2 text-[9px] text-red-500 hover:text-red-650 hover:underline flex items-center gap-1 font-bold"
+                                className="mr-1.5 text-[10px] text-rose-500 hover:text-rose-600 hover:underline flex items-center gap-0.5 font-bold border-r pr-2 border-slate-300 dark:border-slate-700"
                               >
-                                <X className="h-2.5 w-2.5" />
+                                <X className="h-3 w-3" />
                                 <span>حذف فیلترها</span>
                               </button>
                             )}
