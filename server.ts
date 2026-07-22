@@ -44,7 +44,7 @@ async function generateContentWithRetry(
   const candidateModels = [
     originalModel,
     "gemini-3.6-flash",
-    "gemini-3.5-flash",
+    "gemini-3.6-flash",
     "gemini-flash-latest",
     "gemini-3.1-flash-lite"
   ];
@@ -63,18 +63,6 @@ async function generateContentWithRetry(
     while (attempt <= maxRetries) {
       try {
         const currentConfig = { ...generateConfig };
-        if (currentModel.includes("flash")) {
-          const configCopy = { ...(currentConfig.config || {}) };
-          if (!configCopy.tools) {
-             configCopy.tools = [];
-          }
-          // Avoid adding multiple googleSearch tools
-          const hasSearch = configCopy.tools.some((t: any) => t.googleSearch);
-          if (!hasSearch) {
-             configCopy.tools.push({ googleSearch: {} });
-          }
-          currentConfig.config = configCopy;
-        }
 
         const response = await ai.models.generateContent({
           ...currentConfig,
@@ -206,7 +194,7 @@ app.post("/api/extract", async (req, res) => {
     // Dynamically select target backend model based on user's selection panel
     const allowedModels = [
       "gemini-3.6-flash",
-      "gemini-3.5-flash",
+      "gemini-3.6-flash",
       "gemini-flash-latest"
     ];
     let selectedModel = allowedModels.includes(model) ? model : "gemini-3.6-flash";
@@ -282,9 +270,9 @@ app.post("/api/extract", async (req, res) => {
 
 قوانین مطلق و غیرقابل تخطی برای تضمین حداکثر دقت و صحت (OCR Maximum Accuracy & Precision Rules):
 ۱. صد در صد داده‌های استخراج شده و تحلیل‌ها باید مستند به سند و فایل آپلود شده باشند. باید دقیقاً مطابق با چیزی که در تصویر می‌بینید تحلیل کنید و جیسون تحویل دهید. از گمانه‌زنی، فرضیه‌سازی یا تولید مقادیر خیالی خودداری نمایید (Anti-Hallucination). اگر فایلی ارسال نشده یا عاری از دیتای مالی است، فقط یک آبجکت پایه برگردانید.
-۲. خروجی فقط و فقط یک آبجکت ساختار یافته JSON است. شرح متنی مجزا ارائه ندهید.
+۲. خروجی فقط و فقط یک آبجکت ساختار یافته JSON به زبان فارسی است. شرح متنی مجزا ارائه ندهید.
 ۳. در مواجهه با دست‌خط تند، شکسته یا مخدوش، ابتدا تا حد ممکن به قواعد کلمه، موقعیت سطر و موازنه مبالغ رجوع کنید. کلمات کاملاً ناخوانا به شکل "[ناخوانا]" ذخیره شوند.
-۴. فرمت پاسخ برگشتی حتماً باید یک ساختار JSON معتبر منطبق بر سرفصل‌های معین باشد. آبجکت اصلی شامل کلیدهای "نوع_سند"، "تحلیل_سند" و "اقلام_تراکنش" باشد.
+۴. فرمت پاسخ برگشتی حتماً باید یک ساختار JSON معتبر منطبق بر سرفصل‌های معین باشد. آبجکت اصلی شامل کلیدهای "نوع_سند"، "تحلیل_سند"، "ستون_ها" و "ردیف_ها" باشد. کلیه کلیدها، عنوان ستون‌ها و فیلدها باید کاملا به زبان فارسی باشند تا خروجی مستقیم JSON و فایل اکسل با عناوین فارسی و خوانا تولید شود.
 ۵. تشخیص خودکار هزینه‌های غیرقابل قبول مالیاتی: چنانچه در فاکتور یا صورتحساب، ردیفی با عنوان «جریمه دیرکرد»، «خسارت تاخیر» یا موارد مشابه وجود داشت، این مبالغ را شناسایی کرده و فیلد "هزینه_غیرقابل_قبول" را برای آن سطر معادل true قرار دهید.
 ۶. تبدیل و نرمال‌سازی تمامی اعداد به ارقام انگلیسی (Digit Normalization): کلیه اعداد فارسی و عربی (مانند ۱، ۲، ۳، ۴، ۵، ۶، ۷، ۸، ۹، ۰) باید بدون استثنا به ارقام استاندارد انگلیسی (1, 2, 3, 4, 5, 6, 7, 8, 9, 0) تبدیل شوند.
 ۷. حذف ممیزها و جداکننده‌ها در مبالغ مالی: تمام مبالغ پولی و ارقام محاسباتی باید به صورت عددی خالص و فاقد هرگونه ویرگول، نقطه، اسپیس یا کامای جداکننده سه رقمی (مانند تبدیل 12,500,000 یا ۱۲٬۵۰۰٬۰۰۰ به 12500000) ذخیره شوند تا در محاسبات سیستم تداخل ایجاد نشود.
@@ -354,11 +342,11 @@ app.post("/api/extract", async (req, res) => {
             },
             ستون_ها: {
               type: Type.ARRAY,
-              description: "لیست ستون‌های پویای این سند که استخراج شده‌اند. هر ستون باید دارای یک کلید انگلیسی (مانند item_name, quantity, unit_price, total_price, tax, description) و یک عنوان خوانای فارسی باشد.",
+              description: "لیست ستون‌های پویای این سند که استخراج شده‌اند. هر ستون باید دارای یک کلید فارسی (مانند نام_کالا، تعداد، قیمت_واحد، قیمت_کل، مالیات، توضیحات) و یک عنوان خوانای فارسی باشد تا خروجی JSON کاملاً فارسی و مناسب فایل اکسل باشد.",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  کلید: { type: Type.STRING, description: "کلید انگلیسی یکتای ستون (مثلا quantity)" },
+                  کلید: { type: Type.STRING, description: "کلید یکتای ستون به زبان فارسی (مثلا تعداد یا قیمت_واحد)" },
                   عنوان: { type: Type.STRING, description: "عنوان فارسی ستون (مثلا تعداد)" }
                 },
                 required: ["کلید", "عنوان"]
@@ -380,7 +368,7 @@ app.post("/api/extract", async (req, res) => {
                     items: {
                       type: Type.OBJECT,
                       properties: {
-                        کلید: { type: Type.STRING, description: "کلید انگلیسی ستون مربوطه (منطبق با ستون_ها)" },
+                        کلید: { type: Type.STRING, description: "کلید فارسی ستون مربوطه (منطبق با ستون_ها)" },
                         مقدار: { type: Type.STRING, description: "مقدار استخراج شده (حتی اعداد به فرم رشته). در صورت خالی بودن null یا خالی." }
                       },
                       required: ["کلید"]
@@ -498,7 +486,7 @@ app.post("/api/audit-repair", async (req, res) => {
     }
 
     const ai = getGeminiClient();
-    const selectedModel = ["gemini-3.6-flash", "gemini-3.5-flash"].includes(model) ? model : "gemini-3.6-flash";
+    const selectedModel = ["gemini-3.6-flash", "gemini-3.6-flash"].includes(model) ? model : "gemini-3.6-flash";
 
     console.info("[API Audit Repair] Initiating on-demand mathematical alignment and OCR healing...");
 
@@ -707,6 +695,92 @@ app.post("/api/chat-verification", async (req, res) => {
   } catch (error: any) {
     console.error("API Error in verification chat:", error);
     res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در بررسی و تایید" });
+  }
+});
+
+// Exclusive Document AI Chat endpoint
+app.post("/api/document-chat", async (req, res) => {
+  try {
+    const { messages, documentImage, mimeType, documentData, documentName, documentType, documentAnalysis, model } = req.body;
+    
+    if (!messages || !Array.isArray(messages)) {
+       return res.status(400).json({ error: "لیست پیام‌ها ارسال نشده است." });
+    }
+    
+    const ai = getGeminiClient();
+    
+    let systemInstruction = `شما یک دستیار حسابرس فوق‌العاده تخصصی و هوشمند هستید که به صورت انحصاری و اختصاصی برای بررسی و تحلیل سند مالی زیر در اختیار کاربر قرار گرفته‌اید.
+نام سند: ${documentName || "سند مالی"}
+${documentType ? `نوع سند: ${documentType}` : ""}
+${documentAnalysis ? `تحلیل اولیه‌ی سند: ${documentAnalysis}` : ""}
+
+وظایف شما در چت انحصاری سند:
+۱. پاسخگویی دقیق و تخصصی به تمامی پرسش‌ها و ابهامات کاربر صرفاً درباره‌ی همین سند مالی.
+۲. ممیزی محاسبات ریاضی، اقلام، مالیات بر ارزش افزوده، تخفیفات و جمع کل فاکتور/سند.
+۳. تحلیل اعتبار سند، شناسه‌های ملی/مودیان، تاریخ‌ها، و ارزیابی قوانین مالیاتی و ارزش افزوده مرتبط.
+۴. ارائه پاسخ‌های ساختاریافته به زبان فارسی همراه با نکات ممیزی، خلاصه مدیریتی یا جدول‌های توضیحی در صورت درخواست کاربر.
+۵. اگر کاربر بخواهد اصلاحیه‌ای یا نکته خاصی برای پرامپت استخراج سند ثبت کند، او را راهنمایی کرده و خلاصه اصلاحیه را به روشنی بنویسید.`;
+
+    if (documentData) {
+      const dataStr = typeof documentData === "string" ? documentData : JSON.stringify(documentData, null, 2);
+      systemInstruction += `\n\nاطلاعات و جدول داده‌های استخراج شده فعلی از این سند:\n\`\`\`json\n${dataStr.substring(0, 5000)}\n\`\`\``;
+    }
+
+    const rawMessages = messages.map((msg: any, index: number) => {
+      const msgParts: any[] = [{ text: msg.text || "فایل ضمیمه شد." }];
+      
+      if (msg.files && Array.isArray(msg.files)) {
+         msg.files.forEach((f: any) => {
+            msgParts.push({
+               inlineData: {
+                  mimeType: f.mimeType || "application/pdf",
+                  data: f.base64
+               }
+            });
+         });
+      }
+
+      // Attach the document image to the first message if provided
+      if (index === 0 && documentImage) {
+        msgParts.push({
+          inlineData: {
+            mimeType: mimeType || "image/png",
+            data: documentImage,
+          },
+        });
+      }
+
+      return {
+        role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
+        parts: msgParts,
+      };
+    });
+
+    const formattedMessages: any[] = [];
+    for (const msg of rawMessages) {
+      if (formattedMessages.length > 0 && formattedMessages[formattedMessages.length - 1].role === msg.role) {
+        formattedMessages[formattedMessages.length - 1].parts.push(...msg.parts);
+      } else {
+        formattedMessages.push(msg);
+      }
+    }
+
+    const selectedModel = model || "gemini-3.6-flash";
+
+    const response = await generateContentWithRetry(ai, {
+      model: selectedModel,
+      contents: formattedMessages,
+      config: {
+        systemInstruction: systemInstruction,
+      },
+    });
+
+    const tokensUsed = response.usageMetadata?.totalTokenCount || 0;
+
+    res.json({ success: true, text: response.text, tokensUsed });
+  } catch (error: any) {
+    console.error("API Error in document-chat:", error);
+    res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در پردازش چت اختصاصی سند" });
   }
 });
 
