@@ -63,6 +63,10 @@ async function generateContentWithRetry(
     while (attempt <= maxRetries) {
       try {
         const currentConfig = { ...generateConfig };
+        if (currentModel === "gemini-3.1-pro-preview") {
+          currentConfig.config = currentConfig.config || {};
+          currentConfig.config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+        }
 
         const response = await ai.models.generateContent({
           ...currentConfig,
@@ -195,7 +199,8 @@ app.post("/api/extract", async (req, res) => {
     const allowedModels = [
       "gemini-3.6-flash",
       "gemini-3.6-flash",
-      "gemini-flash-latest"
+      "gemini-flash-latest",
+      "gemini-3.1-pro-preview"
     ];
     let selectedModel = allowedModels.includes(model) ? model : "gemini-3.6-flash";
 
@@ -284,6 +289,9 @@ app.post("/api/extract", async (req, res) => {
 
     if (userPrompt && typeof userPrompt === "string" && userPrompt.trim()) {
       promptText += `\n\n[دستور اختصاصی حسابدار / کاربر برای استخراج]:\n${userPrompt}\nلطفا توجه ویژه‌ای به این دستور کاربر داشته باشید و ترجیحاً استخراج و تحلیل را بر مبنای این درخواست انجام دهید.`;
+      if (userPrompt.includes("۱۰۰٪") || userPrompt.includes("دستور اکید") || userPrompt.includes("تمام اطلاعات")) {
+        promptText += `\n\n🚨 [دستور ویژه استخراج ۱۰۰٪ جامع و بدون استثنا]: کاربر رسماً تاکید کرده است که کلیه اعداد، متون، جداول، کدهای اقتصادی، شناسه‌های ملی، آدرس‌ها، تلفن‌ها، تک‌تک سطرهای فاکتور، شرح کالاها، مقادیر، قیمت‌های واحد، تخفیفات، مالیات بر ارزش افزوده، عوارض، جمع کل، شماره شبا/حساب و تمامی یادداشت‌ها و شروط حاشیه‌ای سند بدون کوچک‌ترین حذف یا خلاصه‌سازی استخراج شوند. عدم استخراج حتی یک سطر یا یک فیلد خطای حیاتی محسوب می‌شود.`;
+      }
     }
 
     if (tokenSettings) {
@@ -486,7 +494,7 @@ app.post("/api/audit-repair", async (req, res) => {
     }
 
     const ai = getGeminiClient();
-    const selectedModel = ["gemini-3.6-flash", "gemini-3.6-flash"].includes(model) ? model : "gemini-3.6-flash";
+    const selectedModel = ["gemini-3.6-flash", "gemini-3.1-pro-preview"].includes(model) ? model : "gemini-3.6-flash";
 
     console.info("[API Audit Repair] Initiating on-demand mathematical alignment and OCR healing...");
 

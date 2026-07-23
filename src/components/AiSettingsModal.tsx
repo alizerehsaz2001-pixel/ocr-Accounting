@@ -233,6 +233,7 @@ export default function AiSettingsModal({
                    }`}
                 >
                    <option value="gemini-3.6-flash">Gemini 3.6 Flash (آخرین نسخه - سریع و هوشمند)</option>
+                   <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (استدلال پیشرفته - Thinking High)</option>
                 </select>
               </div>
 
