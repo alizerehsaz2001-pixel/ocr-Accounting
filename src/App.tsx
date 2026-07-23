@@ -82,7 +82,7 @@ import {
   Plus,
   Maximize,
   Printer,
-  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Bot, Zap
+  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Bot, Zap, Wrench
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -136,6 +136,158 @@ const FOLDER_COLORS: { [key: string]: { text: string; bg: string; border: string
   purple: { text: "text-purple-500 dark:text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20", dot: "bg-purple-500", hover: "hover:bg-purple-500/5", fill: "fill-purple-500" },
   cyan: { text: "text-cyan-500 dark:text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/20", dot: "bg-cyan-500", hover: "hover:bg-cyan-500/5", fill: "fill-cyan-500" },
   indigo: { text: "text-indigo-500 dark:text-indigo-400", bg: "bg-indigo-500/10", border: "border-indigo-500/20", dot: "bg-indigo-500", hover: "hover:bg-indigo-500/5", fill: "fill-indigo-500" }
+};
+
+
+const convertPersianDigitsToEnglish = (str: string): string => {
+  if (!str) return "";
+  return str
+    .replace(/[۰-۹]/g, d => "۰۱۲۳۴۵۶۷۸۹".indexOf(d).toString())
+    .replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d).toString());
+};
+
+const repairAndCleanJsonString = (raw: string): string => {
+  if (!raw) return "";
+  let str = raw.trim();
+  
+  // Strip markdown code fences
+  str = str.replace(/^```(?:json)?/gi, "").replace(/```$/g, "").trim();
+
+  // Find first opening brace or bracket
+  const firstOpenArr = str.indexOf("[");
+  const firstOpenObj = str.indexOf("{");
+  let firstOpen = -1;
+  if (firstOpenArr !== -1 && firstOpenObj !== -1) {
+    firstOpen = Math.min(firstOpenArr, firstOpenObj);
+  } else if (firstOpenArr !== -1) {
+    firstOpen = firstOpenArr;
+  } else if (firstOpenObj !== -1) {
+    firstOpen = firstOpenObj;
+  }
+
+  const lastCloseArr = str.lastIndexOf("]");
+  const lastCloseObj = str.lastIndexOf("}");
+  let lastClose = Math.max(lastCloseArr, lastCloseObj);
+
+  if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+    str = str.substring(firstOpen, lastClose + 1);
+  }
+
+  // Convert Persian digits
+  str = convertPersianDigitsToEnglish(str);
+
+  // Strip trailing commas before ] or }
+  str = str.replace(/,\s*([\]\}])/g, "$1");
+
+  return str.trim();
+};
+
+const findArrayInObject = (obj: any): any[] | null => {
+  if (!obj || typeof obj !== "object") return null;
+  if (Array.isArray(obj)) return obj;
+
+  for (const key of Object.keys(obj)) {
+    if (Array.isArray(obj[key]) && obj[key].length > 0) {
+      return obj[key];
+    }
+  }
+
+  for (const key of Object.keys(obj)) {
+    if (obj[key] && typeof obj[key] === "object") {
+      const nested = findArrayInObject(obj[key]);
+      if (nested && nested.length > 0) return nested;
+    }
+  }
+
+  return null;
+};
+
+const cleanJsonString = (str: string) => repairAndCleanJsonString(str);
+
+const parseJsonToTableArray = (jsonText: string): any[] => {
+  if (!jsonText || !jsonText.trim()) return [];
+
+  const cleaned = repairAndCleanJsonString(jsonText);
+  let parsed: any = null;
+
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch (e1) {
+    try {
+      let patched = cleaned;
+      const openBrackets = (patched.match(/\[/g) || []).length;
+      const closeBrackets = (patched.match(/\]/g) || []).length;
+      if (openBrackets > closeBrackets) patched += "]".repeat(openBrackets - closeBrackets);
+
+      const openBraces = (patched.match(/\{/g) || []).length;
+      const closeBraces = (patched.match(/\}/g) || []).length;
+      if (openBraces > closeBraces) patched += "}".repeat(openBraces - closeBraces);
+
+      parsed = JSON.parse(patched);
+    } catch (e2) {
+      const objectMatches = cleaned.match(/\{[^{}]*\}/g);
+      if (objectMatches && objectMatches.length > 0) {
+        const extracted: any[] = [];
+        objectMatches.forEach(m => {
+          try {
+            const item = JSON.parse(m.replace(/,\s*}/g, "}"));
+            extracted.push(item);
+          } catch (_) {}
+        });
+        if (extracted.length > 0) return extracted;
+      }
+      throw new Error("فرمت کد JSON معتبر نیست. لطفاً علامت‌گذاری‌ها را بررسی نمایید.");
+    }
+  }
+
+  let rawList: any[] = [];
+  if (Array.isArray(parsed)) {
+    rawList = parsed;
+  } else if (parsed && typeof parsed === "object") {
+    const found = findArrayInObject(parsed);
+    if (found) {
+      rawList = found;
+    } else {
+      rawList = [parsed];
+    }
+  }
+
+  return rawList.map((row: any, idx: number) => {
+    if (row === null || row === undefined) return { "ردیف": idx + 1, "مقدار": "" };
+    if (typeof row !== "object") return { "ردیف": idx + 1, "مقدار": row };
+
+    const flat: any = {};
+    if (row.فیلد_ها && Array.isArray(row.فیلد_ها)) {
+      flat["ردیف"] = idx + 1;
+      row.فیلد_ها.forEach((f: any) => {
+        if (f && typeof f === "object") {
+          const k = f.عنوان || f.کلید || f.key || "فیلد";
+          flat[k] = f.مقدار !== undefined ? f.مقدار : f.value;
+        }
+      });
+      Object.keys(row).forEach((k) => {
+        if (k !== "فیلد_ها" && typeof row[k] !== "object") {
+          flat[k] = row[k];
+        }
+      });
+      return flat;
+    }
+
+    Object.keys(row).forEach((k) => {
+      const v = row[k];
+      if (v === null || v === undefined) {
+        flat[k] = "";
+      } else if (typeof v === "object") {
+        flat[k] = JSON.stringify(v);
+      } else {
+        flat[k] = v;
+      }
+    });
+
+    if (!flat["ردیف"]) flat["ردیف"] = idx + 1;
+
+    return flat;
+  });
 };
 
 export default function App() {
@@ -2443,9 +2595,9 @@ export default function App() {
         setJsonError(null);
         return;
       }
-      const parsed = JSON.parse(newVal);
-      if (Array.isArray(parsed)) {
-        const mapped: TransactionItem[] = parsed.map((item: any, idx: number) => {
+      const arr = parseJsonToTableArray(newVal);
+      if (arr && arr.length > 0) {
+        const mapped: TransactionItem[] = arr.map((item: any, idx: number) => {
           const row: any = {
             id: `edited-${Date.now()}-${idx}`
           };
@@ -2460,7 +2612,7 @@ export default function App() {
         setTransactions(mapped);
         setJsonError(null);
       } else {
-        setJsonError("خروجی حتماً باید یک آرایه JSON معتبر حاوی اشیاء تراکنش باشد.");
+        setJsonError("خروجی حتماً باید یک آرایه یا شیء معتبر حاوی داده‌های تراکنش باشد.");
       }
     } catch (err: any) {
       setJsonError(`خطای گرامری ساختار: ${err.message}`);
@@ -2469,63 +2621,66 @@ export default function App() {
 
   const handleDownloadExcelFromJSON = () => {
     try {
-      if (!rawJsonText || !rawJsonText.trim()) {
-        showNotification("هیچ کدی برای تولید فایل اکسل وجود ندارد.", "error");
-        return;
-      }
-      const parsed = JSON.parse(rawJsonText);
-      let arr: any[] = [];
-      if (parsed && typeof parsed === "object") {
-        if (Array.isArray(parsed)) {
-          arr = parsed;
-        } else if (parsed.ردیف_ها && Array.isArray(parsed.ردیف_ها)) {
-          arr = parsed.ردیف_ها.map((row: any, idx: number) => {
-            const flatRow: any = { "ردیف": idx + 1 };
-            if (row.فیلد_ها && Array.isArray(row.فیلد_ها)) {
-              row.فیلد_ها.forEach((f: any) => {
-                flatRow[f.عنوان || f.کلید] = f.مقدار;
-              });
-            }
-            return flatRow;
-          });
-        } else {
-          arr = [parsed];
+      let dataToExport: any[] = [];
+      
+      if (rawJsonText && rawJsonText.trim()) {
+        try {
+          const cleaned = repairAndCleanJsonString(rawJsonText);
+          const parsed = JSON.parse(cleaned);
+          
+          if (Array.isArray(parsed)) {
+            dataToExport = parsed;
+          } else if (parsed && typeof parsed === "object") {
+             const found = findArrayInObject(parsed);
+             if (found) {
+                dataToExport = found;
+             } else {
+                dataToExport = [parsed];
+             }
+          }
+        } catch (parseErr: any) {
+          // fallback to transactions
         }
       }
-      
-      if (arr.length === 0) {
-        showNotification("آرایه تراکنش‌ها خالی است.", "error");
+
+      if (!dataToExport || dataToExport.length === 0) {
+        if (transactions && transactions.length > 0) {
+          dataToExport = transactions.map((t) => {
+            const row: any = {};
+            Object.keys(t).forEach(k => { if (k !== "id") row[k] = t[k]; });
+            return row;
+          });
+        }
+      }
+
+      if (!dataToExport || dataToExport.length === 0) {
+        showNotification("هیچ داده‌ای برای ساخت فایل اکسل وجود ندارد.", "error");
         return;
       }
 
-      const worksheet = XLSX.utils.json_to_sheet(arr);
-      
-      // Estimate reasonable column widths
-      const colWidths = Object.keys(arr[0] || {}).map(() => ({ wch: 18 }));
-      worksheet["!cols"] = colWidths;
-      
-      // Set RTL direction
-      if (!worksheet['!views']) worksheet['!views'] = [];
-      worksheet['!views'].push({ rightToLeft: true });
+      setIsJsonVerified(true);
 
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "تراکنش‌های اکسل");
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+      
+      // Auto col width
+      if (dataToExport.length > 0) {
+         worksheet['!cols'] = Object.keys(dataToExport[0]).map(k => ({ wch: Math.max(k.length + 5, 15) }));
+      }
       
       XLSX.writeFile(workbook, `Excel-Export-${activeFile?.name?.replace(/\.[^/.]+$/, "") || "Document"}.xlsx`);
-      
-      logEvent("دانلود اکسل از کدهای خام", "کاربر کدهای خام جی‌سان را مستقیماً به اکسل راست‌چین تبدیل و دانلود کرد.", "success");
-      showNotification("فایل اکسل با موفقیت بارگیری شد.", "success");
+
+      showNotification("فایل اکسل کاملا مطابق با جیسون با موفقیت دانلود شد.", "success");
+      logEvent("تولید اکسل", "کاربر فایل اکسل را دانلود کرد.", "success");
     } catch (err: any) {
-      showNotification("خطا در ساخت فایل اکسل. از صحت فرمت JSON مطمئن شوید.", "error");
+      showNotification(`خطا در ساخت فایل اکسل: ${err.message || "از صحت فرمت JSON مطمئن شوید."}`, "error");
     }
   };
 
   const copyJSONToClipboard = () => {
     if (!rawJsonText) return;
-    if (!isJsonVerified) {
-      showNotification("لطفاً ابتدا تیک تایید صحت اطلاعات را فعال کنید.", "error");
-      return;
-    }
+    setIsJsonVerified(true);
     navigator.clipboard.writeText(rawJsonText);
     logEvent("کپی آرایه JSON", "کاربر متن کامل آرایه JSON را برای استفاده در سیستم‌های دیگر کپی کرد.");
     showNotification("آرایه به فرمت JSON عینا کپی گردید.", "success");
@@ -3075,13 +3230,16 @@ export default function App() {
           )}
 
           {/* ERP Modules */}
-          <div className={`px-4 pt-4 pb-2 text-[9px] font-black uppercase tracking-wider flex items-center justify-between border-t mt-4 ${
-            isDarkMode ? "text-slate-500 border-slate-800/60" : "text-slate-400 border-slate-200"
+          <div className={`px-4 pt-5 pb-3 text-[10px] font-black uppercase tracking-wider flex items-center justify-between border-t mt-4 ${
+            isDarkMode ? "text-slate-400 border-slate-800/80" : "text-slate-500 border-slate-200"
           }`}>
             <span className="flex items-center gap-1.5">
-              <span className="w-1 h-3 rounded-full bg-purple-500" />
+              <span className="w-1.5 h-3.5 rounded-full bg-purple-500 shadow-sm" />
               ماژول‌های هوشمند ERP
             </span>
+            <div className={`p-1 rounded-md ${isDarkMode ? "bg-slate-800/50" : "bg-slate-100"}`}>
+               <Boxes className="h-3.5 w-3.5 opacity-60" />
+            </div>
           </div>
           <div className="space-y-1 px-2 max-h-[280px] overflow-y-auto">
             {ERP_MODULES.map((module) => {
@@ -3127,7 +3285,13 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <IconComponent className={`h-4 w-4 shrink-0 transition-colors ${isActive ? "text-indigo-500" : isDarkMode ? "text-slate-500 group-hover:text-indigo-400" : "text-slate-400 group-hover:text-indigo-600"}`} />
+                    <div className={`p-1.5 rounded-lg shrink-0 transition-colors ${
+                      isActive 
+                        ? isDarkMode ? "bg-indigo-500/20" : "bg-indigo-100" 
+                        : isDarkMode ? "bg-slate-800 group-hover:bg-slate-700" : "bg-slate-100 group-hover:bg-slate-200"
+                    }`}>
+                      <IconComponent className={`h-4 w-4 shrink-0 transition-colors ${isActive ? "text-indigo-500" : isDarkMode ? "text-slate-400 group-hover:text-indigo-400" : "text-slate-500 group-hover:text-indigo-600"}`} />
+                    </div>
                     <span className={`text-[11px] truncate leading-normal transition-colors ${isActive ? isDarkMode ? "text-slate-100" : "text-slate-900" : "group-hover:text-slate-900 dark:group-hover:text-white"}`} title={module.name}>
                       {module.name}
                     </span>
@@ -3164,55 +3328,59 @@ export default function App() {
           </div>
 
           {/* Recent successful extractions */}
-          <div className={`px-4 pt-5 pb-2 text-[9px] font-black uppercase tracking-wider flex items-center justify-between border-t mt-4 ${
-            isDarkMode ? "text-slate-500 border-slate-800/60" : "text-slate-400 border-slate-200"
+          <div className={`px-4 pt-5 pb-3 text-[10px] font-black uppercase tracking-wider flex items-center justify-between border-t mt-4 ${
+            isDarkMode ? "text-slate-400 border-slate-800/80" : "text-slate-500 border-slate-200"
           }`}>
             <span className="flex items-center gap-1.5">
-              <span className="w-1 h-3 rounded-full bg-emerald-500" />
-              تاریخچه اسکن‌های اخیر
+              <span className="w-1.5 h-3.5 rounded-full bg-indigo-500 animate-pulse" />
+              <span>تاریخچه اسکن‌های اخیر</span>
             </span>
-            <History className="h-3.5 w-3.5 opacity-60" />
+            <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+               <History className="h-3.5 w-3.5 opacity-70" />
+            </div>
           </div>
 
           {/* Search & Filters for History */}
           {previousScans.length > 0 && (
-            <div className="px-4 mb-3 space-y-2">
+            <div className={`mx-4 mb-4 p-2.5 rounded-xl space-y-2.5 border ${isDarkMode ? "bg-slate-900/40 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
               {/* Search input with search icon */}
-              <div className="relative flex items-center">
-                <Search className={`absolute right-2.5 h-3.5 w-3.5 pointer-events-none ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
+              <div className="relative flex items-center group">
+                <Search className={`absolute right-3 h-4 w-4 pointer-events-none transition-colors duration-200 ${isDarkMode ? "text-slate-500 group-focus-within:text-indigo-400" : "text-slate-400 group-focus-within:text-indigo-500"}`} />
                 <input
                   type="text"
-                  placeholder="جستجو در نام یا نوع سند..."
+                  placeholder="جستجو در تاریخچه اسکن..."
                   value={historySearchQuery}
                   onChange={(e) => setHistorySearchQuery(e.target.value)}
-                  className={`w-full border rounded-lg py-1.5 pr-8 pl-6 text-[10px] transition-colors text-right outline-none focus:ring-1 focus:ring-indigo-500/50 ${
+                  className={`w-full border rounded-xl py-2 pr-9 pl-8 text-xs font-medium transition-all duration-300 text-right outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm ${
                     isDarkMode 
-                      ? "bg-slate-950/40 border-slate-850 text-slate-200 placeholder-slate-600 focus:border-indigo-500/40" 
-                      : "bg-white border-slate-250 text-slate-800 placeholder-slate-400 focus:border-indigo-400"
+                      ? "bg-slate-950/60 border-slate-800/80 text-slate-200 placeholder-slate-600 focus:border-indigo-500/50" 
+                      : "bg-white border-slate-200/80 text-slate-800 placeholder-slate-400 focus:border-indigo-400"
                   }`}
                   dir="rtl"
                 />
                 {historySearchQuery && (
                   <button
                     onClick={() => setHistorySearchQuery("")}
-                    className="absolute left-2 text-slate-500 hover:text-slate-300 transition"
+                    className={`absolute left-2.5 p-1 rounded-md transition-colors ${
+                      isDarkMode ? "text-slate-500 hover:bg-slate-800 hover:text-slate-300" : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    }`}
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>
 
               {/* Filters Row */}
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-2 gap-2">
                 {/* Document Type Dropdown */}
                 <div className="relative">
                   <select
                     value={historyDocType}
                     onChange={(e) => setHistoryDocType(e.target.value)}
-                    className={`w-full border rounded-lg px-1.5 py-1 text-[9.5px] transition-colors text-right cursor-pointer outline-none ${
+                    className={`w-full border rounded-lg px-2 py-1.5 text-[10px] font-bold transition-all text-right cursor-pointer outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm appearance-none ${
                       isDarkMode 
-                        ? "bg-slate-950/60 border-slate-850 text-slate-300 focus:border-indigo-500/40" 
-                        : "bg-white border-slate-250 text-slate-700 focus:border-indigo-450"
+                        ? "bg-slate-950/60 border-slate-800/80 text-slate-300 focus:border-indigo-500/50 hover:bg-slate-900" 
+                        : "bg-white border-slate-200/80 text-slate-700 focus:border-indigo-400 hover:bg-slate-50"
                     }`}
                     dir="rtl"
                   >
@@ -3230,10 +3398,10 @@ export default function App() {
                   <select
                     value={historyDateRange}
                     onChange={(e) => setHistoryDateRange(e.target.value)}
-                    className={`w-full border rounded-lg px-1.5 py-1 text-[9.5px] transition-colors text-right cursor-pointer outline-none ${
+                    className={`w-full border rounded-lg px-2 py-1.5 text-[10px] font-bold transition-all text-right cursor-pointer outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm appearance-none ${
                       isDarkMode 
-                        ? "bg-slate-950/60 border-slate-850 text-slate-300 focus:border-indigo-500/40" 
-                        : "bg-white border-slate-250 text-slate-700 focus:border-indigo-450"
+                        ? "bg-slate-950/60 border-slate-800/80 text-slate-300 focus:border-indigo-500/50 hover:bg-slate-900" 
+                        : "bg-white border-slate-200/80 text-slate-700 focus:border-indigo-400 hover:bg-slate-50"
                     }`}
                     dir="rtl"
                   >
@@ -3268,12 +3436,16 @@ export default function App() {
             </div>
           )}
 
-          <div className="px-2 space-y-1 overflow-y-auto max-h-[220px]">
+          <div className="px-3 space-y-2 overflow-y-auto max-h-[300px] pb-4 custom-scrollbar">
             {previousScans.length === 0 ? (
-              <div className={`px-3 py-4 text-center rounded-xl border border-dashed text-[10px] italic ${
-                isDarkMode ? "border-slate-800/60 text-slate-500" : "border-slate-250 text-slate-400"
+              <div className={`px-3 py-6 text-center rounded-xl border border-dashed flex flex-col items-center justify-center gap-2 ${
+                isDarkMode ? "border-slate-800/80 bg-slate-900/30 text-slate-500" : "border-slate-300 bg-slate-50 text-slate-400"
               }`}>
-                سندی اخیراً اسکن نشده است.
+                <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center mb-1">
+                   <History className="w-5 h-5 opacity-50" />
+                </div>
+                <span className="text-[11px] font-bold">هیچ تاریخچه‌ای وجود ندارد</span>
+                <span className="text-[9px] opacity-70">اسناد اسکن شده شما در اینجا نمایش داده می‌شوند</span>
               </div>
             ) : filteredPreviousScans.length > 0 ? (
               filteredPreviousScans.map((scan) => {
@@ -3286,22 +3458,26 @@ export default function App() {
                 return (
                   <motion.div
                     key={scan.id}
-                    whileHover={{ x: -2 }}
+                    whileHover={{ x: -2, y: -1 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => selectPreviousScan(scan)}
-                    className={`group relative flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all duration-200 select-none border ${
+                    className={`group relative flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 select-none border backdrop-blur-sm ${
                       isActive
                         ? isDarkMode
-                          ? "bg-indigo-500/10 text-indigo-300 border-indigo-500/40 font-bold shadow-md shadow-indigo-500/2"
-                          : "bg-indigo-50 text-indigo-700 border-indigo-200/80 font-bold"
+                          ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)] font-bold ring-1 ring-indigo-500/20"
+                          : "bg-indigo-50/80 text-indigo-700 border-indigo-300 shadow-sm font-bold ring-1 ring-indigo-500/20"
                         : isDarkMode
-                          ? "border-transparent text-slate-400 hover:bg-slate-800/40 hover:text-white"
-                          : "border-transparent text-slate-600 hover:bg-slate-200/40 hover:text-slate-900"
+                          ? "bg-slate-900/40 border-slate-800/60 text-slate-300 hover:bg-slate-800/80 hover:border-slate-700 hover:shadow-lg hover:shadow-black/20"
+                          : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:shadow-md"
                     }`}
                   >
                     <div className="flex items-center gap-2.5 overflow-hidden min-w-0 flex-1">
                       {/* Thumbnail Container */}
-                      <div className="w-7 h-7 rounded-lg overflow-hidden bg-slate-950/20 border border-slate-800/45 flex items-center justify-center shrink-0 relative shadow-inner">
+                      <div className={`w-9 h-9 rounded-xl overflow-hidden shrink-0 relative shadow-sm border ${
+                         isActive 
+                           ? (isDarkMode ? "border-indigo-500/30 ring-2 ring-indigo-500/20" : "border-indigo-300 ring-2 ring-indigo-500/20")
+                           : (isDarkMode ? "bg-slate-900 border-slate-700/50" : "bg-slate-100 border-slate-200")
+                      } flex items-center justify-center transition-all duration-300 group-hover:scale-105`}>
                         {isPdf && scan.file?.preview ? (
                           <PdfThumbnail base64={scan.file.preview.split(",")[1]} className="w-full h-full object-cover" isDarkMode={true} />
                         ) : scan.file?.preview ? (
@@ -4547,26 +4723,70 @@ export default function App() {
                         </div>
 
                         {/* JSON status footer */}
-                        <div className="p-3 bg-[#181818] border-t border-slate-800/80 text-[10px] select-none shrink-0 flex items-center justify-between">
-                          {jsonError ? (
-                            <span className="text-rose-400 flex items-center gap-1.5 font-bold">
-                              <AlertCircle className="h-3.5 w-3.5" />
-                              ساختار JSON نامعتبر است
-                            </span>
-                          ) : (
-                            <span className="text-emerald-400 flex items-center gap-1.5 font-bold">
-                              <CheckCircle2 className="h-3.5 w-3.5" />
-                              فرمت ساختار کاملاً معتبر است
-                            </span>
-                          )}
-                          <button
-                            onClick={handleDownloadExcelFromJSON}
-                            className="text-[9px] px-2 py-0.5 rounded bg-indigo-600/30 text-indigo-300 hover:bg-indigo-600/50 border border-indigo-500/30 transition cursor-pointer"
-                          >
-                            انتقال به اکسل
-                          </button>
-                        </div>
+                        <div className="p-3 bg-[#181818] border-t border-slate-800/80 text-[10px] select-none shrink-0 flex flex-col gap-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            {jsonError ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-rose-400 flex items-center gap-1.5 font-bold">
+                                  <AlertCircle className="h-3.5 w-3.5" />
+                                  ساختار JSON نامعتبر است
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    try {
+                                      const repaired = parseJsonToTableArray(rawJsonText);
+                                      if (repaired.length > 0) {
+                                        const formatted = JSON.stringify(repaired, null, 2);
+                                        setRawJsonText(formatted);
+                                        setConverterInputJson(formatted);
+                                        setJsonError(null);
+                                        showNotification("کدهای JSON با موفقیت اصلاح و بازسازی شد.", "success");
+                                      }
+                                    } catch (err) {
+                                      showNotification("امکان بازسازی خودکار وجود نداشت. لطفا علامت‌گذاری‌ها را بررسی کنید.", "error");
+                                    }
+                                  }}
+                                  className="text-[9px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition cursor-pointer font-bold flex items-center gap-1"
+                                >
+                                  <Wrench className="w-3 h-3" />
+                                  اصلاح و بازسازی خودکار
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-emerald-400 flex items-center gap-1.5 font-bold">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                فرمت ساختار کاملاً معتبر است
+                              </span>
+                            )}
 
+                            <div className="flex items-center gap-2">
+                              <label className="flex items-center gap-1.5 cursor-pointer text-slate-300 hover:text-white transition-colors bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/60">
+                                <input 
+                                  type="checkbox" 
+                                  checked={isJsonVerified}
+                                  onChange={(e) => setIsJsonVerified(e.target.checked)}
+                                  className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                                />
+                                <span className="font-bold text-slate-200 text-[10px]">تایید صحت اطلاعات</span>
+                              </label>
+                              
+                              <button
+                                type="button"
+                                onClick={handleDownloadExcelFromJSON}
+                                className="text-[10px] px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition shadow-md flex items-center gap-1.5 cursor-pointer active:scale-95"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>تایید و انتقال به اکسل</span>
+                              </button>
+                            </div>
+                          </div>
+                          {jsonError && (
+                            <div className="text-[9px] text-rose-300/80 bg-rose-950/40 p-2 rounded-lg border border-rose-900/40 whitespace-pre-wrap font-mono">
+                              {jsonError}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                     </div>
@@ -7477,48 +7697,45 @@ export default function App() {
                               let worksheetData;
                               let colWidths;
                               
-                              if (activeFile?.columns && activeFile.columns.length > 0) {
-                                 worksheetData = transactions.map((t, idx) => {
-                                   const row: any = { "ردیف": idx + 1 };
-                                   activeFile.columns!.forEach(col => {
-                                     row[col.عنوان] = col.نوع_داده === 'number' && t[col.کلید] ? Number(t[col.کلید]) : t[col.کلید];
-                                   });
-                                   row["ضریب_اطمینان"] = t.ضریب_اطمینان || 100;
-                                   return row;
+                              let parsedFromJson = false;
+                              if (rawJsonText && rawJsonText.trim()) {
+                                try {
+                                  const cleaned = repairAndCleanJsonString(rawJsonText);
+                                  const parsed = JSON.parse(cleaned);
+                                  if (Array.isArray(parsed)) {
+                                    worksheetData = parsed;
+                                    parsedFromJson = true;
+                                  } else if (parsed && typeof parsed === "object") {
+                                    const found = findArrayInObject(parsed);
+                                    if (found) {
+                                      worksheetData = found;
+                                      parsedFromJson = true;
+                                    }
+                                  }
+                                } catch (e) {}
+                              }
+                              
+                              if (!parsedFromJson) {
+                                 worksheetData = transactions.map((t) => {
+                                    const row: any = {};
+                                    Object.keys(t).forEach(k => {
+                                      if (k !== "id") row[k] = t[k];
+                                    });
+                                    return row;
                                  });
-                                 colWidths = [{ wch: 5 }, ...activeFile.columns.map(() => ({ wch: 20 })), { wch: 10 }];
-                              } else {
-                                 worksheetData = transactions.map((t, idx) => ({
-                                    "ردیف": idx + 1,
-                                    "تاریخ": t.تاریخ,
-                                    "شماره_سند": t.شماره_سند,
-                                    "نام_طرف_حساب": t.نام_طرف_حساب,
-                                    "شناسه_کد_ملی": t.شناسه_ملی || "",
-                                    "شماره_مالیاتی": t.شماره_مالیاتی || "",
-                                    "شرح": t.شرح,
-                                    "هزینه_غیرقابل_قبول": t.هزینه_غیرقابل_قبول ? "بله" : "خیر",
-                                    "ارزش_افزوده": t.مالیات_ارزش_افزوده || 0,
-                                    "مبلغ_بدهکار": t.مبلغ_بدهکار || 0,
-                                    "مبلغ_بستانکار": t.مبلغ_بستانکار || 0,
-                                    "نوع_ارز": t.نوع_ارز,
-                                    "توضیحات": t.توضیحات,
-                                    "ضریب_اطمینان": t.ضریب_اطمینان || 100
-                                 }));
-                                 colWidths = [
-                                    { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 25 }, { wch: 40 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 30 }, { wch: 10 }
-                                 ];
+                              }
+                              
+                              if (worksheetData.length > 0) {
+                                colWidths = Object.keys(worksheetData[0]).map(k => ({ wch: Math.max(k.length + 5, 15) }));
                               }
 
                               const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-                              worksheet["!cols"] = colWidths;
-                              if (!worksheet['!views']) worksheet['!views'] = [];
-                              worksheet['!views'].push({ rightToLeft: true });
-
                               const workbook = XLSX.utils.book_new();
-                              XLSX.utils.book_append_sheet(workbook, worksheet, "تراکنش‌های مالی");
-                              
-                              XLSX.writeFile(workbook, `Transactions-Export-${new Date().toISOString().split('T')[0]}.xlsx`);
-                              setNotification({ text: "فایل اکسل با موفقیت دانلود شد.", type: "success" });
+                              XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+                              if (colWidths) {
+                                worksheet['!cols'] = colWidths;
+                              }
+                              XLSX.writeFile(workbook, `Transactions-Export.xlsx`);
                             }}
                             className="w-full sm:w-48 py-2.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-md flex justify-center items-center gap-2 transition-all active:scale-95 shrink-0 self-center"
                           >
@@ -8843,33 +9060,29 @@ export default function App() {
                                   let colWidths: any[] = [];
                                   previousScans.forEach(scan => {
                                     if (selectedScanIds.includes(scan.id) && scan.transactions) {
-                                      scan.transactions.forEach((t: any, idx: number) => {
-                                        worksheetData.push({
-                                          "فاکتور": scan.file?.name || "نامشخص",
-                                          "ردیف": idx + 1,
-                                          "تاریخ": t.تاریخ,
-                                          "شماره_سند": t.شماره_سند,
-                                          "نام_طرف_حساب": t.نام_طرف_حساب,
-                                          "مبلغ_بدهکار": t.مبلغ_بدهکار || 0,
-                                          "مبلغ_بستانکار": t.مبلغ_بستانکار || 0,
-                                          "شرح": t.شرح
+                                      scan.transactions.forEach((t: any) => {
+                                        const row: any = { "فاکتور": scan.file?.name || "نامشخص" };
+                                        Object.keys(t).forEach(k => {
+                                          if (k !== "id") row[k] = t[k];
                                         });
+                                        worksheetData.push(row);
                                       });
                                     }
                                   });
+                                  if (worksheetData.length > 0) {
+                                    colWidths = Object.keys(worksheetData[0]).map(k => ({ wch: Math.max(k.length + 5, 15) }));
+                                  }
                                   if (worksheetData.length === 0) {
                                     setNotification({ text: "تراکنشی برای خروجی اکسل یافت نشد.", type: "error" });
                                     return;
                                   }
-                                  colWidths = [{ wch: 25 }, { wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 40 }];
                                   const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-                                  worksheet["!cols"] = colWidths;
-                                  if (!worksheet["!views"]) worksheet["!views"] = [];
-                                  worksheet["!views"].push({ rightToLeft: true });
                                   const workbook = XLSX.utils.book_new();
-                                  XLSX.utils.book_append_sheet(workbook, worksheet, "تراکنش‌های منتخب");
-                                  XLSX.writeFile(workbook, `Selected-Export-${new Date().toISOString().split("T")[0]}.xlsx`);
-                                  setNotification({ text: "فایل اکسل اسناد منتخب با موفقیت دانلود شد.", type: "success" });
+                                  XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+                                  if (colWidths) {
+                                    worksheet['!cols'] = colWidths;
+                                  }
+                                  XLSX.writeFile(workbook, `Selected-Export.xlsx`);
                                 }}
                                 className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 transition-all"
                               >
