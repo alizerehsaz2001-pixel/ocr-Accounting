@@ -82,7 +82,7 @@ import {
   Plus,
   Maximize,
   Printer,
-  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench
+  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench, Star, Brain, FileSpreadsheet
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -800,7 +800,9 @@ export default function App() {
     let result = previousScans.filter(scan => {
       // 1. Folder filter
       if (selectedFolderFilter !== "all") {
-        if (selectedFolderFilter === "uncategorized") {
+        if (selectedFolderFilter === "starred") {
+          if (!scan.isStarred) return false;
+        } else if (selectedFolderFilter === "uncategorized") {
           if (scan.folder) return false;
         } else if (scan.folder !== selectedFolderFilter) {
           return false;
@@ -813,7 +815,8 @@ export default function App() {
         const nameMatch = (scan.file?.name || "").toLowerCase().includes(query);
         const docTypeMatch = (scan.file?.documentType || "").toLowerCase().includes(query);
         const analysisMatch = (scan.file?.documentAnalysis || "").toLowerCase().includes(query);
-        if (!nameMatch && !docTypeMatch && !analysisMatch) return false;
+        const tagMatch = (scan.tags || []).some(t => t.toLowerCase().includes(query));
+        if (!nameMatch && !docTypeMatch && !analysisMatch && !tagMatch) return false;
       }
       
       // 3. Type filter
@@ -838,6 +841,10 @@ export default function App() {
         return (a.file?.size || 0) - (b.file?.size || 0);
       } else if (fileManagerSortBy === "alphabetical") {
         return (a.file?.name || "").localeCompare(b.file?.name || "", 'fa');
+      } else if (fileManagerSortBy === "most_transactions") {
+        return (b.transactions?.length || 0) - (a.transactions?.length || 0);
+      } else if (fileManagerSortBy === "least_transactions") {
+        return (a.transactions?.length || 0) - (b.transactions?.length || 0);
       }
       return 0;
     });
@@ -1617,6 +1624,7 @@ export default function App() {
   const [adminPanelTab, setAdminPanelTab] = useState<"users" | "data" | "system" | "danger">("users");
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false);
+  const [inspectingScanId, setInspectingScanId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -8354,9 +8362,75 @@ export default function App() {
                 const getFolderFileCount = (folderName: string) => {
                   return previousScans.filter(s => {
                     if (folderName === "all") return true;
+                    if (folderName === "starred") return !!s.isStarred;
                     if (folderName === "uncategorized") return !s.folder;
                     return s.folder === folderName;
                   }).length;
+                };
+
+                const toggleStarScan = (scanId: string) => {
+                  setPreviousScans(prev => prev.map(s => {
+                    if (s.id === scanId) {
+                      const nextVal = !s.isStarred;
+                      showNotification(nextVal ? "سند به برگزیده‌ها اضافه شد ⭐" : "سند از برگزیده‌ها حذف شد", "info");
+                      return { ...s, isStarred: nextVal };
+                    }
+                    return s;
+                  }));
+                };
+
+                const addTagToScan = (scanId: string, tag: string) => {
+                  if (!tag.trim()) return;
+                  const trimmed = tag.trim();
+                  setPreviousScans(prev => prev.map(s => {
+                    if (s.id === scanId) {
+                      const currentTags = s.tags || [];
+                      if (currentTags.includes(trimmed)) return s;
+                      return { ...s, tags: [...currentTags, trimmed] };
+                    }
+                    return s;
+                  }));
+                  showNotification(`برچسب «${trimmed}» افزوده شد.`, "success");
+                };
+
+                const removeTagFromScan = (scanId: string, tag: string) => {
+                  setPreviousScans(prev => prev.map(s => {
+                    if (s.id === scanId) {
+                      return { ...s, tags: (s.tags || []).filter(t => t !== tag) };
+                    }
+                    return s;
+                  }));
+                };
+
+                const handleExportCatalogExcel = () => {
+                  if (fileManagerFilteredScans.length === 0) {
+                    showNotification("هیچ سندی جهت گزارش‌گیری یافت نشد.", "error");
+                    return;
+                  }
+                  try {
+                    const catalogData = fileManagerFilteredScans.map((scan, idx) => ({
+                      "ردیف": idx + 1,
+                      "شناسه سند": scan.id,
+                      "نام فایل": scan.file?.name || "-",
+                      "پوشه": scan.folder || "دسته‌بندی نشده",
+                      "حجم فایل": formatBytes(scan.file?.size || 0),
+                      "فرمت": scan.file?.name?.toLowerCase().endsWith(".pdf") ? "PDF" : "تصویر",
+                      "تاریخ بارگذاری": new Date(scan.timestamp).toLocaleDateString("fa-IR"),
+                      "تعداد تراکنش‌های استخراج‌شده": scan.transactions?.length || 0,
+                      "وضعیت پردازش": scan.file?.status === "idle" ? "پردازش نشده" : "تکمیل شده",
+                      "برگزیده": scan.isStarred ? "بله ⭐" : "خیر",
+                      "برچسب‌ها": (scan.tags || []).join("، ") || "-"
+                    }));
+
+                    const ws = XLSX.utils.json_to_sheet(catalogData);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "فهرست اسناد");
+                    XLSX.writeFile(wb, `Catalog_Export_${new Date().toLocaleDateString("fa-IR")}.xlsx`);
+                    showNotification("گزارش اکسل کلیه اسناد موجود با موفقیت دانلود شد.", "success");
+                    logEvent("دانلود گزارش کاردکس اسناد", "کاربر کاتالوگ اکسل فایل‌ها را دریافت نمود.");
+                  } catch (err) {
+                    showNotification("خطا در دانلود کاتالوگ اکسل.", "error");
+                  }
                 };
 
                 const renameFolder = (oldName: string) => {
@@ -8415,6 +8489,13 @@ export default function App() {
                     showNotification("اسناد انتخاب‌شده با موفقیت حذف گردیدند.", "success");
                     setSelectedScanIds([]);
                   }
+                };
+
+                const handleBulkStar = (status: boolean) => {
+                  setPreviousScans(prev => prev.map(s => selectedScanIds.includes(s.id) ? { ...s, isStarred: status } : s));
+                  logEvent("علامت‌گذاری گروهی اسناد", `کاربر تعداد ${selectedScanIds.length} سند را به عنوان ${status ? "برگزیده" : "عادی"} علامت‌گذاری کرد.`);
+                  showNotification(`اسناد انتخاب شده به عنوان ${status ? "برگزیده" : "عادی"} ثبت شدند.`, "success");
+                  setSelectedScanIds([]);
                 };
 
                 const handleBulkMove = (folder: string | undefined) => {
@@ -8819,6 +8900,28 @@ export default function App() {
                                 </span>
                               </button>
 
+                              {/* Starred / Favorites */}
+                              <button
+                                onClick={() => setSelectedFolderFilter("starred")}
+                                className={`w-full px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                                  selectedFolderFilter === "starred"
+                                    ? "bg-amber-500 text-white shadow-sm"
+                                    : isDarkMode
+                                      ? "bg-slate-900/60 text-amber-400 hover:bg-slate-900"
+                                      : "bg-amber-50/60 text-amber-700 hover:bg-amber-100/80"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                                  <span>اسناد برگزیده</span>
+                                </div>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${
+                                  selectedFolderFilter === "starred" ? "bg-white/20 text-white" : "bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400"
+                                }`}>
+                                  {getFolderFileCount("starred")}
+                                </span>
+                              </button>
+
                               {/* Uncategorized */}
                               <button
                                 onClick={() => setSelectedFolderFilter("uncategorized")}
@@ -8984,6 +9087,20 @@ export default function App() {
                               <span>آپلود مستقیم سند</span>
                             </label>
 
+                            {/* Download Catalog Excel */}
+                            <button
+                              onClick={handleExportCatalogExcel}
+                              className={`px-3 py-1.5 rounded-lg text-[10px] font-black border transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                                isDarkMode
+                                  ? "bg-emerald-950/40 border-emerald-800 text-emerald-400 hover:bg-emerald-900/50"
+                                  : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                              }`}
+                              title="دانلود گزارش کاتالوگ و مشخصات کامل تمام اسناد در اکسل"
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
+                              <span className="hidden md:inline">خروجی اکسل اسناد</span>
+                            </button>
+
                             {/* Type filter */}
                             <div className="flex items-center gap-1 rounded-lg border p-1 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
                               <button
@@ -9034,6 +9151,8 @@ export default function App() {
                                 <option value="largest">بزرگترین حجم</option>
                                 <option value="smallest">کمترین حجم</option>
                                 <option value="alphabetical">الفبایی (نام سند)</option>
+                                <option value="most_transactions">بیشترین داده استخراجی</option>
+                                <option value="least_transactions">کمترین داده استخراجی</option>
                               </select>
                               <ArrowUpDown className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                             </div>
@@ -9112,6 +9231,49 @@ export default function App() {
                                 </select>
                                 <Folder className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-indigo-500 pointer-events-none" />
                               </div>
+
+                              {/* Bulk Star/Unstar */}
+                              <div className="flex bg-white dark:bg-slate-900 rounded-lg overflow-hidden border border-amber-200 dark:border-slate-700">
+                                <button
+                                  onClick={() => handleBulkStar(true)}
+                                  className="px-2 py-1.5 text-[10px] font-bold hover:bg-amber-50 dark:hover:bg-slate-800 text-amber-600 dark:text-amber-400 flex items-center gap-1 transition-all border-l border-amber-100 dark:border-slate-800"
+                                  title="برگزیدن اسناد انتخاب‌شده"
+                                >
+                                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                                </button>
+                                <button
+                                  onClick={() => handleBulkStar(false)}
+                                  className="px-2 py-1.5 text-[10px] font-bold hover:bg-amber-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center gap-1 transition-all"
+                                  title="حذف از برگزیده‌ها"
+                                >
+                                  <Star className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              {/* Bulk Tagging */}
+                              <button
+                                onClick={() => {
+                                  const tag = window.prompt("نام برچسب را برای افزودن به اسناد انتخاب شده وارد کنید:");
+                                  if (tag && tag.trim()) {
+                                    setPreviousScans(prev => prev.map(s => {
+                                      if (selectedScanIds.includes(s.id)) {
+                                        const existingTags = s.tags || [];
+                                        if (!existingTags.includes(tag.trim())) {
+                                          return { ...s, tags: [...existingTags, tag.trim()] };
+                                        }
+                                      }
+                                      return s;
+                                    }));
+                                    logEvent("افزودن گروهی برچسب", `کاربر برچسب «${tag}» را به ${selectedScanIds.length} سند اضافه کرد.`);
+                                    showNotification(`برچسب «${tag}» به اسناد اضافه شد.`, "success");
+                                    setSelectedScanIds([]);
+                                  }
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1 transition-all"
+                              >
+                                <Tag className="w-3.5 h-3.5" />
+                                <span>افزودن برچسب</span>
+                              </button>
 
                               {/* Download Selected */}
                               <button
@@ -9266,6 +9428,14 @@ export default function App() {
                                                 </button>
                                               </div>
                                               <span className="text-[9px] opacity-60">ID: {scan.id.substring(0,6)}...</span>
+                                              {scan.isStarred && (
+                                                <span className="text-[9px] text-amber-400 font-bold flex items-center gap-0.5">⭐ برگزیده</span>
+                                              )}
+                                              {scan.tags && scan.tags.length > 0 && (
+                                                <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 truncate max-w-[80px]">
+                                                  #{scan.tags[0]} {scan.tags.length > 1 ? `+${scan.tags.length - 1}` : ''}
+                                                </span>
+                                              )}
                                             </div>
                                           </div>
                                         </td>
@@ -9314,6 +9484,8 @@ export default function App() {
                                             ) : (
                                               <button onClick={() => { selectPreviousScan(scan); setIsFileManagerOpen(false); }} className="px-2 py-1 rounded bg-indigo-500 text-white text-[9px] font-bold">باز کردن</button>
                                             )}
+                                            <button onClick={() => toggleStarScan(scan.id)} className={`p-1.5 rounded-lg border transition-all ${scan.isStarred ? "bg-amber-500/20 border-amber-500/40 text-amber-500" : isDarkMode ? "hover:bg-slate-800 border-slate-700 text-slate-400" : "hover:bg-slate-100 border-slate-200 text-slate-500"}`} title={scan.isStarred ? "حذف از برگزیده‌ها" : "علامت‌گذاری برگزیده"}><Star className={`w-3 h-3 ${scan.isStarred ? "fill-amber-400 text-amber-400" : ""}`} /></button>
+                                            <button onClick={() => setInspectingScanId(scan.id)} className={`p-1.5 rounded-lg border ${isDarkMode ? "hover:bg-slate-800 border-slate-700 text-cyan-400" : "hover:bg-slate-100 border-slate-200 text-cyan-600"}`} title="شناسنامه و بازرسی کامل سند"><Info className="w-3 h-3" /></button>
                                             <button onClick={() => setActivePreviewScan(scan)} className={`p-1.5 rounded-lg border ${isDarkMode ? "hover:bg-slate-800 border-slate-700" : "hover:bg-slate-100 border-slate-200"}`} title="پیش‌نمایش"><Eye className="w-3 h-3" /></button>
                                             <button onClick={() => openExclusiveChatForDocument(scan)} className={`p-1.5 rounded-lg border text-purple-500 ${isDarkMode ? "hover:bg-purple-900/30 border-purple-500/30" : "hover:bg-purple-50 border-purple-200"}`} title="چت اختصاصی سند با هوش مصنوعی"><MessageSquareText className="w-3 h-3" /></button>
                                              <button onClick={() => downloadBase64File(scan)} className={`p-1.5 rounded-lg border ${isDarkMode ? "hover:bg-slate-800 border-slate-700" : "hover:bg-slate-100 border-slate-200"}`} title="دانلود"><Download className="w-3 h-3" /></button>
@@ -9479,6 +9651,34 @@ export default function App() {
                                         </button>
                                       )}
 
+                                      {/* Star Button */}
+                                      <button
+                                        onClick={() => toggleStarScan(scan.id)}
+                                        className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
+                                          scan.isStarred
+                                            ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
+                                            : isDarkMode
+                                              ? "border-slate-700 hover:bg-slate-750 text-slate-400"
+                                              : "border-slate-200 hover:bg-slate-100 text-slate-500"
+                                        }`}
+                                        title={scan.isStarred ? "حذف از برگزیده‌ها" : "علامت‌گذاری به‌عنوان برگزیده"}
+                                      >
+                                        <Star className={`w-3.5 h-3.5 ${scan.isStarred ? "fill-amber-400 text-amber-400" : ""}`} />
+                                      </button>
+
+                                      {/* Inspector Button */}
+                                      <button
+                                        onClick={() => setInspectingScanId(scan.id)}
+                                        className={`p-1.5 rounded-lg transition-colors border cursor-pointer ${
+                                          isDarkMode 
+                                            ? "border-slate-700 hover:bg-slate-750 text-cyan-400" 
+                                            : "border-slate-200 hover:bg-cyan-50 text-cyan-600"
+                                        }`}
+                                        title="شناسنامه و بازرسی کامل سند"
+                                      >
+                                        <Info className="w-3.5 h-3.5" />
+                                      </button>
+
                                       {/* Exclusive Chat Button */}
                                       <button
                                         onClick={() => openExclusiveChatForDocument(scan)}
@@ -9547,6 +9747,266 @@ export default function App() {
                         )}
                       </div>
                     </div>
+
+                    {/* Document Inspector Sub-Modal */}
+                    {(() => {
+                      if (!inspectingScanId) return null;
+                      const scan = previousScans.find(s => s.id === inspectingScanId);
+                      if (!scan) return null;
+
+                      const isPdf = scan.file?.name?.toLowerCase().endsWith(".pdf") || scan.file?.preview?.startsWith("data:application/pdf");
+                      const totalDebit = scan.transactions?.reduce((acc, t) => acc + (Number(t.بدهکار || t.مبلغ_بدهکار || 0) || 0), 0) || 0;
+                      const totalCredit = scan.transactions?.reduce((acc, t) => acc + (Number(t.بستانکار || t.مبلغ_بستانکار || 0) || 0), 0) || 0;
+
+                      return (
+                        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 sm:p-6 animate-fade-in">
+                          <div 
+                            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+                            onClick={() => setInspectingScanId(null)}
+                          ></div>
+
+                          <div className={`relative w-full max-w-3xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden transform transition-all ${
+                            isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border-slate-200 text-slate-800"
+                          }`} dir="rtl">
+                            {/* Header */}
+                            <div className={`p-5 border-b flex items-center justify-between shrink-0 ${isDarkMode ? "bg-slate-800/80 border-slate-750" : "bg-slate-50/80 border-slate-100"}`}>
+                              <div className="flex items-center gap-3">
+                                <div className={`p-2.5 rounded-xl ${isDarkMode ? "bg-cyan-950/40 text-cyan-400" : "bg-cyan-50 text-cyan-600"}`}>
+                                  <Info className="h-5 w-5" />
+                                </div>
+                                <div>
+                                  <h3 className="font-bold text-base flex items-center gap-2">
+                                    <span>شناسنامه و مشخصات کامل سند</span>
+                                    {scan.isStarred && <Star className="w-4 h-4 fill-amber-400 text-amber-400" />}
+                                  </h3>
+                                  <p className={`text-[11px] mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                    شناسه یکتا: <span className="font-mono text-indigo-400">{scan.id}</span>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => toggleStarScan(scan.id)}
+                                  className={`p-2 rounded-lg border transition-all cursor-pointer ${
+                                    scan.isStarred
+                                      ? "bg-amber-500/20 border-amber-500/40 text-amber-500"
+                                      : isDarkMode
+                                        ? "border-slate-700 text-slate-400 hover:text-amber-400"
+                                        : "border-slate-200 text-slate-500 hover:text-amber-500"
+                                  }`}
+                                  title={scan.isStarred ? "حذف از برگزیده‌ها" : "علامت‌گذاری به‌عنوان برگزیده"}
+                                >
+                                  <Star className={`w-4 h-4 ${scan.isStarred ? "fill-amber-400 text-amber-400" : ""}`} />
+                                </button>
+                                <button 
+                                  onClick={() => setInspectingScanId(null)}
+                                  className={`p-2 rounded-lg transition-colors ${isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-200 text-slate-500 hover:text-slate-900"}`}
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Body */}
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                
+                                {/* Left Column: Preview Thumbnail & Basic Info */}
+                                <div className="space-y-4">
+                                  <div className="w-full aspect-square rounded-xl overflow-hidden bg-slate-950 border border-slate-800 flex items-center justify-center relative shadow-inner">
+                                    {isPdf && scan.file?.preview ? (
+                                      <PdfThumbnail base64={scan.file.preview.split(",")[1]} className="w-full h-full object-contain" isDarkMode={isDarkMode} />
+                                    ) : scan.file?.preview ? (
+                                      <img src={scan.file.preview} alt="" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                    ) : (
+                                      <FileText className="w-12 h-12 text-slate-600" />
+                                    )}
+                                  </div>
+
+                                  <div className={`p-4 rounded-xl border space-y-2.5 text-xs ${isDarkMode ? "bg-slate-800/40 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-slate-400">نام فایل:</span>
+                                      <span className="font-bold truncate max-w-[140px]" title={scan.file?.name}>{scan.file?.name}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-slate-400">حجم فایل:</span>
+                                      <span className="font-bold font-mono" dir="ltr">{formatBytes(scan.file?.size || 0)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-slate-400">نوع پسوند:</span>
+                                      <span className="font-bold uppercase text-indigo-400">{isPdf ? "PDF" : "Image"}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-slate-400">پوشه مربوطه:</span>
+                                      <span className="font-bold text-emerald-400">{scan.folder || "دسته‌بندی نشده"}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-slate-400">تاریخ آپلود:</span>
+                                      <span className="font-bold">{new Date(scan.timestamp).toLocaleDateString("fa-IR")}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Right Column: Tags, Metrics & Actions */}
+                                <div className="md:col-span-2 space-y-5">
+                                  
+                                  {/* Tags Manager */}
+                                  <div className={`p-4 rounded-xl border space-y-3 ${isDarkMode ? "bg-slate-800/30 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
+                                    <h4 className="text-xs font-bold flex items-center gap-2">
+                                      <Tag className="w-3.5 h-3.5 text-indigo-400" />
+                                      <span>برچسب‌های سند</span>
+                                    </h4>
+
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      {(scan.tags || []).length === 0 ? (
+                                        <span className="text-[10px] text-slate-400 italic">هیچ برچسبی ثبت نشده است.</span>
+                                      ) : (
+                                        scan.tags?.map((t, idx) => (
+                                          <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                                            <span>#{t}</span>
+                                            <button 
+                                              onClick={() => removeTagFromScan(scan.id, t)}
+                                              className="hover:text-rose-400 transition-colors"
+                                            >
+                                              <X className="w-2.5 h-2.5" />
+                                            </button>
+                                          </span>
+                                        ))
+                                      )}
+                                    </div>
+
+                                    {/* Add Tag Input */}
+                                    <div className="flex items-center gap-2 pt-1">
+                                      <input
+                                        type="text"
+                                        id="newTagInput"
+                                        placeholder="مثلاً: فاکتور خرید، تایید شده، حسابداری..."
+                                        className={`flex-1 px-3 py-1.5 rounded-lg text-xs border outline-none transition-all ${
+                                          isDarkMode 
+                                            ? "bg-slate-900 border-slate-700 text-white focus:border-indigo-500" 
+                                            : "bg-white border-slate-300 text-slate-800 focus:border-indigo-500"
+                                        }`}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            const input = e.currentTarget;
+                                            addTagToScan(scan.id, input.value);
+                                            input.value = "";
+                                          }
+                                        }}
+                                      />
+                                      <button
+                                        onClick={() => {
+                                          const input = document.getElementById("newTagInput") as HTMLInputElement;
+                                          if (input && input.value) {
+                                            addTagToScan(scan.id, input.value);
+                                            input.value = "";
+                                          }
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer"
+                                      >
+                                        + افزودن
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Extraction Stats */}
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className={`p-3.5 rounded-xl border space-y-1 ${isDarkMode ? "bg-slate-800/40 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
+                                      <span className="text-[10px] text-slate-400 block">تعداد ردیف‌های داده</span>
+                                      <span className="text-base font-extrabold text-indigo-400">{scan.transactions?.length.toLocaleString("fa-IR") || 0} ردیف</span>
+                                    </div>
+                                    <div className={`p-3.5 rounded-xl border space-y-1 ${isDarkMode ? "bg-slate-800/40 border-slate-800" : "bg-slate-800/20 border-slate-200"}`}>
+                                      <span className="text-[10px] text-slate-400 block">توکن‌های AI مصرف‌شده</span>
+                                      <span className="text-base font-extrabold text-emerald-400">{scan.file?.tokensUsed?.toLocaleString("fa-IR") || "مشخص نشده"}</span>
+                                    </div>
+                                    {totalDebit > 0 && (
+                                      <div className={`p-3.5 rounded-xl border space-y-1 ${isDarkMode ? "bg-slate-800/40 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
+                                        <span className="text-[10px] text-slate-400 block">مجموع گردش بدهکار</span>
+                                        <span className="text-sm font-extrabold text-rose-400">{totalDebit.toLocaleString("fa-IR")} ریال</span>
+                                      </div>
+                                    )}
+                                    {totalCredit > 0 && (
+                                      <div className={`p-3.5 rounded-xl border space-y-1 ${isDarkMode ? "bg-slate-800/40 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
+                                        <span className="text-[10px] text-slate-400 block">مجموع گردش بستانکار</span>
+                                        <span className="text-sm font-extrabold text-emerald-400">{totalCredit.toLocaleString("fa-IR")} ریال</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* AI Document Analysis Summary if available */}
+                                  {scan.file?.documentAnalysis && (
+                                    <div className={`p-4 rounded-xl border space-y-1.5 ${isDarkMode ? "bg-slate-800/20 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
+                                      <h4 className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
+                                        <Brain className="w-3.5 h-3.5" />
+                                        <span>خلاصه و تحلیل هوش مصنوعی درباره سند</span>
+                                      </h4>
+                                      <p className="text-xs leading-relaxed text-slate-300 opacity-90 line-clamp-4">
+                                        {scan.file.documentAnalysis}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Footer Actions */}
+                            <div className={`p-4 border-t flex flex-wrap items-center justify-between gap-3 shrink-0 ${isDarkMode ? "bg-slate-800/80 border-slate-750" : "bg-slate-50/80 border-slate-100"}`}>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    selectPreviousScan(scan);
+                                    setInspectingScanId(null);
+                                    setIsFileManagerOpen(false);
+                                  }}
+                                  className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer"
+                                >
+                                  باز کردن در موتور حسابداری
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    setInspectingScanId(null);
+                                    openExclusiveChatForDocument(scan);
+                                  }}
+                                  className="px-3 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <MessageSquareText className="w-3.5 h-3.5" />
+                                  <span>چت اختصاصی سند</span>
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => downloadBase64File(scan)}
+                                  className={`px-3 py-2 rounded-xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                                    isDarkMode ? "border-slate-700 hover:bg-slate-800 text-slate-300" : "border-slate-300 hover:bg-slate-100 text-slate-700"
+                                  }`}
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>دانلود فایل</span>
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm(`آیا مطمئن هستید که می‌خواهید سند «${scan.file?.name}» را حذف کنید؟`)) {
+                                      setPreviousScans(prev => prev.filter(s => s.id !== scan.id));
+                                      setInspectingScanId(null);
+                                      showNotification("سند با موفقیت حذف گردید.", "success");
+                                    }
+                                  }}
+                                  className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>حذف سند</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}

@@ -76,4 +76,6 @@ export interface PreviousScan {
   timestamp: number;
   auditLogs?: AuditLogEntry[];
   folder?: string;
+  isStarred?: boolean;
+  tags?: string[];
 }
