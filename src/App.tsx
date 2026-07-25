@@ -82,7 +82,7 @@ import {
   Plus,
   Maximize,
   Printer,
-  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Bot, Zap, Wrench
+  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -1157,23 +1157,21 @@ export default function App() {
     // 1. Destination Module Guidelines
     if (erpDestinationModule === "general-ledger") {
       instructions += "ماژول هدف: سند عمومی حسابداری و دفتر روزنامه. فیلدهای بدهکار، بستانکار، بابت، و کد حساب کل/معین را متناسب با قالب دفتر روزنامه دوطرفه تراز و موازنه کن.\n";
-    } else if (erpDestinationModule === "sales-purchase") {
-      instructions += "ماژول هدف: فاکتور خرید و فروش رسمی. اقلام کالا، کدهای اقتصادی، شناسه ملی خریدار/فروشنده، شماره فاکتور، درصد و مبلغ مالیات بر ارزش افزوده و مبالغ ناخالص و خالص فاکتور را دقیقاً طبق فاکتور استاندارد مالیاتی تفکیک کن.\n";
-    } else if (erpDestinationModule === "petty-cash") {
-      instructions += "ماژول هدف: هزینه جاری و تنخواه گردان. اطلاعات پرداخت‌کننده، شرح تفصیلی هر بند هزینه، طبقه‌بندی هزینه‌ها (سوخت، ملزومات، پذیرایی و ...)، شماره سند تسویه و مبالغ را استخراج کن.\n";
-    } else if (erpDestinationModule === "payroll") {
-      instructions += "ماژول هدف: لیست حقوق و دستمزد پرسنل. نام پرسنل، حقوق پایه، کارکرد (روز/ساعت)، اضافه کار، بیمه سهم کارمند، مالیات حقوق و خالص پرداختی هر فرد را با دقت و موازنه ریاضی بالا استخراج کن.\n";
+    } else if (erpDestinationModule === "accounts-payable") {
+      instructions += "ماژول هدف: حساب‌های پرداختی (AP). اطلاعات فاکتور خرید، نام فروشنده/تامین‌کننده، مبلغ کل، تخفیف، مالیات، عوارض و شرایط پرداخت را استخراج کن. ثبت دقیق کدهای اقتصادی و شناسه ملی الزامی است.\n";
+    } else if (erpDestinationModule === "accounts-receivable") {
+      instructions += "ماژول هدف: حساب‌های دریافتی (AR). اطلاعات فاکتور فروش، نام خریدار/مشتری، مبالغ ناخالص و خالص، مالیات، شماره فاکتور و سررسید پرداخت را با دقت استخراج کن.\n";
     } else if (erpDestinationModule === "inventory") {
-      instructions += "ماژول هدف: رسید انبار و کاردکس کالا. شرح کالا، تعداد وارده/صادره، نام تحویل‌گیرنده، فرستنده، شماره برگه رسید و جزئیات موجودی کالا را ثبت و استخراج نما.\n";
+      instructions += "ماژول هدف: انبار و کالا (Inventory). رسید انبار و حواله کالا. شرح دقیق کالا، تعداد، واحد اندازه‌گیری، فی، مبلغ کل هر ردیف، مشخصات تحویل‌دهنده و تحویل‌گیرنده استخراج شود.\n";
     }
 
     // 2. Strictness Mode Guidelines
     if (strictnessMode === "speed") {
-      instructions += "حالت پردازش: سرعت فوق‌العاده. بهینه‌ترین حالت؛ با تکیه بر اطلاعات ظاهری سند بدون پردازش‌های ثانویه سنگین، مقادیر عددی فاکتور را استخراج کن.\n";
+      instructions += "حالت پردازش: سرعت بالا (Fast Extraction). هدف استخراج سریع مبالغ کلیدی و اطلاعات هویتی پایه است. از پردازش ثانویه و راستی‌آزمایی محاسبات ریاضی چشم‌پوشی کن تا خروجی با بالاترین سرعت ممکن تولید شود.\n";
     } else if (strictnessMode === "balanced") {
-      instructions += "حالت پردازش: متوازن. موازنه محاسباتی بین بدهکار و بستانکار و حاصل‌ضرب اقلام فاکتور با دقت حسابداری استاندارد چک شود.\n";
+      instructions += "حالت پردازش: متوازن (Balanced). موازنه محاسباتی بین مبالغ جزء و مبالغ کل (Subtotal, Tax, Grand Total) را به صورت استاندارد بررسی کن و در صورت مغایرت جزئی، عدد نهایی نوشته شده در سند ملاک عمل باشد.\n";
     } else if (strictnessMode === "audit") {
-      instructions += "حالت پردازش: ممیزی و استدلال عمیق. شما ممیز ارشد مالی و حسابدار رسمی هستید. تک‌تک ردیف‌ها را مجدداً به صورت ریاضی محاسبه کن (تعداد * قیمت واحد = جمع کل). ترازهای بستانکار و بدهکار را موازنه دوطرفه کن. هرگونه عدم تطابق محاسباتی یا مالیات غیرواقعی را در تحلیل سند ذکر کن. شماره پیگیری و ارقام دست‌نویس مخدوش را با بالاترین سطح دقت استخراج کن.\n";
+      instructions += "حالت پردازش: ممیزی سخت‌گیرانه (Strict Audit). تو یک ممیز ارشد مالیاتی و حسابرس قانونی هستی. تمام ردیف‌ها را مجدداً به صورت ریاضی محاسبه کن (تعداد × قیمت واحد = جمع کل ردیف). مجموع اقلام، تخفیفات، مالیات بر ارزش افزوده (VAT) و مبلغ نهایی باید دقیقاً موازنه دوطرفه شوند. هرگونه مخدوش بودن، خط‌خوردگی، و یا مغایرت محاسباتی در سند را تشخیص داده و گزارش کن. اطلاعات هویتی و تاریخ‌ها را با سخت‌گیرانه‌ترین حالت بررسی کن.\n";
     }
 
     // 3. Selection Scopes
@@ -3939,9 +3937,9 @@ export default function App() {
                                onChange={(e) => setStrictnessMode(e.target.value as any)}
                                className={`w-full p-2 rounded-xl border text-[10px] font-bold outline-none cursor-pointer transition-colors mt-auto ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-300 focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-700 focus:border-indigo-500"}`}
                             >
-                               <option value="speed">حالت سریع (Fast)</option>
-                               <option value="balanced">حالت متعادل (Balanced)</option>
-                               <option value="audit">ممیزی سخت‌گیرانه (Strict)</option>
+                               <option value="speed">حالت سریع و فوری (Fast)</option>
+                               <option value="balanced">حالت متعادل و خودکار (Balanced)</option>
+                               <option value="audit">ممیزی موشکافانه و سخت‌گیرانه (Strict Audit)</option>
                             </select>
                           </div>
                         </div>

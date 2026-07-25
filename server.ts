@@ -9,6 +9,47 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Security Hardening: Disable Express signature header
+app.disable("x-powered-by");
+
+// Security Headers Middleware (OWASP recommended headers)
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=*, microphone=*, geolocation=*");
+  next();
+});
+
+// Sliding Window Memory Rate Limiter for API Endpoints (Anti-DoS / Quota Protection)
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
+const MAX_REQUESTS_PER_WINDOW = 60; // Max 60 requests per minute per IP
+
+const apiRateLimiter = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const clientIp = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "127.0.0.1";
+  const now = Date.now();
+  const record = rateLimitMap.get(clientIp);
+
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(clientIp, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return next();
+  }
+
+  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
+    res.status(429).json({
+      error: "تعداد درخواست‌های شما بیش از حد مجاز است (Rate Limit). لطفاً ۱ دقیقه دیگر مجدداً تلاش کنید.",
+    });
+    return;
+  }
+
+  record.count += 1;
+  next();
+};
+
+app.use("/api/", apiRateLimiter);
+
 // High limits for handling high-resolution document uploads
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
@@ -291,6 +332,13 @@ app.post("/api/extract", async (req, res) => {
       promptText += `\n\n[دستور اختصاصی حسابدار / کاربر برای استخراج]:\n${userPrompt}\nلطفا توجه ویژه‌ای به این دستور کاربر داشته باشید و ترجیحاً استخراج و تحلیل را بر مبنای این درخواست انجام دهید.`;
       if (userPrompt.includes("۱۰۰٪") || userPrompt.includes("دستور اکید") || userPrompt.includes("تمام اطلاعات")) {
         promptText += `\n\n🚨 [دستور ویژه استخراج ۱۰۰٪ جامع و بدون استثنا]: کاربر رسماً تاکید کرده است که کلیه اعداد، متون، جداول، کدهای اقتصادی، شناسه‌های ملی، آدرس‌ها، تلفن‌ها، تک‌تک سطرهای فاکتور، شرح کالاها، مقادیر، قیمت‌های واحد، تخفیفات، مالیات بر ارزش افزوده، عوارض، جمع کل، شماره شبا/حساب و تمامی یادداشت‌ها و شروط حاشیه‌ای سند بدون کوچک‌ترین حذف یا خلاصه‌سازی استخراج شوند. عدم استخراج حتی یک سطر یا یک فیلد خطای حیاتی محسوب می‌شود.`;
+      }
+      if (userPrompt.includes("Strict Audit") || userPrompt.includes("ممیزی سخت‌گیرانه")) {
+        promptText += `\n\n🚨 [دستور ویژه ممیزی سخت‌گیرانه]: کاربر حالت "Strict Audit" را فعال کرده است. شما به عنوان یک ممیز ارشد، باید تک‌تک محاسبات ریاضی (مقدار × فی = جمع) و تراز مبالغ (مالیات، عوارض، تخفیف، جمع کل) را مستقلاً محاسبه و با سند تطبیق دهید. هرگونه مغایرت، خط‌خوردگی، ارقام مبهم یا کسری اطلاعات را با ذکر دلیل در "تحلیل_سند" برجسته کنید و مقادیر اشتباه را فیلتر نکنید بلکه مقدار سند را در کنار مقدار صحیح محاسبه شده گزارش کنید.`;
+      } else if (userPrompt.includes("Fast Extraction") || userPrompt.includes("سرعت بالا")) {
+        promptText += `\n\n⚡ [دستور ویژه استخراج سریع]: کاربر حالت "Fast" را فعال کرده است. ممیزی و محاسبات ریاضی پیچیده را نادیده بگیرید، مبالغ را همان‌طور که در سند آمده است فوراً استخراج کنید و پردازش‌های تحلیلی را برای افزایش سرعت به حداقل برسانید.`;
+      } else if (userPrompt.includes("Balanced") || userPrompt.includes("متوازن")) {
+        promptText += `\n\n⚖️ [دستور ویژه استخراج متوازن]: تطبیق استاندارد حسابداری مد نظر است. در صورت مغایرت جزئی، عدد نوشته شده در سند ملاک عمل است.`;
       }
     }
 

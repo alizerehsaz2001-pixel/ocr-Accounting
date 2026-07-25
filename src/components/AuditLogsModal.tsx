@@ -21,6 +21,7 @@ export default function AuditLogsModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterAction, setFilterAction] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
 
   const uniqueActions = useMemo(() => {
     const actions = new Set(auditLogs.map(log => log.action));
@@ -38,6 +39,24 @@ export default function AuditLogsModal({
       return matchesSearch && matchesAction && matchesType;
     });
   }, [auditLogs, searchQuery, filterAction, filterType]);
+
+  const sortedAndFilteredLogs = useMemo(() => {
+    return [...filteredLogs].sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime() || 0;
+      const timeB = new Date(b.timestamp).getTime() || 0;
+      if (sortOrder === "desc") return timeB - timeA;
+      return timeA - timeB;
+    });
+  }, [filteredLogs, sortOrder]);
+
+  const stats = useMemo(() => {
+    return {
+      total: auditLogs.length,
+      errors: auditLogs.filter(l => l.type === 'error').length,
+      warnings: auditLogs.filter(l => l.type === 'warning').length,
+      auth: auditLogs.filter(l => l.type === 'auth').length,
+    };
+  }, [auditLogs]);
 
   const handleExportCSV = () => {
     if (filteredLogs.length === 0) return;
@@ -60,6 +79,19 @@ export default function AuditLogsModal({
     const link = document.createElement("a");
     link.setAttribute("href", url);
     link.setAttribute("download", `audit_logs_${new Date().toLocaleDateString("fa-IR")}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportJSON = () => {
+    if (filteredLogs.length === 0) return;
+    const jsonContent = JSON.stringify(filteredLogs, null, 2);
+    const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `audit_logs_${new Date().toLocaleDateString("fa-IR")}.json`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -146,18 +178,32 @@ export default function AuditLogsModal({
             </div>
             
             <div className="flex items-center gap-2">
-              <button 
-                onClick={handleExportCSV}
-                title="دانلود گزارش CSV"
-                disabled={filteredLogs.length === 0}
-                className={`p-2 rounded-lg transition-colors border ${
-                  isDarkMode 
-                    ? "border-slate-700 hover:bg-slate-800 text-slate-300 disabled:opacity-50" 
-                    : "border-slate-200 hover:bg-slate-100 text-slate-600 disabled:opacity-50"
-                }`}
-              >
-                <Download className="h-4 w-4" />
-              </button>
+              <div className="flex gap-1 border p-1 rounded-lg dark:border-slate-700 border-slate-200">
+                <button 
+                  onClick={handleExportCSV}
+                  title="دانلود CSV"
+                  disabled={filteredLogs.length === 0}
+                  className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1 ${
+                    isDarkMode 
+                      ? "hover:bg-slate-800 text-slate-300 disabled:opacity-50" 
+                      : "hover:bg-slate-100 text-slate-600 disabled:opacity-50"
+                  }`}
+                >
+                  <Download className="h-3.5 w-3.5" /> CSV
+                </button>
+                <button 
+                  onClick={handleExportJSON}
+                  title="دانلود JSON"
+                  disabled={filteredLogs.length === 0}
+                  className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1 ${
+                    isDarkMode 
+                      ? "hover:bg-slate-800 text-slate-300 disabled:opacity-50" 
+                      : "hover:bg-slate-100 text-slate-600 disabled:opacity-50"
+                  }`}
+                >
+                  <Download className="h-3.5 w-3.5" /> JSON
+                </button>
+              </div>
               
               {onClearLogs && (
                 <button 
@@ -191,6 +237,21 @@ export default function AuditLogsModal({
             </div>
           </div>
 
+          {/* Dashboard Stats */}
+          <div className="grid grid-cols-4 gap-3 mb-2">
+            {[
+              { label: "کل رویدادها", value: stats.total, color: "text-blue-500", bg: isDarkMode ? "bg-blue-500/10 border-blue-500/20" : "bg-blue-50 border-blue-100" },
+              { label: "خطاها", value: stats.errors, color: "text-rose-500", bg: isDarkMode ? "bg-rose-500/10 border-rose-500/20" : "bg-rose-50 border-rose-100" },
+              { label: "هشدارها", value: stats.warnings, color: "text-amber-500", bg: isDarkMode ? "bg-amber-500/10 border-amber-500/20" : "bg-amber-50 border-amber-100" },
+              { label: "امنیتی", value: stats.auth, color: "text-purple-500", bg: isDarkMode ? "bg-purple-500/10 border-purple-500/20" : "bg-purple-50 border-purple-100" },
+            ].map((stat, idx) => (
+              <div key={idx} className={`p-3 rounded-xl border flex flex-col gap-1 items-center justify-center ${isDarkMode ? "border-slate-700/50" : "border-slate-200/50"} ${stat.bg}`}>
+                <span className={`text-[10px] font-medium ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{stat.label}</span>
+                <span className={`text-lg font-black ${stat.color}`}>{stat.value.toLocaleString("fa-IR")}</span>
+              </div>
+            ))}
+          </div>
+
           {/* Filters & Search */}
           <div className="flex flex-col sm:flex-row gap-3 mt-1">
             <div className="relative flex-1">
@@ -207,6 +268,18 @@ export default function AuditLogsModal({
                 }`}
               />
             </div>
+            
+            <button
+              onClick={() => setSortOrder(prev => prev === "desc" ? "asc" : "desc")}
+              className={`px-3 rounded-lg border flex items-center gap-2 text-[10px] font-bold transition-colors ${
+                isDarkMode 
+                  ? "bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800" 
+                  : "bg-white border-slate-300 text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              <span>{sortOrder === "desc" ? "جدیدترین‌ها" : "قدیمی‌ترین‌ها"}</span>
+            </button>
             
             <div className="flex gap-3 sm:w-80">
               <div className="relative flex-1">
@@ -265,7 +338,7 @@ export default function AuditLogsModal({
            ) : (
              <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-indigo-300 before:to-transparent dark:before:via-indigo-800/50">
                 <AnimatePresence initial={false}>
-                  {filteredLogs.map((log) => {
+                  {sortedAndFilteredLogs.map((log) => {
                      const d = new Date(log.timestamp);
                      const timeStr = d.toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                      const dateStr = d.toLocaleDateString("fa-IR", { year: "numeric", month: "long", day: "numeric" });
