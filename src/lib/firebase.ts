@@ -18,7 +18,7 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase Services
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
 
 // Custom connection validation
@@ -31,7 +31,7 @@ export async function testFirebaseConnection() {
   } catch (error: any) {
     console.warn("Firebase test connection warning (this is normal if no database collection is setup yet):", error.message);
     if (error?.message && error.message.includes("the client is offline")) {
-      console.error("Firebase is offline. Please check your network and configuration.");
+      console.warn("Firebase is offline. Please check your network and configuration.");
     }
     return false;
   }
@@ -80,7 +80,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  console.warn('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
 

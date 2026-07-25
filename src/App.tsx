@@ -1625,10 +1625,26 @@ export default function App() {
       if (firebaseUser) {
         try {
           const userRef = doc(db, "users", firebaseUser.uid);
-          const docSnap = await getDoc(userRef);
+          const foldersRef = collection(db, "users", firebaseUser.uid, "folders");
+          const scansRef = collection(db, "users", firebaseUser.uid, "scans");
+
+          const [docSnap, foldersSnap, scansSnap] = await Promise.all([
+            getDoc(userRef).catch(err => {
+               console.warn("User getDoc error:", err);
+               return null;
+            }),
+            getDocs(foldersRef).catch(err => {
+               console.warn("Folders getDocs error:", err);
+               return null;
+            }),
+            getDocs(scansRef).catch(err => {
+               console.warn("Scans getDocs error:", err);
+               return null;
+            })
+          ]);
           
           let dbUser: any;
-          if (docSnap.exists()) {
+          if (docSnap && docSnap.exists()) {
             dbUser = docSnap.data();
           } else {
             dbUser = {
@@ -1641,7 +1657,8 @@ export default function App() {
               extraStorage: 0,
               isOnboarded: false
             };
-            await setDoc(userRef, dbUser);
+            // Do not block initial render for user creation
+            setDoc(userRef, dbUser).catch(err => console.warn("Background user doc creation error", err));
           }
           
           setUsers((prevUsers) => {
@@ -1654,32 +1671,19 @@ export default function App() {
           setCurrentUser(dbUser);
           localStorage.setItem("is_demo_mode", "false");
 
-          // Load & Sync folders/scans from cloud
-          const foldersRef = collection(db, "users", firebaseUser.uid, "folders");
-          let foldersSnap;
-          try {
-            foldersSnap = await getDocs(foldersRef);
-          } catch (err) {
-            handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}/folders`);
-            return;
-          }
           let dbFolders: any[] = [];
-          foldersSnap.forEach((docSnap) => {
-            dbFolders.push(docSnap.data());
-          });
-
-          const scansRef = collection(db, "users", firebaseUser.uid, "scans");
-          let scansSnap;
-          try {
-            scansSnap = await getDocs(scansRef);
-          } catch (err) {
-            handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}/scans`);
-            return;
+          if (foldersSnap) {
+             foldersSnap.forEach((dSnap: any) => {
+               dbFolders.push(dSnap.data());
+             });
           }
+
           let dbScans: PreviousScan[] = [];
-          scansSnap.forEach((docSnap) => {
-            dbScans.push(docSnap.data() as PreviousScan);
-          });
+          if (scansSnap) {
+             scansSnap.forEach((dSnap: any) => {
+               dbScans.push(dSnap.data() as PreviousScan);
+             });
+          }
 
           // Perform cloud-migration if Firestore is completely empty but local is populated
           if (dbFolders.length === 0 && dbScans.length === 0) {
@@ -1706,7 +1710,8 @@ export default function App() {
                   description: folder.description || "",
                   createdAt: folder.createdAt || new Date().toISOString()
                 };
-                await setDoc(folderDocRef, folderData).catch(err => handleFirestoreError(err, OperationType.WRITE, folderDocRef.path));
+                // Fire and forget so we don't block login
+                setDoc(folderDocRef, folderData).catch(err => console.warn("Background migration folder err", err));
                 dbFolders.push(folderData);
               }
             }
@@ -1733,7 +1738,8 @@ export default function App() {
                   },
                   transactions: scan.transactions || []
                 };
-                await setDoc(scanDocRef, scanData).catch(err => handleFirestoreError(err, OperationType.WRITE, scanDocRef.path));
+                // Fire and forget
+                setDoc(scanDocRef, scanData).catch(err => console.warn("Background migration scan err", err));
                 dbScans.push(scanData);
               }
             }
@@ -1748,7 +1754,7 @@ export default function App() {
           setUserDefinedFolders(dbFolders);
           setPreviousScans(dbScans);
         } catch (err: any) {
-          console.error("Firestore sync warning:", err);
+          console.warn("Firestore sync warning:", err);
           const localUser = {
             id: firebaseUser.uid,
             name: firebaseUser.displayName || firebaseUser.email || "کاربر ممیزی",
@@ -1763,7 +1769,16 @@ export default function App() {
         }
       } else {
         const isDemo = localStorage.getItem("is_demo_mode") === "true";
-        if (!isDemo) {
+        if (isDemo) {
+          const storedDemoUser = localStorage.getItem("demo_user_data");
+          if (storedDemoUser) {
+            try {
+              setCurrentUser(JSON.parse(storedDemoUser));
+            } catch (e) {
+              // fallback
+            }
+          }
+        } else {
           setCurrentUser(null);
         }
       }
@@ -1772,16 +1787,22 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const handleEnterDemo = () => {
+  const handleEnterDemo = (customName?: string, customEmail?: string) => {
+    const nameToUse = customName?.trim() || "سمانه رسولی";
+    const emailToUse = customEmail?.trim() || "samaneh.rasouli@example.com";
+    const nameParts = nameToUse.split(" ");
+    const firstName = nameParts[0] || "کاربر";
+    const lastName = nameParts.slice(1).join(" ") || "ممیزی";
+
     const demoUser = { 
-      id: 1, 
-      name: "سمانه رسولی", 
-      firstName: "سمانه",
-      lastName: "رسولی",
-      companyName: "بازرگانی دریا",
+      id: "user_" + Date.now(), 
+      name: nameToUse, 
+      firstName: firstName,
+      lastName: lastName,
+      companyName: "مؤسسه مالی و حسابداری",
       phone: "09121111111",
-      jobTitle: "مدیر مالی",
-      email: "samaneh.rasouli@example.com",
+      jobTitle: "مدیر مالی / ممیز ارشد",
+      email: emailToUse,
       role: "admin", 
       status: "active", 
       apiUsage: 45000, 
@@ -1789,6 +1810,7 @@ export default function App() {
       isOnboarded: true
     };
     localStorage.setItem("is_demo_mode", "true");
+    localStorage.setItem("demo_user_data", JSON.stringify(demoUser));
     setCurrentUser(demoUser);
   };
 
@@ -3843,102 +3865,151 @@ export default function App() {
                     ) : (
                       <div className="flex flex-col gap-5">
                                         {/* Guide Area */}
-                <div className={`p-4 rounded-2xl border ${isDarkMode ? "bg-slate-950/40 border-slate-800" : "bg-blue-50/20 border-blue-100"}`}>
+                <div className={`p-4 rounded-2xl border transition-all ${isDarkMode ? "bg-blue-500/5 border-blue-500/20" : "bg-blue-50 border-blue-100 shadow-sm"}`}>
                   <div className="flex items-center gap-2 mb-3">
-                    <BookOpen className="w-4 h-4 text-blue-500" />
+                    <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-blue-500/20" : "bg-blue-100"}`}>
+                      <BookOpen className="w-4 h-4 text-blue-500" />
+                    </div>
                     <span className={`text-[11.5px] font-black ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                      چک‌لیست عکاسی برای استخراج دقیق:
+                      نکات طلایی برای استخراج دقیق‌تر
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { title: "📐 بدون زاویه و مستقیم", desc: "سند را کاملاً تخت قرار دهید و دوربین را دقیقاً از بالا بگیرید." },
-                      { title: "☀️ نورپردازی یکنواخت", desc: "از عکاسی زیر نور مستقیم شدید یا سایه خودداری کنید." },
-                      { title: "✏️ ممیزی عمیق", desc: "برای پردازش برگه‌های خط‌خورده ممیزی سخت‌گیرانه را فعال کنید." },
-                      { title: "📄 تجمیع اسناد", desc: "فاکتور و فیش واریزی آن را می‌توان همزمان آپلود کرد." }
+                      { icon: "📐", title: "زاویه مستقیم", desc: "عکاسی دقیقاً از بالا (۹۰ درجه)" },
+                      { icon: "☀️", title: "نورپردازی خوب", desc: "پرهیز از سایه و بازتاب نور" },
+                      { icon: "✏️", title: "وضوح خط‌خوردگی‌ها", desc: "خوانا بودن اصلاحات دستی" },
+                      { icon: "📄", title: "تجمیع اسناد", desc: "آپلود فاکتور + فیش واریزی" }
                     ].map((step, idx) => (
-                      <div key={idx} className={`p-2.5 rounded-xl border ${isDarkMode ? "bg-slate-900/80 border-slate-800/80 backdrop-blur-md shadow-sm rounded-xl mb-4/80" : "bg-white border-slate-150 shadow-sm"}`}>
-                        <h6 className={`text-[9.5px] font-extrabold ${isDarkMode ? "text-slate-200" : "text-slate-800"} mb-1`}>{step.title}</h6>
-                        <p className={`text-[8.5px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{step.desc}</p>
+                      <div key={idx} className={`p-3 rounded-xl border flex gap-2 items-start transition-colors ${isDarkMode ? "bg-slate-900/60 border-slate-800/80 hover:bg-slate-900/80 hover:border-slate-700" : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm"}`}>
+                        <div className="text-sm shrink-0">{step.icon}</div>
+                        <div>
+                          <h6 className={`text-[10px] font-bold ${isDarkMode ? "text-slate-200" : "text-slate-800"} mb-0.5`}>{step.title}</h6>
+                          <p className={`text-[8.5px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{step.desc}</p>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* Model */}
-                        <div className="flex flex-col gap-2">
-                          <label className={`text-[11px] font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                             <Cpu className="w-3.5 h-3.5 text-blue-500" /> مدل پردازشی:
-                          </label>
-                          <select 
-                             value={selectedModel}
-                             onChange={(e) => setSelectedModel(e.target.value)}
-                             className={`w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none cursor-pointer ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"}`}
-                          >
-                             <option value="gemini-3.6-flash">Gemini 3.6 Flash (آخرین آپدیت - سریع و هوشمند)</option>
-                             <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (استدلال پیشرفته - Thinking High)</option>
-                          </select>
-                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {/* Model */}
+                          <div className={`flex flex-col gap-2 p-3 rounded-2xl border transition-all ${isDarkMode ? "bg-slate-900/50 border-slate-800 hover:border-blue-500/50" : "bg-white border-slate-200 hover:border-blue-400/50 shadow-sm"}`}>
+                            <label className={`text-[11px] font-extrabold flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                               <Cpu className="w-4 h-4 text-blue-500" /> مدل پردازشی
+                            </label>
+                            <p className={`text-[9px] mb-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>موتور هوش مصنوعی برای استخراج</p>
+                            <select 
+                               value={selectedModel}
+                               onChange={(e) => setSelectedModel(e.target.value)}
+                               className={`w-full p-2 rounded-xl border text-[10px] font-bold outline-none cursor-pointer transition-colors mt-auto ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-300 focus:border-blue-500" : "bg-slate-50 border-slate-200 text-slate-700 focus:border-blue-500"}`}
+                            >
+                               <option value="gemini-3.6-flash">⚡ Gemini 3.6 Flash (سریع)</option>
+                               <option value="gemini-3.1-pro-preview">🧠 Gemini 3.1 Pro (دقیق)</option>
+                            </select>
+                          </div>
 
-                        {/* ERP Module */}
-                        <div className="flex flex-col gap-2">
-                          <label className={`text-[11px] font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                             <Database className="w-3.5 h-3.5 text-emerald-500" /> ماژول مقصد:
-                          </label>
-                          <select 
-                             value={erpDestinationModule}
-                             onChange={(e) => setErpDestinationModule(e.target.value)}
-                             className={`w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none cursor-pointer ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"}`}
-                          >
-                             <option value="general-ledger">دفتر کل (General Ledger)</option>
-                             <option value="accounts-payable">حساب‌های پرداختی (AP)</option>
-                             <option value="accounts-receivable">حساب‌های دریافتی (AR)</option>
-                             <option value="inventory">انبار و کالا (Inventory)</option>
-                          </select>
-                        </div>
+                          {/* ERP Module */}
+                          <div className={`flex flex-col gap-2 p-3 rounded-2xl border transition-all ${isDarkMode ? "bg-slate-900/50 border-slate-800 hover:border-emerald-500/50" : "bg-white border-slate-200 hover:border-emerald-400/50 shadow-sm"}`}>
+                            <label className={`text-[11px] font-extrabold flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                               <Database className="w-4 h-4 text-emerald-500" /> ماژول مقصد
+                            </label>
+                            <p className={`text-[9px] mb-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>سیستم حسابداری هدف برای ثبت</p>
+                            <select 
+                               value={erpDestinationModule}
+                               onChange={(e) => setErpDestinationModule(e.target.value)}
+                               className={`w-full p-2 rounded-xl border text-[10px] font-bold outline-none cursor-pointer transition-colors mt-auto ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-300 focus:border-emerald-500" : "bg-slate-50 border-slate-200 text-slate-700 focus:border-emerald-500"}`}
+                            >
+                               <option value="general-ledger">دفتر کل (General Ledger)</option>
+                               <option value="accounts-payable">حساب‌های پرداختی (AP)</option>
+                               <option value="accounts-receivable">حساب‌های دریافتی (AR)</option>
+                               <option value="inventory">انبار و کالا (Inventory)</option>
+                            </select>
+                          </div>
 
-                        {/* Strictness */}
-                        <div className="flex flex-col gap-2">
-                          <label className={`text-[11px] font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                             <Shield className="w-3.5 h-3.5 text-indigo-500" /> دقت و سخت‌گیری:
-                          </label>
-                          <select 
-                             value={strictnessMode}
-                             onChange={(e) => setStrictnessMode(e.target.value as any)}
-                             className={`w-full p-2.5 rounded-xl border text-[11px] font-bold outline-none cursor-pointer ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"}`}
-                          >
-                             <option value="speed">حالت سریع (Fast)</option>
-                             <option value="balanced">حالت متعادل (Balanced)</option>
-                             <option value="audit">ممیزی سخت‌گیرانه (Strict Audit)</option>
-                          </select>
+                          {/* Strictness */}
+                          <div className={`flex flex-col gap-2 p-3 rounded-2xl border transition-all ${isDarkMode ? "bg-slate-900/50 border-slate-800 hover:border-indigo-500/50" : "bg-white border-slate-200 hover:border-indigo-400/50 shadow-sm"}`}>
+                            <label className={`text-[11px] font-extrabold flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                               <Shield className="w-4 h-4 text-indigo-500" /> دقت و سخت‌گیری
+                            </label>
+                            <p className={`text-[9px] mb-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>سطح اعتبارسنجی اطلاعات</p>
+                            <select 
+                               value={strictnessMode}
+                               onChange={(e) => setStrictnessMode(e.target.value as any)}
+                               className={`w-full p-2 rounded-xl border text-[10px] font-bold outline-none cursor-pointer transition-colors mt-auto ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-300 focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-700 focus:border-indigo-500"}`}
+                            >
+                               <option value="speed">حالت سریع (Fast)</option>
+                               <option value="balanced">حالت متعادل (Balanced)</option>
+                               <option value="audit">ممیزی سخت‌گیرانه (Strict)</option>
+                            </select>
+                          </div>
                         </div>
 
                         {/* Custom Prompt */}
-                        <div className="flex flex-col gap-2">
+                        <div className={`flex flex-col gap-3 p-4 rounded-2xl border transition-all ${isDarkMode ? "bg-slate-900/50 border-slate-800 hover:border-purple-500/50" : "bg-white border-slate-200 hover:border-purple-400/50 shadow-sm"}`}>
                           <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <label className={`text-[11px] font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                               <FileEdit className="w-3.5 h-3.5 text-purple-500" /> پرامپت و دستورالعمل استخراج (تنظیمات سند):
-                            </label>
+                            <div>
+                              <label className={`text-[11.5px] font-extrabold flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                                 <FileEdit className="w-4 h-4 text-purple-500" /> پرامپت و دستورالعمل استخراج
+                              </label>
+                              <p className={`text-[9.5px] mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>دستورالعمل‌های خاص و الگوهای استخراج را مدیریت کنید</p>
+                            </div>
                             <button
                               type="button"
                               onClick={handleSetDirectJsonPrompt}
-                              className={`px-2 py-1 rounded-lg text-[9.5px] font-black flex items-center gap-1 transition-all border ${
+                              className={`px-3 py-1.5 rounded-xl text-[10px] font-black flex items-center gap-1.5 transition-all border ${
                                 isDarkMode 
-                                  ? "bg-purple-500/10 border-purple-500/30 text-purple-300 hover:bg-purple-500/20" 
+                                  ? "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20" 
                                   : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                              } cursor-pointer`}
+                              } cursor-pointer shadow-sm`}
                               title="افزودن دستور استخراج مستقیم به فرمت آرایه استاندارد JSON"
                             >
-                              <Code className="w-3 h-3 text-purple-500" />
-                              <span>⚡ تنظیم خروجی مستقیم JSON</span>
+                              <Code className="w-3.5 h-3.5" />
+                              <span>الگوی خروجی JSON</span>
                             </button>
                           </div>
+                          
+                          <div className="flex flex-wrap gap-2 mb-1">
+                            {[
+                              { label: "استخراج فقط مالیات", text: "فقط مبلغ مربوط به مالیات بر ارزش افزوده را استخراج کن." },
+                              { label: "نادیده گرفتن دست‌نویس", text: "بخش‌های دست‌نویس را به طور کامل نادیده بگیر و فقط تایپی‌ها را استخراج کن." },
+                              { label: "استخراج جدولی سخت‌گیرانه", text: "اطلاعات را دقیقاً به شکل جدولی استخراج کن و مقادیر خالی را null قرار بده." },
+                              { label: "استخراج فقط تاریخ و مبلغ", text: "فقط تاریخ صدور و مبلغ نهایی فاکتور/فیش را استخراج کن." }
+                            ].map((preset, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setCustomPrompt(prev => prev ? `${prev}\n${preset.text}` : preset.text)}
+                                className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold border transition-colors ${
+                                  isDarkMode
+                                    ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white"
+                                    : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
+                                }`}
+                                title={preset.text}
+                              >
+                                + {preset.label}
+                              </button>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={() => setCustomPrompt("")}
+                                className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold border transition-colors ${
+                                  isDarkMode
+                                    ? "bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20"
+                                    : "bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100"
+                                }`}
+                                title="پاک کردن متن"
+                              >
+                                پاک کردن
+                              </button>
+                          </div>
                           <textarea
-                            rows={2}
+                            rows={3}
                             value={customPrompt}
                             onChange={(e) => setCustomPrompt(e.target.value)}
-                            placeholder="دستورالعمل خاصی اگر دارید بنویسید (الزامی)..."
-                            className={`w-full p-2.5 rounded-xl border text-[11px] outline-none resize-none ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-200 focus:border-blue-500/50" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-blue-500/50"}`}
+                            placeholder="مثال: فقط نام فروشنده و مبلغ کل را استخراج کن..."
+                            className={`w-full p-3 rounded-xl border text-[11px] font-medium outline-none resize-none transition-colors ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-200 focus:border-purple-500/50" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-purple-500/50"}`}
                             required
                           />
                         </div>
