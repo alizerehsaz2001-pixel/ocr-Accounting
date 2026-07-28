@@ -571,16 +571,23 @@ export default function App() {
     }
   };
 
+  const getFolderId = (folderName: string) => {
+    const clean = folderName.replace(/[^a-zA-Z0-9_\-]/g, "_") || "folder";
+    const hash = Math.abs(folderName.split("").reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0));
+    return (clean.substring(0, 60) + "_" + hash).substring(0, 128);
+  };
+
   const saveFolderToCloud = async (folder: any) => {
     if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
     try {
-      const folderId = folder.name.replace(/[^a-zA-Z0-9_\-]/g, "_") || "folder_" + Date.now();
+      const folderName = typeof folder === "string" ? folder : (folder?.name || "پوشه جدید");
+      const folderId = getFolderId(folderName);
       const folderDocRef = doc(db, "users", auth.currentUser.uid, "folders", folderId);
       const folderData = {
-        name: folder.name,
-        color: folder.color,
-        description: folder.description || "",
-        createdAt: folder.createdAt || new Date().toISOString()
+        name: folderName,
+        color: (typeof folder === "object" && folder?.color) || "indigo",
+        description: (typeof folder === "object" && folder?.description) || "",
+        createdAt: (typeof folder === "object" && folder?.createdAt) || new Date().toISOString()
       };
       await setDoc(folderDocRef, folderData).catch(err => handleFirestoreError(err, OperationType.WRITE, folderDocRef.path));
     } catch (e) {
@@ -591,7 +598,7 @@ export default function App() {
   const deleteFolderFromCloud = async (folderName: string) => {
     if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
     try {
-      const folderId = folderName.replace(/[^a-zA-Z0-9_\-]/g, "_");
+      const folderId = getFolderId(folderName);
       const folderDocRef = doc(db, "users", auth.currentUser.uid, "folders", folderId);
       await deleteDoc(folderDocRef).catch(err => handleFirestoreError(err, OperationType.DELETE, folderDocRef.path));
     } catch (e) {
@@ -1708,15 +1715,15 @@ export default function App() {
 
             if (localFolders.length > 0) {
               for (const folder of localFolders) {
-                const folderId = folder.name.replace(/[^a-zA-Z0-9_\-]/g, "_") || "folder_" + Date.now();
+                const folderName = typeof folder === "string" ? folder : (folder?.name || "پوشه جدید");
+                const folderId = getFolderId(folderName);
                 const folderDocRef = doc(db, "users", firebaseUser.uid, "folders", folderId);
                 const folderData = {
-                  name: folder.name || "پوشه جدید",
-                  color: folder.color || "indigo",
-                  description: folder.description || "",
-                  createdAt: folder.createdAt || new Date().toISOString()
+                  name: folderName,
+                  color: (typeof folder === "object" && folder?.color) || "indigo",
+                  description: (typeof folder === "object" && folder?.description) || "",
+                  createdAt: (typeof folder === "object" && folder?.createdAt) || new Date().toISOString()
                 };
-                // Fire and forget so we don't block login
                 setDoc(folderDocRef, folderData).catch(err => console.warn("Background migration folder err", err));
                 dbFolders.push(folderData);
               }
@@ -1724,27 +1731,29 @@ export default function App() {
 
             if (localScans.length > 0) {
               for (const scan of localScans) {
-                const scanId = scan.id || "scan_" + Date.now();
+                const rawScanId = scan.id ? String(scan.id) : "scan_" + Date.now();
+                const scanId = rawScanId.replace(/[^a-zA-Z0-9_\-\.]/g, "_").substring(0, 128);
                 const scanDocRef = doc(db, "users", firebaseUser.uid, "scans", scanId);
                 const scanData = {
-                  id: scan.id,
-                  timestamp: scan.timestamp,
+                  id: rawScanId,
+                  timestamp: scan.timestamp || Date.now(),
                   folder: scan.folder || "",
+                  isStarred: !!scan.isStarred,
+                  tags: scan.tags || [],
                   file: {
-                    id: scan.file.id,
-                    name: scan.file.name,
-                    size: scan.file.size,
-                    preview: scan.file.preview,
-                    status: scan.file.status,
-                    error: scan.file.error || null,
-                    documentType: scan.file.documentType || null,
-                    mimeType: scan.file.mimeType || null,
-                    documentAnalysis: scan.file.documentAnalysis || null,
-                    tokensUsed: scan.file.tokensUsed || null
+                    id: scan.file?.id || "file_" + Date.now(),
+                    name: scan.file?.name || "سند بی‌نام",
+                    size: scan.file?.size || 0,
+                    preview: scan.file?.preview || "",
+                    status: scan.file?.status || "success",
+                    error: scan.file?.error || null,
+                    documentType: scan.file?.documentType || null,
+                    mimeType: scan.file?.mimeType || null,
+                    documentAnalysis: scan.file?.documentAnalysis || null,
+                    tokensUsed: scan.file?.tokensUsed || null
                   },
                   transactions: scan.transactions || []
                 };
-                // Fire and forget
                 setDoc(scanDocRef, scanData).catch(err => console.warn("Background migration scan err", err));
                 dbScans.push(scanData);
               }
