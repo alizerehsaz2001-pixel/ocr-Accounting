@@ -28,13 +28,13 @@ interface AiSettingsModalProps {
   setStrictnessMode: (mode: "balanced" | "speed" | "audit") => void;
   customPrompt: string;
   setCustomPrompt: (prompt: string) => void;
-  pendingFile: {
+  pendingFiles: Array<{
     base64: string;
     name: string;
     mimeType: string;
     size: number;
-  } | null;
-  setPendingFile: (file: any) => void;
+  }>;
+  setPendingFiles: (file: any) => void;
   onUploadClick: () => void;
   handleDirectExtraction: () => void;
   isExtracting: boolean;
@@ -53,8 +53,8 @@ export default function AiSettingsModal({
   setStrictnessMode,
   customPrompt,
   setCustomPrompt,
-  pendingFile,
-  setPendingFile,
+  pendingFiles,
+  setPendingFiles,
   onUploadClick,
   handleDirectExtraction,
   isExtracting,
@@ -127,7 +127,7 @@ export default function AiSettingsModal({
                 بارگذاری و آپلود مستقیم سند مالی:
               </label>
               
-              {pendingFile ? (
+              {pendingFiles.length > 0 ? (
                 /* Pending file preview inside modal */
                 <div className={`p-4 rounded-2xl border flex items-center justify-between gap-4 transition-all ${
                   isDarkMode ? "bg-slate-950/40 border-slate-800/80" : "bg-slate-50 border-slate-250/50"
@@ -140,15 +140,15 @@ export default function AiSettingsModal({
                     </div>
                     <div className="min-w-0 text-right">
                       <p className={`text-[11px] font-black truncate max-w-[220px] sm:max-w-[340px] ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                        {pendingFile.name}
+                        {pendingFiles.length === 1 ? pendingFiles[0].name : `${pendingFiles.length} سند`}
                       </p>
                       <p className={`text-[9px] font-mono mt-0.5 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                        {Math.round(pendingFile.size / 1024)} KB
+                        {Math.round(pendingFiles.reduce((acc, f) => acc + f.size, 0) / 1024)} KB
                       </p>
                     </div>
                   </div>
                   <button
-                    onClick={() => setPendingFile(null)}
+                    onClick={() => setPendingFiles([])}
                     className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
                       isDarkMode 
                         ? "bg-rose-950/20 border-rose-900/50 text-rose-400 hover:bg-rose-950/40" 
@@ -332,7 +332,7 @@ export default function AiSettingsModal({
                 بستن تنظیمات
               </button>
 
-              {pendingFile && (
+              {pendingFiles.length > 0 && (
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <button
                     onClick={() => {

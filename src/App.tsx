@@ -95,6 +95,7 @@ import OnboardingProfileModal from "./components/OnboardingProfileModal";
 import AuditLogsModal from "./components/AuditLogsModal";
 import LoginScreen from "./components/LoginScreen";
 import PdfThumbnail from "./components/PdfThumbnail";
+import { BatchOCRProgressPanel, BatchOCRProgressItem } from "./components/BatchOCRProgressPanel";
 import { auth, db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
@@ -419,14 +420,15 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [pendingFile, setPendingFile] = useState<{ 
+  const [pendingFiles, setPendingFiles] = useState<Array<{ 
     base64: string; 
     name: string; 
     mimeType: string; 
     size: number;
     id?: string;
     folder?: string;
-  } | null>(null);
+    preview?: string;
+  }>>([]);
   const [customPrompt, setCustomPrompt] = useState<string>("");
   const [preExtractChat, setPreExtractChat] = useState<{ role: 'user' | 'assistant'; text: string; files?: { base64: string; name: string; mimeType: string; size: number }[] }[]>([]);
   const [preExtractInput, setPreExtractInput] = useState<string>("");
@@ -480,7 +482,7 @@ export default function App() {
   useEffect(() => {
     setIsAiUnderstandingConfirmed(false);
     setVerificationSummary(null);
-  }, [pendingFile]);
+  }, [pendingFiles]);
 
   const [previousScans, setPreviousScans] = useState<PreviousScan[]>(() => {
     const saved = localStorage.getItem("previous_scans");
@@ -682,6 +684,333 @@ export default function App() {
   const [activePreviewScan, setActivePreviewScan] = useState<PreviousScan | null>(null);
   const [previewTab, setPreviewTab] = useState<"transactions" | "analysis" | "audit">("transactions");
 
+  // Batch OCR Parallel Processing Engine States
+  const [batchOCRItems, setBatchOCRItems] = useState<BatchOCRProgressItem[]>([]);
+  const [isBatchProcessing, setIsBatchProcessing] = useState<boolean>(false);
+  const [isBatchPanelOpen, setIsBatchPanelOpen] = useState<boolean>(false);
+  const [isBatchPanelMinimized, setIsBatchPanelMinimized] = useState<boolean>(false);
+  const cancelBatchRef = useRef<boolean>(false);
+
+  const processSingleFileWithAutoRetry = async (
+    item: {
+      id: string;
+      scanId?: string;
+      name: string;
+      size: number;
+      preview: string;
+      mimeType: string;
+      base64: string;
+      folder?: string;
+    },
+    userPrompt: string = "",
+    chatFiles: any[] = []
+  ): Promise<{ success: boolean; transactionsCount: number; error?: string }> => {
+    let attempt = 1;
+    const maxAttempts = 50;
+
+    const updateProgress = (patch: Partial<BatchOCRProgressItem>) => {
+      setBatchOCRItems(prev => prev.map(it => it.id === item.id ? { ...it, ...patch } : it));
+    };
+
+    const scanId = item.scanId || item.id;
+    const finalPrompt = userPrompt || getCompiledAIInstructions();
+
+    updateProgress({
+      status: "processing",
+      attempt: 1,
+      statusMessage: "در حال ارسال سند به هوش مصنوعی Gemini...",
+      startTime: Date.now()
+    });
+
+    while (attempt <= maxAttempts) {
+      if (cancelBatchRef.current) {
+        updateProgress({
+          status: "error",
+          statusMessage: "عملیات پردازش توسط کاربر لغو شد.",
+          errorMessage: "لغو شده"
+        });
+        return { success: false, transactionsCount: 0, error: "لغو شده" };
+      }
+
+      try {
+        if (attempt > 1) {
+          updateProgress({
+            status: "retrying",
+            attempt,
+            statusMessage: `تلاش شماره ${attempt} - در حال برقراری ارتباط مجدد با Gemini...`
+          });
+        } else {
+          updateProgress({
+            status: "processing",
+            attempt: 1,
+            statusMessage: "در حال استخراج هوشمند داده‌های مالی..."
+          });
+        }
+
+        const response = await fetch("/api/extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            image: item.base64,
+            mimeType: item.mimeType,
+            model: selectedModel,
+            tokenSettings,
+            userPrompt: finalPrompt,
+            chatFiles,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          const realTokensUsed = result.tokensUsed || 0;
+          setModelQuotas(prev => {
+            const quota = prev[selectedModel];
+            if (quota) {
+              return {
+                ...prev,
+                [selectedModel]: { ...quota, used: Math.min(quota.limit, quota.used + 1) }
+              };
+            }
+            return prev;
+          });
+
+          if (realTokensUsed > 0) {
+            setCurrentUser(prev => prev ? { ...prev, apiUsage: (prev.apiUsage || 0) + realTokensUsed } : prev);
+          }
+
+          const rowsArray = Array.isArray(result.data.ردیف_ها) ? result.data.ردیف_ها : (Array.isArray(result.data.اقلام_تراکنش) ? result.data.اقلام_تراکنش : []);
+          const columnsArray = Array.isArray(result.data.ستون_ها) ? result.data.ستون_ها : [];
+          
+          const extractedItems: TransactionItem[] = rowsArray.map((rowItem: any, idx: number) => {
+            const row: any = {
+              id: `extracted-${Date.now()}-${idx}-${Math.random().toString(36).substring(2,6)}`,
+              ضریب_اطمینان: rowItem.ضریب_اطمینان !== undefined && rowItem.ضریب_اطمینان !== null ? Number(rowItem.ضریب_اطمینان) : 100,
+            };
+
+            if (rowItem.فیلد_ها && Array.isArray(rowItem.فیلد_ها)) {
+              rowItem.فیلد_ها.forEach((f: any) => {
+                if (f.کلید) row[f.کلید] = f.مقدار;
+              });
+            } else {
+              Object.keys(rowItem).forEach(key => {
+                if (key !== 'ضریب_اطمینان') row[key] = rowItem[key];
+              });
+            }
+            return row as TransactionItem;
+          });
+
+          const documentType = result.data.نوع_سند || "سند نامشخص";
+          const documentAnalysis = result.data.تحلیل_سند || "";
+
+          const successFile: UploadedFile = {
+            id: scanId,
+            name: item.name,
+            size: item.size,
+            preview: item.preview || `data:${item.mimeType};base64,${item.base64}`,
+            status: "success",
+            error: null,
+            results: extractedItems,
+            columns: columnsArray,
+            documentType,
+            documentAnalysis,
+            tokensUsed: realTokensUsed,
+            tokenDetails: result.tokenDetails
+          };
+
+          setPreviousScans(prev => {
+            const filtered = prev.filter(s => s.id !== scanId && s.file.name !== item.name);
+            return [
+              {
+                id: scanId,
+                file: successFile,
+                transactions: extractedItems,
+                timestamp: Date.now(),
+                folder: item.folder
+              },
+              ...filtered
+            ].slice(0, 500);
+          });
+
+          setTransactions(prev => [...extractedItems, ...prev]);
+
+          updateProgress({
+            status: "success",
+            statusMessage: `استخراج موفقیت‌آمیز! (${extractedItems.length.toLocaleString("fa-IR")} ردیف مالی استخراج گردید)`,
+            extractedCount: extractedItems.length,
+            endTime: Date.now()
+          });
+
+          logEvent("استخراج موازی موفق", `سند «${item.name}» با موفقیت در تلاش ${attempt} استخراج گردید.`);
+          return { success: true, transactionsCount: extractedItems.length };
+        } else {
+          throw new Error(result.error || `پاسخ ناموفق از سرور (کد ${response.status})`);
+        }
+      } catch (err: any) {
+        console.warn(`Attempt ${attempt} for file ${item.name} failed:`, err.message);
+        
+        const isQuotaOrRateLimit = err.message?.includes("429") || err.message?.includes("سهمیه") || err.message?.includes("ترافیک") || err.message?.includes("Quota") || err.message?.includes("Service Unavailable") || err.message?.includes("503");
+        
+        const delayMs = Math.min(2000 * Math.pow(1.2, Math.min(attempt, 10)) + Math.floor(Math.random() * 1000), 10000);
+        const delaySeconds = Math.round(delayMs / 1000);
+
+        updateProgress({
+          status: "retrying",
+          attempt: attempt + 1,
+          statusMessage: isQuotaOrRateLimit
+            ? `محدودیت ترافیک / سهمیه Gemini (کد 429/503). انتظار ${delaySeconds} ثانیه تا تلاش مجدد (تلاش ${attempt + 1})...`
+            : `خطا در استخراج (${err.message || "خطای شبکه‌ای"}). انتظار ${delaySeconds} ثانیه تا تلاش مجدد (تلاش ${attempt + 1})...`
+        });
+
+        await new Promise(res => setTimeout(res, delayMs));
+        attempt++;
+      }
+    }
+
+    updateProgress({
+      status: "error",
+      statusMessage: "تعداد تلاش‌ها به حداکثر رسید.",
+      errorMessage: "ناموفق پس از حداکثر تلاش"
+    });
+    return { success: false, transactionsCount: 0, error: "تلاش‌ها به پایان رسید" };
+  };
+
+  const startBatchExtractionPipeline = async (
+    fileList: Array<{
+      id?: string;
+      name: string;
+      size: number;
+      preview?: string;
+      base64: string;
+      mimeType: string;
+      folder?: string;
+    }>,
+    userPrompt: string = ""
+  ) => {
+    if (fileList.length === 0) return;
+
+    cancelBatchRef.current = false;
+    setIsBatchProcessing(true);
+    setIsBatchPanelOpen(true);
+    setIsBatchPanelMinimized(false);
+
+    const initialItems: BatchOCRProgressItem[] = fileList.map((f, idx) => ({
+      id: f.id || `batch_item_${Date.now()}_${idx}_${Math.random().toString(36).substring(2,6)}`,
+      scanId: f.id,
+      name: f.name,
+      size: f.size,
+      preview: f.preview || `data:${f.mimeType};base64,${f.base64}`,
+      mimeType: f.mimeType,
+      base64: f.base64,
+      folder: f.folder,
+      status: "queued",
+      attempt: 0,
+      statusMessage: "در صف پردازش موازی...",
+      startTime: Date.now()
+    }));
+
+    setBatchOCRItems(initialItems);
+
+    showNotification(`پردازش موازی برای ${fileList.length.toLocaleString("fa-IR")} سند با قابلیت تلاش مجدد خودکار آغاز شد.`, "info");
+    logEvent("شروع پردازش موازی اسناد", `تعداد ${fileList.length} سند به صورت همزمان جهت استخراج OCR پردازش می‌شوند.`);
+
+    const parallelPromises = initialItems.map(item => processSingleFileWithAutoRetry(item, userPrompt));
+
+    await Promise.all(parallelPromises);
+
+    setIsBatchProcessing(false);
+    showNotification("عملیات پردازش موازی تمام اسناد با موفقیت به پایان رسید!", "success");
+    logEvent("پایان پردازش موازی اسناد", "تمام اسناد در صف موازی پردازش شدند.");
+  };
+
+  const handleCancelBatchProcessing = () => {
+    cancelBatchRef.current = true;
+    setIsBatchProcessing(false);
+    showNotification("درخواست لغو پردازش موازی صادر گردید.", "info");
+    logEvent("لغو پردازش موازی", "کاربر پردازش موازی اسناد را لغو کرد.");
+  };
+
+  const handleMultipleFilesUpload = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    const validFiles = fileArray.filter(
+      f => f.type.startsWith("image/") || f.type === "application/pdf"
+    );
+
+    if (validFiles.length === 0) {
+      showNotification("تنها فایل‌های تصویر و PDF پشتیبانی می‌شوند.", "error");
+      return;
+    }
+
+    const extraStorageBytes = (currentUser?.extraStorage || 0) * 1024 * 1024 * 1024;
+    const MAX_STORAGE = 5 * 1024 * 1024 * 1024 + extraStorageBytes;
+    const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file.size || 0), 0);
+    const totalNewSize = validFiles.reduce((acc, f) => acc + f.size, 0);
+
+    if (usedStorage + totalNewSize > MAX_STORAGE) {
+      showNotification("ظرفیت حافظه ابری شما تکمیل شده است. لطفاً فایل‌های اضافی را حذف کنید.", "error");
+      return;
+    }
+
+    try {
+      showNotification(`در حال پیش‌پردازش ${validFiles.length.toLocaleString("fa-IR")} سند جهت پردازش موازی...`, "info");
+
+      const convertedItems = await Promise.all(
+        validFiles.map(async (file) => {
+          const base64 = await convertFileToBase64(file);
+          const targetMime = file.type === "application/pdf" ? "application/pdf" : "image/jpeg";
+          return {
+            id: "scan_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
+            name: file.name,
+            size: file.size,
+            base64,
+            mimeType: targetMime,
+            preview: `data:${targetMime};base64,${base64}`,
+            folder: selectedFolderFilter !== "all" && selectedFolderFilter !== "uncategorized" ? selectedFolderFilter : undefined
+          };
+        })
+      );
+
+      if (convertedItems.length > 0) {
+        setPendingFiles(prev => [...prev, ...convertedItems]);
+        setCustomPrompt("");
+        // Instead of starting immediately, we allow user to review pending files
+      }
+    } catch (error) {
+      console.error(error);
+      showNotification("خطا در پیش‌پردازش و تبدیل اسناد", "error");
+    }
+  };
+
+  const handleBulkBatchOCR = () => {
+    if (selectedScanIds.length === 0) return;
+    const selectedScans = previousScans.filter(s => selectedScanIds.includes(s.id));
+    const fileItems = selectedScans.map(s => {
+      const base64Data = s.file.preview && s.file.preview.includes(",")
+        ? s.file.preview.split(",")[1]
+        : s.file.preview;
+      return {
+        id: s.id,
+        name: s.file.name,
+        size: s.file.size,
+        preview: s.file.preview,
+        base64: base64Data,
+        mimeType: s.file.mimeType || (s.file.name.endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
+        folder: s.folder
+      };
+    });
+    startBatchExtractionPipeline(fileItems);
+    setSelectedScanIds([]);
+  };
+
+  const handleViewScanFromBatch = (scanId: string) => {
+    const scan = previousScans.find(s => s.id === scanId);
+    if (scan) {
+      setActiveFile(scan.file);
+      setTransactions(scan.transactions || []);
+      showNotification(`سند «${scan.file.name}» بارگذاری شد.`, "info");
+    }
+  };
+
   const uploadFileDirectly = async (file: File) => {
     if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
       showNotification("تنها فایل‌های تصویر و PDF پشتیبانی می‌شوند.", "error");
@@ -727,14 +1056,14 @@ export default function App() {
 
   const handleProcessUnscannedFile = (scan: PreviousScan) => {
     setIsFileManagerOpen(false);
-    setPendingFile({
+    setPendingFiles([{
       base64: scan.file.preview,
       name: scan.file.name,
       mimeType: scan.file.mimeType || "image/jpeg",
       size: scan.file.size,
       id: scan.id,
       folder: scan.folder
-    });
+    }]);
     setCustomPrompt("");
     showNotification(`سند "${scan.file.name}" آماده استخراج است. روی دکمه شروع استخراج کلیک کنید.`, "info");
   };
@@ -1045,7 +1374,7 @@ export default function App() {
 
   const handleSendPreExtractChat = async (textToSend?: string) => {
     const text = textToSend || preExtractInput;
-    if ((!text.trim() && preExtractFiles.length === 0) || !pendingFile) return;
+    if ((!text.trim() && preExtractFiles.length === 0) || pendingFiles.length === 0) return;
 
     setPreExtractInput("");
     const filesToAttach = [...preExtractFiles];
@@ -1061,8 +1390,8 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           messages: newMessages,
-          image: pendingFile.base64,
-          mimeType: pendingFile.mimeType,
+          image: pendingFiles[0].base64,
+          mimeType: pendingFiles[0].mimeType,
           model: selectedModel,
           customPrompt: customPrompt
         }),
@@ -1121,7 +1450,7 @@ export default function App() {
   };
 
   const handleExtractDirectToJson = async () => {
-    if (!pendingFile) return;
+    if (pendingFiles.length === 0) return;
     const jsonInstruction = "لطفاً تمامی اطلاعات کلیدی، اقلام تراکنش، مبالغ، مالیات، عوارض، شناسه مودیان و کدهای اختصاصی این سند را به صورت مستقیم در قالب آرایه ساختاریافته استاندارد JSON با عناوین و کلیدهای فارسی استخراج و تنظیم کنید.";
     setCustomPrompt(prev => {
       const trimmed = prev.trim();
@@ -1158,7 +1487,7 @@ export default function App() {
     logEvent("استخراج ۱۰۰٪ کلیه اطلاعات به JSON", "کاربر دستور استخراج ۱۰۰٪ کلیه اطلاعات سند (اعداد و متون) به JSON برای اکسل را صادر کرد.");
     showNotification("دستور استخراج ۱۰۰٪ تمام اطلاعات ثبت گردید. در حال استخراج و تبدیل مستقیم به جدول اکسل...", "success");
 
-    if (pendingFile) {
+    if (pendingFiles.length > 0) {
       setTimeout(() => {
         handleDirectExtraction();
       }, 200);
@@ -1212,7 +1541,7 @@ export default function App() {
   };
 
   const handleDirectExtraction = async () => {
-    if (!pendingFile) return;
+    if (pendingFiles.length === 0) return;
     if (!isAiUnderstandingConfirmed) {
       showNotification("لطفاً ابتدا تاییدیه تفهیم و درک هوش مصنوعی را بررسی و علامت بزنید.", "info");
       return;
@@ -1231,8 +1560,8 @@ export default function App() {
     setExtractionStep(3);
     await new Promise(resolve => setTimeout(resolve, 1500));
     
-    const fileData = pendingFile;
-    setPendingFile(null);
+    const filesData = [...pendingFiles];
+    setPendingFiles([]);
     setIsExtracting(false);
     setExtractionStep(0);
     setVerificationSummary(null);
@@ -1246,19 +1575,19 @@ export default function App() {
       return acc;
     }, [] as any[]);
 
-    await processImageForExtraction(
-      fileData.base64, 
-      fileData.name, 
-      fileData.mimeType, 
-      finalPrompt, 
-      allChatFiles,
-      fileData.id,
-      fileData.folder
-    );
+    await startBatchExtractionPipeline(filesData.map(fileData => ({
+      id: fileData.id,
+      name: fileData.name,
+      size: fileData.size,
+      preview: fileData.preview || `data:${fileData.mimeType};base64,${fileData.base64}`,
+      base64: fileData.base64,
+      mimeType: fileData.mimeType,
+      folder: fileData.folder
+    })), finalPrompt);
   };
 
   const handleVerifyInstructions = async () => {
-    if (!pendingFile) return;
+    if (pendingFiles.length === 0) return;
     setIsVerifying(true);
     try {
       const response = await fetch("/api/chat-verification", {
@@ -1266,8 +1595,8 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: preExtractChat,
-          image: pendingFile.base64,
-          mimeType: pendingFile.mimeType,
+          image: pendingFiles[0].base64,
+          mimeType: pendingFiles[0].mimeType,
           model: selectedModel
         }),
       });
@@ -1947,7 +2276,7 @@ export default function App() {
 
   const [notification, setNotification] = useState<{
     text: string;
-    type: "success" | "error" | "info";
+    type: "success" | "error" | "info" | "warning";
   } | null>(null);
 
   // Local file input ref
@@ -2527,67 +2856,14 @@ export default function App() {
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
-        showNotification("تنها فایل‌های تصویر و PDF پشتیبانی می‌شوند.", "error");
-        return;
-      }
-      // Check storage limit
-      const extraStorageBytes = (currentUser?.extraStorage || 0) * 1024 * 1024 * 1024;
-      const MAX_STORAGE = 5 * 1024 * 1024 * 1024 + extraStorageBytes;
-      const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file.size || 0), 0);
-      if (usedStorage + file.size > MAX_STORAGE) {
-        showNotification("ظرفیت حافظه ابری شما تکمیل شده است. لطفاً فایل‌های اضافی را حذف کنید یا از مدیر درخواست فضای اضافه نمایید.", "error");
-        return;
-      }
-      try {
-        const base64 = await convertFileToBase64(file);
-        // Map any image format to standard JPEG except for PDF
-        const targetMime = file.type === "application/pdf" ? "application/pdf" : "image/jpeg";
-        setPendingFile({
-          base64,
-          name: file.name,
-          mimeType: targetMime,
-          size: file.size
-        });
-        setCustomPrompt("");
-      } catch (error) {
-        console.error(error);
-        showNotification("خطا در پیش‌پردازش فایل", "error");
-      }
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleMultipleFilesUpload(e.dataTransfer.files);
     }
   };
 
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
-        showNotification("تنها فایل‌های تصویر و PDF پشتیبانی می‌شوند.", "error");
-        return;
-      }
-      // Check storage limit
-      const extraStorageBytes = (currentUser?.extraStorage || 0) * 1024 * 1024 * 1024;
-      const MAX_STORAGE = 5 * 1024 * 1024 * 1024 + extraStorageBytes;
-      const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file.size || 0), 0);
-      if (usedStorage + file.size > MAX_STORAGE) {
-        showNotification("ظرفیت حافظه ابری شما تکمیل شده است. لطفاً فایل‌های اضافی را حذف کنید یا از مدیر درخواست فضای اضافه نمایید.", "error");
-        return;
-      }
-      try {
-        const base64 = await convertFileToBase64(file);
-        const targetMime = file.type === "application/pdf" ? "application/pdf" : "image/jpeg";
-        setPendingFile({
-          base64,
-          name: file.name,
-          mimeType: targetMime,
-          size: file.size
-        });
-        setCustomPrompt("");
-      } catch (error) {
-        console.error(error);
-        showNotification("خطا در پیش‌پردازش فایل", "error");
-      }
+    if (e.target.files && e.target.files.length > 0) {
+      handleMultipleFilesUpload(e.target.files);
     }
   };
 
@@ -2608,12 +2884,12 @@ export default function App() {
         return;
       }
 
-      setPendingFile({
+      setPendingFiles([{
         base64: rawBase64,
         name: `اسکن_دوربین_${Date.now()}.jpg`,
         mimeType: mimeType,
         size: estimatedSize
-      });
+      }]);
       setCustomPrompt("");
     } catch (err) {
       console.error("Camera data URL parsing error:", err);
@@ -3123,8 +3399,8 @@ export default function App() {
         setStrictnessMode={setStrictnessMode}
         customPrompt={customPrompt}
         setCustomPrompt={setCustomPrompt}
-        pendingFile={pendingFile}
-        setPendingFile={setPendingFile}
+        pendingFiles={pendingFiles}
+        setPendingFiles={setPendingFiles}
         onUploadClick={() => fileInputRef.current?.click()}
         handleDirectExtraction={handleDirectExtraction}
         isExtracting={isExtracting}
@@ -3836,7 +4112,7 @@ export default function App() {
           {/* Conditional Layout: Hidden when no file is uploaded! */}
           {!activeFile ? (
             <div className="flex-1 flex items-center justify-center p-4">
-              {pendingFile ? (
+              {pendingFiles.length > 0 ? (
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.99, y: 8 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -3866,8 +4142,8 @@ export default function App() {
                         </div>
                       </div>
                       <div className="text-right">
-                         <p className={`text-[10px] font-bold truncate max-w-[150px] ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>{pendingFile.name}</p>
-                         <p className={`text-[9px] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>{Math.round(pendingFile.size / 1024)} KB</p>
+                         <p className={`text-[10px] font-bold truncate max-w-[150px] ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>{pendingFiles.length === 1 ? pendingFiles[0].name : `${pendingFiles.length} سند`}</p>
+                         <p className={`text-[9px] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>{Math.round(pendingFiles.reduce((acc, f) => acc + f.size, 0) / 1024)} KB</p>
                       </div>
                     </div>
 
@@ -4292,7 +4568,7 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => {
-                              setPendingFile(null);
+                              setPendingFiles([]);
                               setCustomPrompt("");
                             }}
                             className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${isDarkMode ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-600"}`}
@@ -4302,7 +4578,7 @@ export default function App() {
                           <div className="flex flex-wrap items-center justify-end gap-2">
                             <button
                               type="button"
-                              onClick={() => openExclusiveChatForDocument(pendingFile)}
+                              onClick={() => openExclusiveChatForDocument(pendingFiles[0])}
                               className={`px-3 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all border cursor-pointer ${
                                 isDarkMode 
                                   ? "bg-purple-500/10 border-purple-500/30 text-purple-300 hover:bg-purple-500/20" 
@@ -4396,6 +4672,7 @@ export default function App() {
                         ref={fileInputRef}
                         onChange={onFileChange}
                         accept="image/*,application/pdf"
+                        multiple
                         className="hidden"
                       />
                       
@@ -4404,7 +4681,7 @@ export default function App() {
                       </div>
                       
                       <p className={`text-xs font-bold mb-1 ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
-                        {dragActive ? "رها کنید تا آپلود شود..." : "سند، فاکتور یا فایل PDF را به اینجا بکشید"}
+                        {dragActive ? "رها کنید تا آپلود شوند..." : "یک یا چند سند، فاکتور یا فایل PDF را به صورت همزمان به اینجا بکشید"}
                       </p>
                       <p className={`text-[10px] mb-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
                         یا برای انتخاب فایل کلیک کنید
@@ -4443,6 +4720,18 @@ export default function App() {
                         </button>
                       </div>
                     </motion.div>
+
+                    {/* Live Parallel Batch OCR Progress Panel */}
+                    <BatchOCRProgressPanel
+                      isOpen={isBatchPanelOpen}
+                      isMinimized={isBatchPanelMinimized}
+                      onToggleMinimize={() => setIsBatchPanelMinimized(!isBatchPanelMinimized)}
+                      onClose={() => setIsBatchPanelOpen(false)}
+                      onCancelBatch={handleCancelBatchProcessing}
+                      items={batchOCRItems}
+                      isDarkMode={isDarkMode}
+                      onViewScan={handleViewScanFromBatch}
+                    />
                   </div>
                 </motion.div>
               )}
@@ -9218,6 +9507,15 @@ export default function App() {
                             </div>
                             
                             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                              {/* Bulk Parallel Gemini OCR Button */}
+                              <button
+                                onClick={handleBulkBatchOCR}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+                                title="شروع پردازش همزمان اسناد انتخاب شده با قابلیت تلاش مجدد خودکار در صورت تراکم ترافیک"
+                              >
+                                <Zap className="w-3.5 h-3.5 text-amber-300 animate-bounce" />
+                                <span>پردازش موازی با Gemini (استخراج OCR)</span>
+                              </button>
                               {/* Move Folder Group action */}
                               <div className="relative">
                                 <select
