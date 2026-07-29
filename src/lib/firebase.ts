@@ -64,8 +64,15 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMessage = error instanceof Error ? error.message : String(error);
+  const isUnavailable = 
+    errMessage.includes("unavailable") || 
+    errMessage.includes("offline") || 
+    errMessage.includes("Could not reach Cloud Firestore") ||
+    (error as any)?.code === "unavailable";
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMessage,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -80,6 +87,12 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
+
+  if (isUnavailable) {
+    console.warn("Firestore Connection Warning (Offline/Unavailable):", JSON.stringify(errInfo));
+    return;
+  }
+
   console.warn('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }

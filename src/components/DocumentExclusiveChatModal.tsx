@@ -22,6 +22,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import Markdown from "react-markdown";
 import PdfThumbnail from "./PdfThumbnail";
+import PdfViewer from "./PdfViewer";
 
 interface DocumentExclusiveChatModalProps {
   isOpen: boolean;
@@ -376,9 +377,12 @@ export default function DocumentExclusiveChatModal({
                   </div>
                   <div className="flex-1 overflow-auto p-3 flex items-center justify-center">
                     {isPdf && docPreview ? (
-                      <div className="w-full h-full min-h-[400px]">
-                        <iframe src={docPreview} title="PDF Preview" className="w-full h-full rounded-lg border" />
-                      </div>
+                      <PdfViewer
+                        base64={docPreview}
+                        fileName={docName}
+                        isDarkMode={isDarkMode}
+                        className="w-full h-full min-h-[400px]"
+                      />
                     ) : docPreview ? (
                       <img src={docPreview} alt={docName} className="max-w-full max-h-full object-contain rounded-lg shadow-md border" referrerPolicy="no-referrer" />
                     ) : (

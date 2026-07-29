@@ -34,6 +34,14 @@ export interface AudioNote {
   noteText?: string;
 }
 
+export interface DocumentExtractionSettings {
+  selectedModel: string;
+  erpDestinationModule: string;
+  strictnessMode: "balanced" | "speed" | "audit";
+  customPrompt: string;
+  savedAt?: number;
+}
+
 export interface UploadedFile {
   id: string;
   name: string;
@@ -54,6 +62,7 @@ export interface UploadedFile {
     cachedContentTokenCount?: number;
   };
   audioNotes?: AudioNote[];
+  extractionSettings?: DocumentExtractionSettings;
 }
 
 export interface AuditLogEntry {
@@ -78,4 +87,5 @@ export interface PreviousScan {
   folder?: string;
   isStarred?: boolean;
   tags?: string[];
+  extractionSettings?: DocumentExtractionSettings;
 }

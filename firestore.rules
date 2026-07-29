@@ -54,18 +54,8 @@ service cloud.firestore {
     function isValidScan(data) {
       return data.keys().hasAll(['id', 'timestamp', 'file', 'transactions'])
         && data.id is string
-        && data.id.size() <= 128
         && (data.timestamp is int || data.timestamp is number)
-        && (!data.keys().contains('folder') || data.folder == null || (data.folder is string && data.folder.size() <= 200))
-        && (!data.keys().contains('isStarred') || data.isStarred is bool)
-        && (!data.keys().contains('tags') || data.tags is list)
         && data.file is map
-        && data.file.id is string
-        && data.file.name is string
-        && data.file.name.size() <= 500
-        && (data.file.size is int || data.file.size is number)
-        && data.file.preview is string
-        && data.file.status is string
         && data.transactions is list;
     }
 

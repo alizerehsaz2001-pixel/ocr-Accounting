@@ -5,6 +5,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
+  Menu,
+  ChevronDown,
   Landmark, Package,
   FileJson,
   Cpu,
@@ -84,7 +86,7 @@ import {
   Printer,
   Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench, Star, Brain, FileSpreadsheet
 } from "lucide-react";
-import { TransactionItem, UploadedFile, PreviousScan } from "./types";
+import { TransactionItem, UploadedFile, PreviousScan, DocumentExtractionSettings } from "./types";
 import CameraCapture from "./components/CameraCapture";
 import AudioNotesSection from "./components/AudioNotesSection";
 import ThemeSwitcher from "./components/ThemeSwitcher";
@@ -95,6 +97,7 @@ import OnboardingProfileModal from "./components/OnboardingProfileModal";
 import AuditLogsModal from "./components/AuditLogsModal";
 import LoginScreen from "./components/LoginScreen";
 import PdfThumbnail from "./components/PdfThumbnail";
+import PdfViewer from "./components/PdfViewer";
 import { BatchOCRProgressPanel, BatchOCRProgressItem } from "./components/BatchOCRProgressPanel";
 import { auth, db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -541,19 +544,23 @@ export default function App() {
       const scanDocRef = doc(db, "users", auth.currentUser.uid, "scans", scan.id);
       const scanData = {
         id: scan.id,
-        timestamp: scan.timestamp,
+        timestamp: scan.timestamp || Date.now(),
         folder: scan.folder || "",
+        isStarred: !!scan.isStarred,
+        tags: scan.tags || [],
+        extractionSettings: scan.extractionSettings || scan.file?.extractionSettings || null,
         file: {
-          id: scan.file.id,
-          name: scan.file.name,
-          size: scan.file.size,
-          preview: scan.file.preview,
-          status: scan.file.status,
-          error: scan.file.error || null,
-          documentType: scan.file.documentType || null,
-          mimeType: scan.file.mimeType || null,
-          documentAnalysis: scan.file.documentAnalysis || null,
-          tokensUsed: scan.file.tokensUsed || null
+          id: scan.file?.id || scan.id,
+          name: scan.file?.name || "سند بی‌نام",
+          size: scan.file?.size || 0,
+          preview: scan.file?.preview || "",
+          status: scan.file?.status || "success",
+          error: scan.file?.error || null,
+          documentType: scan.file?.documentType || null,
+          mimeType: scan.file?.mimeType || null,
+          documentAnalysis: scan.file?.documentAnalysis || null,
+          tokensUsed: scan.file?.tokensUsed || null,
+          extractionSettings: scan.file?.extractionSettings || scan.extractionSettings || null
         },
         transactions: scan.transactions || []
       };
@@ -803,6 +810,14 @@ export default function App() {
           const documentType = result.data.نوع_سند || "سند نامشخص";
           const documentAnalysis = result.data.تحلیل_سند || "";
 
+          const currentDocExtractionSettings: DocumentExtractionSettings = {
+            selectedModel,
+            erpDestinationModule,
+            strictnessMode,
+            customPrompt,
+            savedAt: Date.now()
+          };
+
           const successFile: UploadedFile = {
             id: scanId,
             name: item.name,
@@ -815,7 +830,8 @@ export default function App() {
             documentType,
             documentAnalysis,
             tokensUsed: realTokensUsed,
-            tokenDetails: result.tokenDetails
+            tokenDetails: result.tokenDetails,
+            extractionSettings: (item as any).extractionSettings || currentDocExtractionSettings
           };
 
           setPreviousScans(prev => {
@@ -826,7 +842,8 @@ export default function App() {
                 file: successFile,
                 transactions: extractedItems,
                 timestamp: Date.now(),
-                folder: item.folder
+                folder: item.folder,
+                extractionSettings: (item as any).extractionSettings || currentDocExtractionSettings
               },
               ...filtered
             ].slice(0, 500);
@@ -1007,6 +1024,13 @@ export default function App() {
     if (scan) {
       setActiveFile(scan.file);
       setTransactions(scan.transactions || []);
+      const docSettings = scan.extractionSettings || scan.file?.extractionSettings;
+      if (docSettings) {
+        if (docSettings.selectedModel) setSelectedModel(docSettings.selectedModel);
+        if (docSettings.erpDestinationModule) setErpDestinationModule(docSettings.erpDestinationModule);
+        if (docSettings.strictnessMode) setStrictnessMode(docSettings.strictnessMode);
+        if (docSettings.customPrompt !== undefined) setCustomPrompt(docSettings.customPrompt);
+      }
       showNotification(`سند «${scan.file.name}» بارگذاری شد.`, "info");
     }
   };
@@ -1737,6 +1761,7 @@ export default function App() {
     return localStorage.getItem("has_seen_onboarding") !== "true";
   });
   const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false);
+  const [isTopLeftMenuOpen, setIsTopLeftMenuOpen] = useState(false);
   const [isCompressionEnabled, setIsCompressionEnabled] = useState<boolean>(() => {
     return localStorage.getItem("is_compression_enabled") === "true";
   });
@@ -2411,6 +2436,90 @@ export default function App() {
   };
 
   // Intermediate function to request biometrics before showing private panels
+      const handleQuickExcelExport = () => {
+    try {
+      const allTx = transactions.length > 0 ? transactions : previousScans.flatMap(s => s.transactions || []);
+      if (allTx.length === 0) {
+        showNotification("هیچ تراکنشی جهت دریافت خروجی اکسل یافت نشد.", "info");
+        return;
+      }
+      const worksheet = XLSX.utils.json_to_sheet(allTx);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "اسناد و تراکنش‌ها");
+      XLSX.writeFile(workbook, `OCR_Accounting_Export_${Date.now()}.xlsx`);
+      showNotification("فایل اکسل جامع کلیه اسناد با موفقیت دانلود شد.", "success");
+      logEvent("خروجی اکسل منو", "کاربر خروجی اکسل را از منوی اصلی بالای صفحه دانلود کرد.");
+    } catch (err) {
+      showNotification("خطا در ساخت خروجی اکسل اسناد.", "error");
+    }
+  };
+
+    const handleSaveCurrentDocExtractionSettings = () => {
+    const targetName = activeFile?.name || (pendingFiles[0]?.name ? pendingFiles[0].name : null);
+    if (!targetName) {
+      showNotification("سند فعالی جهت ثبت تنظیمات اختصاصی انتخاب نشده است.", "info");
+      return;
+    }
+
+    const docSettings: DocumentExtractionSettings = {
+      selectedModel,
+      erpDestinationModule,
+      strictnessMode,
+      customPrompt,
+      savedAt: Date.now()
+    };
+
+    if (activeFile) {
+      const updatedActive = { ...activeFile, extractionSettings: docSettings };
+      setActiveFile(updatedActive);
+      setPreviousScans(prev => prev.map(scan => {
+        if (scan.id === activeFile.id || scan.file?.id === activeFile.id || scan.file?.name === activeFile.name) {
+          const updatedScan = {
+            ...scan,
+            file: { ...scan.file, extractionSettings: docSettings },
+            extractionSettings: docSettings
+          };
+          saveScanToCloud(updatedScan);
+          return updatedScan;
+        }
+        return scan;
+      }));
+    }
+
+    if (pendingFiles.length > 0) {
+      setPendingFiles((prev: any[]) => prev.map(f => ({ ...f, extractionSettings: docSettings })));
+    }
+
+    showNotification(`تنظیمات استخراج اختصاصی سند «${targetName}» با موفقیت ثبت و ذخیره گردید.`, "success");
+    logEvent("ثبت تنظیمات اختصاصی سند", `کاربر تنظیمات استخراج اختصاصی سند "${targetName}" را ذخیره کرد.`);
+  };
+
+  const handleDownloadFullBackup = () => {
+    try {
+      const backupData = {
+        version: "2.5",
+        exportDate: new Date().toISOString(),
+        user: currentUser?.email || "کاربر عمومی",
+        scansCount: previousScans.length,
+        transactionsCount: transactions.length,
+        previousScans,
+        transactions,
+        userDefinedFolders
+      };
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ocr_accounting_full_backup_${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showNotification("فایل پشتیبان کامل داده‌ها با موفقیت دانلود شد.", "success");
+      logEvent("پشتیبان‌گیری کامل", "کاربر نسخه کامل JSON از کل اطلاعات را دانلود کرد.");
+    } catch (e) {
+      showNotification("خطا در ایجاد فایل پشتیبان داده‌ها", "error");
+    }
+  };
+
   const handleOpenProtectedPanel = (target: "admin" | "user") => {
     setBiometricTarget(target);
     setBiometricStatus("idle");
@@ -3049,6 +3158,13 @@ export default function App() {
   const selectPreviousScan = (scan: PreviousScan) => {
     logEvent("بازیابی سند قبلی", `کاربر سند قبلی با نام "${scan.file.name}" را از تاریخچه بازیابی کرد.`);
     setActiveFile(scan.file);
+    const docSettings = scan.extractionSettings || scan.file?.extractionSettings;
+    if (docSettings) {
+      if (docSettings.selectedModel) setSelectedModel(docSettings.selectedModel);
+      if (docSettings.erpDestinationModule) setErpDestinationModule(docSettings.erpDestinationModule);
+      if (docSettings.strictnessMode) setStrictnessMode(docSettings.strictnessMode);
+      if (docSettings.customPrompt !== undefined) setCustomPrompt(docSettings.customPrompt);
+    }
     setTransactions(scan.transactions);
     const formatted = JSON.stringify(scan.transactions, null, 2);
     setRawJsonText(formatted);
@@ -3405,6 +3521,8 @@ export default function App() {
         handleDirectExtraction={handleDirectExtraction}
         isExtracting={isExtracting}
         isAiUnderstandingConfirmed={isAiUnderstandingConfirmed}
+        activeDocumentName={activeFile?.name || (pendingFiles[0]?.name ? pendingFiles[0].name : null)}
+        onSaveDocumentSettings={handleSaveCurrentDocExtractionSettings}
       />
 
       <OnboardingProfileModal 
@@ -4009,7 +4127,7 @@ export default function App() {
       {/* Main Workspace Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Header toolbar */}
-        <header className={`h-11 border-b flex items-center justify-between px-3 lg:px-5 shrink-0 select-none transition-all duration-300 backdrop-blur-md ${
+        <header className={`h-11 border-b flex items-center justify-between px-3 lg:px-5 shrink-0 select-none transition-all duration-300 backdrop-blur-md z-50 relative ${
           isDarkMode ? "bg-slate-900/75 border-slate-800/80 text-slate-100" : "bg-white/80 border-slate-200/60 text-slate-800"
         }`}>
           <div className="flex items-center gap-2 md:gap-4">
@@ -4044,7 +4162,267 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 md:gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2 relative">
+            {/* Top Left Interactive Dropdown Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setIsTopLeftMenuOpen(!isTopLeftMenuOpen)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all border text-[11px] font-extrabold cursor-pointer shadow-sm ${
+                  isTopLeftMenuOpen
+                    ? "bg-gradient-to-r from-indigo-600 to-blue-600 text-white border-indigo-500 shadow-indigo-500/20"
+                    : isDarkMode
+                      ? "bg-slate-800/70 border-slate-700 text-slate-200 hover:bg-slate-800 hover:border-slate-600 hover:text-white"
+                      : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 hover:text-indigo-600"
+                }`}
+                title="منوی اصلی و امکانات سریع سامانه"
+              >
+                <Menu className="w-3.5 h-3.5 text-indigo-400 dark:text-indigo-400 shrink-0" />
+                <span className="hidden xs:inline font-bold">منوی امکانات</span>
+                <ChevronDown className={`w-3 h-3 opacity-80 transition-transform duration-200 ${isTopLeftMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {/* Backdrop Overlay */}
+              {isTopLeftMenuOpen && (
+                <div 
+                  className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]" 
+                  onClick={() => setIsTopLeftMenuOpen(false)} 
+                />
+              )}
+
+              {/* Top Left Menu Dropdown Popover */}
+              {isTopLeftMenuOpen && (
+                <div className={`absolute left-0 top-full mt-2 w-80 z-50 rounded-2xl shadow-2xl border p-3.5 backdrop-blur-2xl transition-all duration-200 animate-in fade-in slide-in-from-top-2 text-right ${
+                  isDarkMode
+                    ? "bg-slate-900/95 border-slate-800 text-slate-100 shadow-slate-950/80"
+                    : "bg-white/95 border-slate-200/90 text-slate-800 shadow-indigo-950/10"
+                }`}>
+                  {/* Menu Header Card: User & System Status */}
+                  <div className={`p-3 rounded-xl mb-3 border flex items-center justify-between ${
+                    isDarkMode ? "bg-slate-800/60 border-slate-700/60" : "bg-slate-50 border-slate-200/80"
+                  }`}>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-600 text-white flex items-center justify-center font-black text-xs shadow-md">
+                        {currentUser?.name ? currentUser.name.charAt(0) : "U"}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-black truncate max-w-[150px]">
+                          {currentUser?.email || "کاربر سامانه OCR"}
+                        </span>
+                        <span className="text-[9px] font-bold text-emerald-500 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          {currentUser?.role === "admin" ? "مدیر ارشد سیستم" : "حسابدار ارشد"}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsTopLeftMenuOpen(false)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Storage bar indicator in menu */}
+                  <div className="mb-3.5 px-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
+                      <span>حافظه ابری اسناد:</span>
+                      <span className="text-indigo-400 font-mono">
+                        {((previousScans.reduce((acc, scan) => acc + (scan.file?.size || 0), 0)) / (1024 * 1024)).toFixed(1)}MB / 5GB
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-300" 
+                        style={{ width: `${Math.min(100, (previousScans.reduce((acc, scan) => acc + (scan.file?.size || 0), 0) / (5000 * 1024 * 1024)) * 100 + 5)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Section 1: Quick Action Tools */}
+                  <div className="space-y-1 mb-3">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider px-2 mb-1">
+                      امکانات و ابزارهای اصلی
+                    </div>
+                    
+                    <button
+                      onClick={() => {
+                        setIsTopLeftMenuOpen(false);
+                        fileInputRef.current?.click();
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isDarkMode ? "hover:bg-slate-800 text-slate-200" : "hover:bg-indigo-50 text-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Upload className="w-3.5 h-3.5 text-blue-500" />
+                        <span>آپلود و تفکیک هوشمند اسناد</span>
+                      </div>
+                      <span className="text-[9px] bg-blue-500/10 text-blue-500 px-1.5 py-0.5 rounded font-mono">Quick</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsTopLeftMenuOpen(false);
+                        setIsFileManagerOpen(true);
+                        logEvent("مشاهده فایل‌ها", "کاربر از منوی اصلی وارد مدیریت فایل‌ها شد.");
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isDarkMode ? "hover:bg-slate-800 text-slate-200" : "hover:bg-indigo-50 text-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <HardDrive className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>مدیریت کامل فایل‌ها و پوشه‌ها</span>
+                      </div>
+                      <span className="text-[9px] font-mono text-slate-400">{previousScans.length} سند</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsTopLeftMenuOpen(false);
+                        setIsAiSettingsOpen(true);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isDarkMode ? "hover:bg-slate-800 text-slate-200" : "hover:bg-indigo-50 text-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Settings className="w-3.5 h-3.5 text-fuchsia-500" />
+                        <span>تنظیمات مدل‌های AI و دستورات</span>
+                      </div>
+                      <span className="text-[9px] text-fuchsia-400 font-mono">{selectedModel.split("-")[1] || "AI"}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsTopLeftMenuOpen(false);
+                        setIsAuditLogsOpen(true);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isDarkMode ? "hover:bg-slate-800 text-slate-200" : "hover:bg-indigo-50 text-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>سیاهه رویدادها و گزارش‌ها</span>
+                      </div>
+                      <span className="text-[9px] text-emerald-500 font-mono">Logs</span>
+                    </button>
+                  </div>
+
+                  <div className="h-px bg-slate-200 dark:bg-slate-800 my-2" />
+
+                  {/* Section 2: Data Exports & Security */}
+                  <div className="space-y-1 mb-3">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider px-2 mb-1">
+                      خروجی داده‌ها و امنیت
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setIsTopLeftMenuOpen(false);
+                        handleQuickExcelExport();
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isDarkMode ? "hover:bg-slate-800 text-slate-200" : "hover:bg-indigo-50 text-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>خروجی پیشرفته اکسل (Excel)</span>
+                      </div>
+                      <Download className="w-3 h-3 text-slate-400" />
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsTopLeftMenuOpen(false);
+                        handleDownloadFullBackup();
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isDarkMode ? "hover:bg-slate-800 text-slate-200" : "hover:bg-indigo-50 text-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Database className="w-3.5 h-3.5 text-amber-500" />
+                        <span>پشتیبان‌گیری کامل به JSON</span>
+                      </div>
+                      <Download className="w-3 h-3 text-slate-400" />
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsTopLeftMenuOpen(false);
+                        handleOpenProtectedPanel("user");
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isDarkMode ? "hover:bg-slate-800 text-slate-200" : "hover:bg-indigo-50 text-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <User className="w-3.5 h-3.5 text-cyan-500" />
+                        <span>پنل کاربری و API Keys</span>
+                      </div>
+                      <Key className="w-3 h-3 text-slate-400" />
+                    </button>
+
+                    {currentUser?.role === "admin" && (
+                      <button
+                        onClick={() => {
+                          setIsTopLeftMenuOpen(false);
+                          handleOpenProtectedPanel("admin");
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isDarkMode ? "hover:bg-slate-800 text-slate-200" : "hover:bg-indigo-50 text-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Shield className="w-3.5 h-3.5 text-rose-500" />
+                          <span>پنل مدیریت ارشد سامانه</span>
+                        </div>
+                        <Shield className="w-3 h-3 text-rose-400" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="h-px bg-slate-200 dark:bg-slate-800 my-2" />
+
+                  {/* Section 3: System Preferences */}
+                  <div className="flex items-center justify-between pt-1 px-1">
+                    <button
+                      onClick={() => setIsDarkMode(!isDarkMode)}
+                      className={`p-2 rounded-xl border flex items-center gap-2 text-xs font-bold transition-all ${
+                        isDarkMode
+                          ? "bg-slate-800 border-slate-700 text-amber-300 hover:bg-slate-750"
+                          : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
+                      }`}
+                      title="تغییر حالت روز و شب"
+                    >
+                      {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+                      <span>{isDarkMode ? "حالت روز" : "حالت شب"}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsTopLeftMenuOpen(false);
+                        setShowOnboarding(true);
+                      }}
+                      className={`p-2 rounded-xl border flex items-center gap-2 text-xs font-bold transition-all ${
+                        isDarkMode
+                          ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750"
+                          : "bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200"
+                      }`}
+                      title="راهنمای تعاملی سامانه"
+                    >
+                      <HelpCircle className="w-4 h-4 text-indigo-400" />
+                      <span>راهنما</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Direct Quick Action Shortcuts */}
             <button
               onClick={() => setIsAuditLogsOpen(true)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all border text-[10px] font-bold ${
@@ -4137,8 +4515,11 @@ export default function App() {
                         </div>
                         <div>
                           <h2 className={`text-[15px] font-black tracking-tight ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>
-                            تنظیمات استخراج سند
+                            پنل آماده‌سازی و استخراج سند
                           </h2>
+                          <p className={`text-[10px] mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            تنظیمات هوش مصنوعی و پرامپت این سند با منوی اصلی یکپارچه و هماهنگ است.
+                          </p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -4155,154 +4536,52 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="flex flex-col gap-5">
-                                        {/* Guide Area */}
-                <div className={`p-4 rounded-2xl border transition-all ${isDarkMode ? "bg-blue-500/5 border-blue-500/20" : "bg-blue-50 border-blue-100 shadow-sm"}`}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-blue-500/20" : "bg-blue-100"}`}>
-                      <BookOpen className="w-4 h-4 text-blue-500" />
-                    </div>
-                    <span className={`text-[11.5px] font-black ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                      نکات طلایی برای استخراج دقیق‌تر
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      { icon: "📐", title: "زاویه مستقیم", desc: "عکاسی دقیقاً از بالا (۹۰ درجه)" },
-                      { icon: "☀️", title: "نورپردازی خوب", desc: "پرهیز از سایه و بازتاب نور" },
-                      { icon: "✏️", title: "وضوح خط‌خوردگی‌ها", desc: "خوانا بودن اصلاحات دستی" },
-                      { icon: "📄", title: "تجمیع اسناد", desc: "آپلود فاکتور + فیش واریزی" }
-                    ].map((step, idx) => (
-                      <div key={idx} className={`p-3 rounded-xl border flex gap-2 items-start transition-colors ${isDarkMode ? "bg-slate-900/60 border-slate-800/80 hover:bg-slate-900/80 hover:border-slate-700" : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm"}`}>
-                        <div className="text-sm shrink-0">{step.icon}</div>
-                        <div>
-                          <h6 className={`text-[10px] font-bold ${isDarkMode ? "text-slate-200" : "text-slate-800"} mb-0.5`}>{step.title}</h6>
-                          <p className={`text-[8.5px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{step.desc}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Model */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          {/* Model */}
-                          <div className={`flex flex-col gap-2 p-3 rounded-2xl border transition-all ${isDarkMode ? "bg-slate-900/50 border-slate-800 hover:border-blue-500/50" : "bg-white border-slate-200 hover:border-blue-400/50 shadow-sm"}`}>
-                            <label className={`text-[11px] font-extrabold flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                               <Cpu className="w-4 h-4 text-blue-500" /> مدل پردازشی
-                            </label>
-                            <p className={`text-[9px] mb-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>موتور هوش مصنوعی برای استخراج</p>
-                            <select 
-                               value={selectedModel}
-                               onChange={(e) => setSelectedModel(e.target.value)}
-                               className={`w-full p-2 rounded-xl border text-[10px] font-bold outline-none cursor-pointer transition-colors mt-auto ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-300 focus:border-blue-500" : "bg-slate-50 border-slate-200 text-slate-700 focus:border-blue-500"}`}
-                            >
-                               <option value="gemini-3.6-flash">⚡ Gemini 3.6 Flash (سریع)</option>
-                               <option value="gemini-3.1-pro-preview">🧠 Gemini 3.1 Pro (دقیق)</option>
-                            </select>
-                          </div>
-
-                          {/* ERP Module */}
-                          <div className={`flex flex-col gap-2 p-3 rounded-2xl border transition-all ${isDarkMode ? "bg-slate-900/50 border-slate-800 hover:border-emerald-500/50" : "bg-white border-slate-200 hover:border-emerald-400/50 shadow-sm"}`}>
-                            <label className={`text-[11px] font-extrabold flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                               <Database className="w-4 h-4 text-emerald-500" /> ماژول مقصد
-                            </label>
-                            <p className={`text-[9px] mb-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>سیستم حسابداری هدف برای ثبت</p>
-                            <select 
-                               value={erpDestinationModule}
-                               onChange={(e) => setErpDestinationModule(e.target.value)}
-                               className={`w-full p-2 rounded-xl border text-[10px] font-bold outline-none cursor-pointer transition-colors mt-auto ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-300 focus:border-emerald-500" : "bg-slate-50 border-slate-200 text-slate-700 focus:border-emerald-500"}`}
-                            >
-                               <option value="general-ledger">دفتر کل (General Ledger)</option>
-                               <option value="accounts-payable">حساب‌های پرداختی (AP)</option>
-                               <option value="accounts-receivable">حساب‌های دریافتی (AR)</option>
-                               <option value="inventory">انبار و کالا (Inventory)</option>
-                            </select>
-                          </div>
-
-                          {/* Strictness */}
-                          <div className={`flex flex-col gap-2 p-3 rounded-2xl border transition-all ${isDarkMode ? "bg-slate-900/50 border-slate-800 hover:border-indigo-500/50" : "bg-white border-slate-200 hover:border-indigo-400/50 shadow-sm"}`}>
-                            <label className={`text-[11px] font-extrabold flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                               <Shield className="w-4 h-4 text-indigo-500" /> دقت و سخت‌گیری
-                            </label>
-                            <p className={`text-[9px] mb-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>سطح اعتبارسنجی اطلاعات</p>
-                            <select 
-                               value={strictnessMode}
-                               onChange={(e) => setStrictnessMode(e.target.value as any)}
-                               className={`w-full p-2 rounded-xl border text-[10px] font-bold outline-none cursor-pointer transition-colors mt-auto ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-300 focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-700 focus:border-indigo-500"}`}
-                            >
-                               <option value="speed">حالت سریع و فوری (Fast)</option>
-                               <option value="balanced">حالت متعادل و خودکار (Balanced)</option>
-                               <option value="audit">ممیزی موشکافانه و سخت‌گیرانه (Strict Audit)</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        {/* Custom Prompt */}
-                        <div className={`flex flex-col gap-3 p-4 rounded-2xl border transition-all ${isDarkMode ? "bg-slate-900/50 border-slate-800 hover:border-purple-500/50" : "bg-white border-slate-200 hover:border-purple-400/50 shadow-sm"}`}>
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div>
-                              <label className={`text-[11.5px] font-extrabold flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                                 <FileEdit className="w-4 h-4 text-purple-500" /> پرامپت و دستورالعمل استخراج
-                              </label>
-                              <p className={`text-[9.5px] mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>دستورالعمل‌های خاص و الگوهای استخراج را مدیریت کنید</p>
+                        
+                        {/* Unified Settings & Guide Trigger Card */}
+                        <div className={`p-4 rounded-2xl border transition-all ${
+                          isDarkMode ? "bg-slate-900/60 border-slate-800" : "bg-gradient-to-r from-blue-50/50 to-indigo-50/30 border-blue-100 shadow-sm"
+                        }`}>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2.5 rounded-xl ${isDarkMode ? "bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20" : "bg-fuchsia-50 text-fuchsia-600 border border-fuchsia-100"}`}>
+                                <Settings className="w-5 h-5 animate-spin-slow" />
+                              </div>
+                              <div className="text-right">
+                                <h3 className={`text-[12.5px] font-black ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                                  تنظیمات استخراج سند (تنظیمات هوشمند و راهنما)
+                                </h3>
+                                <div className="flex flex-wrap items-center gap-2 mt-1">
+                                  <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold ${isDarkMode ? "bg-slate-800 text-blue-400" : "bg-blue-100/70 text-blue-700"}`}>
+                                    🤖 مدل: {selectedModel === "gemini-3.6-flash" ? "Gemini 3.6 Flash" : "Gemini 3.1 Pro"}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold ${isDarkMode ? "bg-slate-800 text-emerald-400" : "bg-emerald-100/70 text-emerald-700"}`}>
+                                    🏢 ماژول: {erpDestinationModule}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold ${isDarkMode ? "bg-slate-800 text-indigo-400" : "bg-indigo-100/70 text-indigo-700"}`}>
+                                    🛡️ سخت‌گیری: {strictnessMode === "audit" ? "ممیزی دقیق" : strictnessMode === "speed" ? "سریع" : "متعادل"}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
+
                             <button
                               type="button"
-                              onClick={handleSetDirectJsonPrompt}
-                              className={`px-3 py-1.5 rounded-xl text-[10px] font-black flex items-center gap-1.5 transition-all border ${
-                                isDarkMode 
-                                  ? "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20" 
-                                  : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                              } cursor-pointer shadow-sm`}
-                              title="افزودن دستور استخراج مستقیم به فرمت آرایه استاندارد JSON"
+                              onClick={() => setIsAiSettingsOpen(true)}
+                              className="px-4 py-2 rounded-xl text-[11px] font-black bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white shadow-md transition-all cursor-pointer flex items-center gap-2 hover:-translate-y-0.5 shrink-0"
                             >
-                              <Code className="w-3.5 h-3.5" />
-                              <span>الگوی خروجی JSON</span>
+                              <Settings className="w-3.5 h-3.5" />
+                              <span>باز کردن منوی تنظیمات و راهنما</span>
                             </button>
                           </div>
-                          
-                          <div className="flex flex-wrap gap-2 mb-1">
-                            {[
-                              { label: "استخراج فقط مالیات", text: "فقط مبلغ مربوط به مالیات بر ارزش افزوده را استخراج کن." },
-                              { label: "نادیده گرفتن دست‌نویس", text: "بخش‌های دست‌نویس را به طور کامل نادیده بگیر و فقط تایپی‌ها را استخراج کن." },
-                              { label: "استخراج جدولی سخت‌گیرانه", text: "اطلاعات را دقیقاً به شکل جدولی استخراج کن و مقادیر خالی را null قرار بده." },
-                              { label: "استخراج فقط تاریخ و مبلغ", text: "فقط تاریخ صدور و مبلغ نهایی فاکتور/فیش را استخراج کن." }
-                            ].map((preset, idx) => (
-                              <button
-                                key={idx}
-                                type="button"
-                                onClick={() => setCustomPrompt(prev => prev ? `${prev}\n${preset.text}` : preset.text)}
-                                className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold border transition-colors ${
-                                  isDarkMode
-                                    ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white"
-                                    : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
-                                }`}
-                                title={preset.text}
-                              >
-                                + {preset.label}
-                              </button>
-                            ))}
-                            <button
-                                type="button"
-                                onClick={() => setCustomPrompt("")}
-                                className={`px-2.5 py-1.5 rounded-lg text-[9px] font-bold border transition-colors ${
-                                  isDarkMode
-                                    ? "bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20"
-                                    : "bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100"
-                                }`}
-                                title="پاک کردن متن"
-                              >
-                                پاک کردن
-                              </button>
-                          </div>
-                          <textarea
-                            rows={3}
-                            value={customPrompt}
-                            onChange={(e) => setCustomPrompt(e.target.value)}
-                            placeholder="مثال: فقط نام فروشنده و مبلغ کل را استخراج کن..."
-                            className={`w-full p-3 rounded-xl border text-[11px] font-medium outline-none resize-none transition-colors ${isDarkMode ? "bg-slate-950 border-slate-800 text-slate-200 focus:border-purple-500/50" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-purple-500/50"}`}
-                            required
-                          />
+
+                          {customPrompt.trim() && (
+                            <div className={`mt-3 p-2.5 rounded-xl border text-[10.5px] font-medium leading-relaxed ${
+                              isDarkMode ? "bg-slate-950/60 border-slate-800 text-slate-300" : "bg-white border-slate-200 text-slate-700"
+                            }`}>
+                              <span className="font-bold text-purple-500 ml-1">دستورالعمل سفارشی:</span>
+                              {customPrompt}
+                            </div>
+                          )}
                         </div>
 
                         {/* Chat before extraction */}
@@ -4819,10 +5098,12 @@ export default function App() {
                            <span className="text-[11px] opacity-70">سند دیجیتال (بدون تصویر فیزیکی)</span>
                         </div>
                       ) : activeFile.preview.startsWith("data:application/pdf") ? (
-                        <div className="flex flex-col items-center justify-center p-4 text-center text-slate-500 w-full h-full relative">
-                           <PdfThumbnail base64={activeFile.preview.split(",")[1]} className="w-full max-h-[260px] object-contain rounded-lg shadow-sm border border-slate-200 dark:border-slate-800" isDarkMode={isDarkMode} />
-                           <span className="text-[11px] opacity-70 mt-2">فایل PDF با موفقیت بارگذاری شد</span>
-                        </div>
+                        <PdfViewer
+                          base64={activeFile.preview}
+                          fileName={activeFile.name}
+                          isDarkMode={isDarkMode}
+                          className="w-full h-[290px]"
+                        />
                       ) : (
                         <img
                           src={activeFile.preview || undefined}
@@ -4991,19 +5272,12 @@ export default function App() {
                                <span className="text-[10px] opacity-70">سند دیجیتال (بدون تصویر فیزیکی)</span>
                             </div>
                           ) : activeFile.preview.startsWith("data:application/pdf") ? (
-                            <div className="flex flex-col items-center justify-center text-center text-slate-500 pb-4">
-                               <PdfThumbnail base64={activeFile.preview.split(",")[1]} className="w-full max-h-[260px] object-contain rounded-lg shadow-sm border border-slate-200 dark:border-slate-800" isDarkMode={isDarkMode} />
-                               <div className="flex items-center gap-2 mt-3">
-                                 <span className="text-[10px] opacity-70">فایل PDF بارگذاری شده است</span>
-                                 <a 
-                                   href={activeFile.preview} 
-                                   download={activeFile.name}
-                                   className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[9px] font-bold inline-flex items-center gap-1"
-                                 >
-                                   <Download className="w-3 h-3" /> دانلود فایل PDF
-                                 </a>
-                               </div>
-                            </div>
+                            <PdfViewer
+                              base64={activeFile.preview}
+                              fileName={activeFile.name}
+                              isDarkMode={isDarkMode}
+                              className="w-full h-[320px]"
+                            />
                           ) : (
                             <div className="relative group max-h-[300px]">
                               <img
@@ -10361,13 +10635,12 @@ export default function App() {
                 isDarkMode ? "bg-slate-950/30 border-slate-800" : "bg-slate-50/50 border-slate-150"
               }`}>
                 {activePreviewScan.file?.name?.toLowerCase().endsWith(".pdf") || activePreviewScan.file?.preview?.startsWith("data:application/pdf") ? (
-                  <div className="flex flex-col items-center justify-center p-4 text-center max-w-sm rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/30 relative w-full h-full">
-                    <PdfThumbnail base64={activePreviewScan.file.preview?.split(",")[1] || ""} className="w-full max-h-[50vh] object-contain rounded-lg shadow-sm border border-slate-200 dark:border-slate-800" isDarkMode={isDarkMode} />
-                    <h5 className="font-black text-xs text-indigo-600 dark:text-indigo-400 mt-4">سند با قالب PDF</h5>
-                    <p className="text-[10px] mt-2 leading-relaxed text-slate-400">
-                      این فایل به صورت PDF بارگذاری شده است.
-                    </p>
-                  </div>
+                  <PdfViewer
+                    base64={activePreviewScan.file.preview}
+                    fileName={activePreviewScan.file.name}
+                    isDarkMode={isDarkMode}
+                    className="w-full h-full min-h-[440px]"
+                  />
                 ) : activePreviewScan.file?.preview ? (
                   <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-md max-h-[60vh]">
                     <img src={activePreviewScan.file.preview} alt="Document Preview" className="max-h-[58vh] max-w-full object-contain" referrerPolicy="no-referrer" />

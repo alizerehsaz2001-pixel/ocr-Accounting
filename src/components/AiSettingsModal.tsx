@@ -39,6 +39,8 @@ interface AiSettingsModalProps {
   handleDirectExtraction: () => void;
   isExtracting: boolean;
   isAiUnderstandingConfirmed?: boolean;
+  activeDocumentName?: string | null;
+  onSaveDocumentSettings?: () => void;
 }
 
 export default function AiSettingsModal({
@@ -59,6 +61,8 @@ export default function AiSettingsModal({
   handleDirectExtraction,
   isExtracting,
   isAiUnderstandingConfirmed = false,
+  activeDocumentName,
+  onSaveDocumentSettings,
 }: AiSettingsModalProps) {
   if (!isOpen) return null;
 
@@ -120,6 +124,34 @@ export default function AiSettingsModal({
           {/* Body */}
           <div className="p-4 md:p-6 flex flex-col gap-6">
             
+            {/* Active Document Exclusive Banner */}
+            {activeDocumentName && (
+              <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
+                isDarkMode ? "bg-amber-500/10 border-amber-500/20 text-amber-300" : "bg-amber-50 border-amber-200 text-amber-800"
+              }`}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0 animate-pulse" />
+                  <div className="min-w-0 text-right">
+                    <p className="text-[11px] font-black truncate">
+                      تنظیمات اختصاصی استخراج سند: «{activeDocumentName}»
+                    </p>
+                    <p className="text-[9.5px] opacity-80 mt-0.5">
+                      این تنظیمات به طور انحصاری برای همین سند حفظ گردیده و در پردازش‌ها بازیابی می‌شود.
+                    </p>
+                  </div>
+                </div>
+                {onSaveDocumentSettings && (
+                  <button
+                    type="button"
+                    onClick={onSaveDocumentSettings}
+                    className="px-3 py-1.5 rounded-xl text-[10px] font-black bg-amber-500 hover:bg-amber-600 text-slate-950 transition-all shrink-0 cursor-pointer shadow-sm"
+                  >
+                    ثبت اختصاصی سند
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Direct Upload Box */}
             <div className="flex flex-col gap-2">
               <label className={`text-[12px] font-black flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
@@ -315,6 +347,29 @@ export default function AiSettingsModal({
                       : "bg-slate-50 border-slate-200 text-slate-800 focus:border-blue-500/40"
                   }`}
                 />
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {[
+                    { label: "استخراج فقط مالیات", text: "فقط مبلغ مربوط به مالیات بر ارزش افزوده را استخراج کن." },
+                    { label: "نادیده گرفتن دست‌نویس", text: "بخش‌های دست‌نویس را به طور کامل نادیده بگیر و فقط تایپی‌ها را استخراج کن." },
+                    { label: "استخراج جدولی سخت‌گیرانه", text: "اطلاعات را دقیقاً به شکل جدولی استخراج کن و مقادیر خالی را null قرار بده." },
+                    { label: "استخراج فقط تاریخ و مبلغ", text: "فقط تاریخ صدور و مبلغ نهایی فاکتور/فیش را استخراج کن." }
+                  ].map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setCustomPrompt(customPrompt.trim() ? `${customPrompt.trim()}\n${preset.text}` : preset.text);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[9.5px] font-bold transition-all border cursor-pointer ${
+                        isDarkMode 
+                          ? "bg-slate-950/80 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white" 
+                          : "bg-slate-100/80 border-slate-200 text-slate-700 hover:bg-slate-200 hover:text-slate-900"
+                      }`}
+                    >
+                      + {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
             </div>
