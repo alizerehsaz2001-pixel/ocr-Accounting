@@ -727,11 +727,14 @@ export default function App() {
     const scanId = item.scanId || item.id;
     const finalPrompt = userPrompt || getCompiledAIInstructions();
 
+    const startTime = Date.now();
     updateProgress({
       status: "processing",
+      stage: "analyzing_layout",
       attempt: 1,
-      statusMessage: "در حال ارسال سند به هوش مصنوعی Gemini...",
-      startTime: Date.now()
+      statusMessage: "در حال تحلیل ساختار چیدمان و الگوی سند...",
+      startTime,
+      modelUsed: selectedModel
     });
 
     while (attempt <= maxAttempts) {
@@ -748,14 +751,16 @@ export default function App() {
         if (attempt > 1) {
           updateProgress({
             status: "retrying",
+            stage: "extracting_fields",
             attempt,
-            statusMessage: `تلاش شماره ${attempt} - در حال برقراری ارتباط مجدد با Gemini...`
+            statusMessage: `تلاش شماره ${attempt} - ارسال مجدد درخواست استخراج به Gemini...`
           });
         } else {
           updateProgress({
             status: "processing",
+            stage: "extracting_fields",
             attempt: 1,
-            statusMessage: "در حال استخراج هوشمند داده‌های مالی..."
+            statusMessage: "در حال استخراج هوشمند لایه‌ها و جدول اقلام..."
           });
         }
 
@@ -856,11 +861,22 @@ export default function App() {
 
           setTransactions(prev => [...extractedItems, ...prev]);
 
+          const endTime = Date.now();
+          const processingTimeMs = endTime - startTime;
+          const avgConfidence = extractedItems.length > 0 
+            ? Math.round(extractedItems.reduce((acc, curr) => acc + (curr.ضریب_اطمینان ?? 100), 0) / extractedItems.length) 
+            : 100;
+
           updateProgress({
             status: "success",
+            stage: "completed",
             statusMessage: `استخراج موفقیت‌آمیز! (${extractedItems.length.toLocaleString("fa-IR")} ردیف مالی استخراج گردید)`,
             extractedCount: extractedItems.length,
-            endTime: Date.now()
+            confidenceScore: avgConfidence,
+            documentType,
+            tokensUsed: realTokensUsed,
+            processingTimeMs,
+            endTime
           });
 
           logEvent("استخراج موازی موفق", `سند «${item.name}» با موفقیت در تلاش ${attempt} استخراج گردید.`);
@@ -1495,7 +1511,53 @@ export default function App() {
   };
 
   const handleExtract100PercentAllToJsonAndExcel = async () => {
-    const fullJsonInstruction = "دستور اکید و لایه‌به‌لایه ۱۰۰٪ جامع (موتور ارشد Gemini): تمام اطلاعات مندرج در این سند مالی و اداری را بدون هیچ‌گونه استثنا، حذف، خلاصه‌سازی یا نادیده گرفتن، ۱۰۰٪ کامل و با دقت مطلق استخراج کن. تأکید اکید می‌شود که کلیه اجزای سند باید تبدیل به داده شوند: ۱) تمامی مشخصات هدر (شامل نام کامل صادرکننده و خریدار، شناسه/کد ملی، کد اقتصادی، شماره ثبت، شماره فاکتور/سند/پیگیری/صیادی، تاریخ‌های شمسی و میلادی، آدرس‌ها، تلفن‌ها و ایمیل)؛ ۲) تک‌تک سطرهای جدول اقلام (شامل شماره ردیف، کد کالا، شرح کامل و دقیق کالا/خدمات، تعداد/مقدار، واحد سنجش، قیمت واحد/فی، مبلغ کل، تخفیف سطر، ارزش افزوده سطر و مبلغ نهایی ردیف)؛ ۳) تمام محاسبات و اعداد فوتر (شامل جمع کل قبل از تخفیف، تخفیف کل، مبلغ مشمول مالیات، نرخ و مبلغ مالیات بر ارزش افزوده و عوارض، سایر کسورات/اضافات، مبلغ قابل پرداخت حروفی و عددی، و شماره حساب/شبا/کارت بانکی)؛ ۴) کلیه متون، یادداشت‌ها، شروط فاکتور، وضعیت مهر و امضاها. خروجی باید منحصراً یک ساختار JSON کاملاً شفاف با کلیدهای استاندارد فارسی باشد تا بدون نیاز به ویرایش دستی، مستقیماً وارد جدول و فایل اکسل شود.";
+    const fullJsonInstruction = `🎯 دستور اکید، فوق‌دقیق و لایه‌به‌لایه استخراج ۱۰۰٪ داده‌ها (موتور ارشد Gemini - ویژه خروجی فول‌اکسل):
+تمامی اطلاعات مندرج در این سند مالی و اداری را بدون هیچ‌گونه استثنا، تلخیص، خلاصه، حذف یا نادیده گرفتن، ۱۰۰٪ کامل، با دقت مطلق و تفکیک لایه‌ای استخراج کن. خروجی باید کاملاً ساختاریافته در قالب آرایه JSON با کلیدهای یکدست و استاندارد فارسی تنظیم شود تا مستقیماً و بدون نیاز به ویرایش دستی وارد جدول و فایل اکسل (.xlsx) گردد.
+
+📋 ۱) هدر و اطلاعات عمومی (Header & Metadata):
+- نام کامل صادرکننده/فروشنده، شناسه ملی/کد ملی، کد اقتصادی، شماره ثبت، تلفن، آدرس، کدپستی، ایمیل، استان و شهر.
+- نام کامل خریدار/مشتری، شناسه ملی/کد ملی، کد اقتصادی، شماره ثبت، تلفن، آدرس، کدپستی، ایمیل.
+- شماره فاکتور / شماره سند / شماره صورتحساب / شماره رسید / شماره قبض / شماره پیگیری / شناسه صیاد / کد مالیاتی.
+- تاریخ شمسی دقیق (سال/ماه/روز)، تاریخ میلادی (در صورت وجود)، زمان/ساعت ثبت سند.
+
+📦 ۲) جدول تک‌تک اقلام و ردیف‌های کالا/خدمات (Line Items Breakdown):
+استخراج تک‌تک سطرهای جدول بدون حتی یک مورد جاماندگی یا خلاصه‌سازی شامل:
+- شماره ردیف (۱، ۲، ...)
+- کد کالا / کد خدمت / شناسه کالا / بارکد
+- شرح کامل، دقیق و بدون تلخیص کالا یا خدمات (به همراه تمامی جزئیات فنی، مدل، مشخصات و توضیحات)
+- تعداد / مقدار (به عدد دقیق)
+- واحد سنجش (عدد، کیلوگرم، متر، بسته، دستگاه، ساعت، ...)
+- قیمت واحد / فی (به عدد دقیق به ریال/تومان)
+- مبلغ کل ردیف (قبل از تخفیف)
+- مبلغ تخفیف ردیف و درصد تخفیف ردیف
+- نرخ مالیات بر ارزش افزوده ردیف (%) و مبلغ مالیات ردیف
+- مبلغ عوارض ردیف
+- مبلغ نهایی و خالص هر ردیف
+
+💰 ۳) محاسبات مالی، عوارض و فوتر (Footer & Financial Totals):
+- جمع کل قبل از تخفیف
+- تخفیف کل سند
+- مبلغ مشمول مالیات
+- نرخ و جمع کل مالیات بر ارزش افزوده
+- نرخ و جمع کل عوارض قانونی
+- سایر کسورات (سپرده بیمه، مالیات تکلیفی، جریمه، ...)
+- سایر اضافات (هزینه حمل و نقل، بسته‌بندی، نصب، ...)
+- مبلغ قابل پرداخت نهایی (هم به عدد دقیق و هم به حروف فارسی)
+- وضعیت تسویه (نقدی، نسیه، چک، اقساط، متغیر) و مهلت/شرایط پرداخت
+
+💳 ۴) اطلاعات بانکی، واریز و تسویه (Banking & Settlement):
+- شماره حساب بانکی، شماره کارت، شماره شبا (IBAN)
+- نام بانک و نام صاحب حساب
+- شماره مرجع / شناسه واریز / شماره ارجاع پرداخت / کد پیگیری بانکی
+
+📜 ۵) متون حقوقی، توضیحات و وضعیت رسمی (Legal Notes & Stamp):
+- کلیه شروط فاکتور، توضیحات دست‌نویس یا چاپی فوتر و هدر
+- وضعیت مهر، امضا، و تأییدیه هوشمند (مانند وضعیت سامانه مؤدیان یا کد یکتای مالیاتی)
+
+⚠️ قواعد اکید ساختار خروجی JSON:
+۱. خروجی باید منحصراً ساختار آرایه‌ای از اشیا JSON با کلیدهای شفاف فارسی باشد.
+۲. مقادیر عددی (مانند مبالغ، تعداد، درصدها) به صورت اعداد خالص ریاضی (بدون جداکننده هزارگان متنی یا پسوند ریال/تومان در درون عدد) استخراج شوند تا فرمول‌نویسی در اکسل کاملاً فعال باشد.
+۳. هیچ اطلاعاتی از سند نباید حذف یا به صورت "سایر موارد" درج شود. ۱۰۰٪ اجزا بایستی پوشش داده شوند.`;
     
     setCustomPrompt(prev => {
       const trimmed = prev.trim();
@@ -1571,10 +1633,7 @@ export default function App() {
 
   const handleDirectExtraction = async () => {
     if (pendingFiles.length === 0) return;
-    if (!isAiUnderstandingConfirmed) {
-      showNotification("لطفاً ابتدا تاییدیه تفهیم و درک هوش مصنوعی را بررسی و علامت بزنید.", "info");
-      return;
-    }
+
     if (!customPrompt.trim()) {
        showNotification("لطفاً پرامپت (دستورالعمل) را وارد کنید. این فیلد الزامی است.", "error");
        return;
@@ -4485,343 +4544,89 @@ export default function App() {
                       : "bg-white/95 backdrop-blur-2xl border-slate-200/80 shadow-[0_20px_50px_rgba(15,23,42,0.06)]"
                   }`}>
                     
-                    {/* Header */}
-                    <div className="flex items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-100 dark:border-slate-800/60">
+                    {/* Minimal Header */}
+                    <div className={`p-4 border-b flex items-center justify-between ${isDarkMode ? "border-slate-800/60" : "border-slate-100"}`}>
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                          isDarkMode ? "bg-blue-500/10 text-blue-400 border border-blue-500/15" : "bg-blue-50 text-blue-600 border border-blue-100"
-                        }`}>
-                          <Sparkles className="w-5 h-5" />
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
+                          <FileText className="w-4 h-4" />
                         </div>
                         <div>
-                          <h2 className={`text-[15px] font-black tracking-tight ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>
-                            پنل آماده‌سازی و استخراج سند
+                          <h2 className={`text-sm font-black ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                            آماده‌سازی سند
                           </h2>
-                          <p className={`text-[10px] mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                            تنظیمات هوش مصنوعی و پرامپت این سند با منوی اصلی یکپارچه و هماهنگ است.
+                          <p className={`text-[9px] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                            {pendingFiles.length === 1 ? pendingFiles[0].name : `${pendingFiles.length} سند`} • {Math.round(pendingFiles.reduce((acc, f) => acc + f.size, 0) / 1024)} KB
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                         <p className={`text-[10px] font-bold truncate max-w-[150px] ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>{pendingFiles.length === 1 ? pendingFiles[0].name : `${pendingFiles.length} سند`}</p>
-                         <p className={`text-[9px] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>{Math.round(pendingFiles.reduce((acc, f) => acc + f.size, 0) / 1024)} KB</p>
-                      </div>
+                      
+                      {/* Compact Settings Trigger */}
+                      <button
+                        type="button"
+                        onClick={() => setIsAiSettingsOpen(true)}
+                        className={`p-1.5 rounded-lg transition-all ${isDarkMode ? "bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200" : "bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700"}`}
+                        title="تنظیمات استخراج (مدل، ماژول، سخت‌گیری)"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
                     </div>
 
                     {/* Simple Settings */}
                     {isExtracting ? (
-                      <div className="flex flex-col gap-4 py-8 items-center justify-center">
+                      <div className="flex flex-col gap-4 py-12 items-center justify-center">
                          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                          <p className={`text-[12px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>در حال پردازش هوشمند سند...</p>
                       </div>
                     ) : (
-                      <div className="flex flex-col gap-5">
+                      <div className="flex flex-col gap-4 p-4">
                         
-                        {/* Unified Settings & Guide Trigger Card */}
-                        <div className={`p-4 rounded-2xl border transition-all ${
-                          isDarkMode ? "bg-slate-900/60 border-slate-800" : "bg-gradient-to-r from-blue-50/50 to-indigo-50/30 border-blue-100 shadow-sm"
-                        }`}>
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2.5 rounded-xl ${isDarkMode ? "bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20" : "bg-fuchsia-50 text-fuchsia-600 border border-fuchsia-100"}`}>
-                                <Settings className="w-5 h-5 animate-spin-slow" />
-                              </div>
-                              <div className="text-right">
-                                <h3 className={`text-[12.5px] font-black ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                                  تنظیمات استخراج سند (تنظیمات هوشمند و راهنما)
-                                </h3>
-                                <div className="flex flex-wrap items-center gap-2 mt-1">
-                                  <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold ${isDarkMode ? "bg-slate-800 text-blue-400" : "bg-blue-100/70 text-blue-700"}`}>
-                                    🤖 مدل: {selectedModel === "gemini-3.6-flash" ? "Gemini 3.6 Flash" : "Gemini 3.1 Pro"}
-                                  </span>
-                                  <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold ${isDarkMode ? "bg-slate-800 text-emerald-400" : "bg-emerald-100/70 text-emerald-700"}`}>
-                                    🏢 ماژول: {erpDestinationModule}
-                                  </span>
-                                  <span className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold ${isDarkMode ? "bg-slate-800 text-indigo-400" : "bg-indigo-100/70 text-indigo-700"}`}>
-                                    🛡️ سخت‌گیری: {strictnessMode === "audit" ? "ممیزی دقیق" : strictnessMode === "speed" ? "سریع" : "متعادل"}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => setIsAiSettingsOpen(true)}
-                              className="px-4 py-2 rounded-xl text-[11px] font-black bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white shadow-md transition-all cursor-pointer flex items-center gap-2 hover:-translate-y-0.5 shrink-0"
-                            >
-                              <Settings className="w-3.5 h-3.5" />
-                              <span>باز کردن منوی تنظیمات و راهنما</span>
-                            </button>
-                          </div>
-
-                          {customPrompt.trim() && (
-                            <div className={`mt-3 p-2.5 rounded-xl border text-[10.5px] font-medium leading-relaxed ${
-                              isDarkMode ? "bg-slate-950/60 border-slate-800 text-slate-300" : "bg-white border-slate-200 text-slate-700"
-                            }`}>
-                              <span className="font-bold text-purple-500 ml-1">دستورالعمل سفارشی:</span>
-                              {customPrompt}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Chat before extraction */}
-                        <div className="flex flex-col gap-3 border-t pt-4 dark:border-slate-800/60 border-slate-200">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <label className={`text-[11.5px] font-extrabold flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                               <MessageSquare className="w-4 h-4 text-blue-500 animate-pulse" /> گفتگوی پیش از استخراج (تضمین صددرصد دقت):
-                            </label>
-                            
-                            {preExtractChat.length > 0 && (
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={handleApplyChatToPrompt}
-                                  className={`px-2 py-1 rounded-lg text-[9.5px] font-black flex items-center gap-1 transition-all border ${
-                                    isDarkMode 
-                                      ? "bg-purple-500/10 border-purple-500/30 text-purple-300 hover:bg-purple-500/20" 
-                                      : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                                  } cursor-pointer`}
-                                  title="انتقال توافقات این گفتگو به فیلد پرامپت نهایی برای اعمال در سند استخراج شده"
-                                >
-                                  <span>📋 انتقال به پرامپت نهایی</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={handleClearPreExtractChat}
-                                  className={`p-1 rounded-lg transition-all border ${
-                                    isDarkMode 
-                                      ? "bg-slate-900 border-slate-800 text-slate-400 hover:text-rose-400" 
-                                      : "bg-slate-100 border-slate-200 text-slate-500 hover:text-rose-600"
-                                  } cursor-pointer`}
-                                  title="پاکسازی تاریخچه گفتگو"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-
-                          <p className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                            پیش از اجرای استخراج نهایی، می‌توانید سند را ممیزی کنید، از درستی مبالغ مطمئن شوید، و پس از تایید، آن را با دکمه بالا به پرامپت نهایی منتقل کنید تا به صورت فایل متنی یا جدول استخراج شود.
-                          </p>
-
-                          {/* Hero Action Card for 100% Full JSON Extraction */}
-                          <div className={`p-3 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all ${
-                            isDarkMode 
-                              ? "bg-gradient-to-r from-amber-950/40 via-purple-950/40 to-indigo-950/40 border-amber-500/30 text-amber-200" 
-                              : "bg-gradient-to-r from-amber-50 via-purple-50 to-indigo-50 border-amber-200 text-amber-900 shadow-xs"
+                        {customPrompt.trim() && (
+                          <div className={`p-2.5 rounded-xl border text-[10px] leading-relaxed ${
+                            isDarkMode ? "bg-slate-900/50 border-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-700"
                           }`}>
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-1.5 font-extrabold text-[11.5px]">
-                                <Zap className="w-4 h-4 text-amber-500 animate-bounce shrink-0" />
-                                <span>⚡ دستور ویژه: استخراج ۱۰۰٪ کلیه اطلاعات (اعداد، متون، هدر، اقلام و فوتر) به JSON جهت اکسل مستقیم</span>
+                            <span className="font-bold text-blue-500 ml-1">دستور سفارشی:</span>
+                            {customPrompt}
+                          </div>
+                        )}
+
+                        {/* Enhanced 100% Extraction Hero Card */}
+                        <div className={`relative overflow-hidden p-5 rounded-2xl border transition-all group ${
+                          isDarkMode 
+                            ? "bg-gradient-to-br from-amber-950/60 via-slate-900 to-indigo-950/40 border-amber-500/20 shadow-[0_4px_20px_rgba(245,158,11,0.07)] hover:border-amber-500/40" 
+                            : "bg-gradient-to-br from-amber-50/80 via-white to-indigo-50/50 border-amber-200 shadow-sm hover:shadow-md hover:border-amber-300"
+                        }`}>
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                          
+                          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div className="flex flex-col gap-2 flex-1">
+                              <div className="flex items-center gap-2">
+                                <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-600"}`}>
+                                  <Zap className="w-4 h-4 animate-pulse" />
+                                </div>
+                                <h3 className={`text-[13px] font-black tracking-tight ${isDarkMode ? "text-amber-300" : "text-amber-800"}`}>
+                                  دستور ویژه فول‌اکسل (استخراج ۱۰۰٪ داده‌ها)
+                                </h3>
                               </div>
-                              <p className={`text-[10px] leading-relaxed ${isDarkMode ? "text-amber-300/80" : "text-amber-800/80"}`}>
-                                «دستور اکید و لایه‌به‌لایه ۱۰۰٪ جامع: تمام اطلاعات مندرج در این سند (شامل مشخصات کامل صادرکننده/خریدار، شناسه ملی، کد اقتصادی، شماره سند، تاریخ‌ها، تک‌تک سطرهای جدول اقلام، کالاها، مقادیر، فی، تخفیفات، مالیات بر ارزش افزوده، عوارض، جمع کل، شماره شبا/حساب و تمامی یادداشت‌های حاشیه‌ای) را بدون کوچک‌ترین استثنا به JSON تبدیل کن تا مستقیماً وارد فایل اکسل شود.»
+                              <p className={`text-[10px] leading-relaxed max-w-xl ${isDarkMode ? "text-amber-200/70" : "text-amber-900/70"}`}>
+                                موتور ارشد هوش مصنوعی تمامی مشخصات، تک‌تک اقلام، اعداد و یادداشت‌ها را بدون حذف مستقیماً به فرمت استاندارد <strong>JSON</strong> برای ورود به <strong>اکسل</strong> استخراج می‌کند.
                               </p>
                             </div>
+                            
                             <button
                               type="button"
                               onClick={handleExtract100PercentAllToJsonAndExcel}
-                              className="px-3.5 py-2 rounded-xl text-[11px] font-black flex items-center gap-1.5 shrink-0 transition-all bg-gradient-to-r from-amber-500 via-purple-600 to-indigo-600 hover:from-amber-400 hover:via-purple-500 hover:to-indigo-500 text-white shadow-md cursor-pointer hover:scale-102 active:scale-98"
-                            >
-                              <Code className="w-4 h-4 text-amber-200" />
-                              <span>⚡ تبدیل ۱۰۰٪ به JSON و اکسل</span>
-                            </button>
-                          </div>
-
-                          {/* Quick audit helper chips */}
-                          <div className="flex flex-col gap-1.5 mt-1">
-                            <span className={`text-[9.5px] font-bold ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>ابزارهای ممیزی و موازنه سریع پیش از استخراج:</span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {[
-                                { text: "⚡ تبدیل ۱۰۰٪ کلیه اطلاعات به JSON (جهت اکسل)", query: "دستور اکید و لایه‌به‌لایه ۱۰۰٪ جامع (موتور ارشد Gemini): تمام اطلاعات مندرج در این سند مالی و اداری را بدون هیچ‌گونه استثنا، حذف، خلاصه‌سازی یا نادیده گرفتن، ۱۰۰٪ کامل و با دقت مطلق استخراج کن. تأکید اکید می‌شود که کلیه اجزای سند باید تبدیل به داده شوند: ۱) تمامی مشخصات هدر (شامل نام کامل صادرکننده و خریدار، شناسه/کد ملی، کد اقتصادی، شماره ثبت، شماره فاکتور/سند/پیگیری/صیادی، تاریخ‌های شمسی و میلادی، آدرس‌ها، تلفن‌ها و ایمیل)؛ ۲) تک‌تک سطرهای جدول اقلام (شامل شماره ردیف، کد کالا، شرح کامل و دقیق کالا/خدمات، تعداد/مقدار، واحد سنجش، قیمت واحد/فی، مبلغ کل، تخفیف سطر، ارزش افزوده سطر و مبلغ نهایی ردیف)؛ ۳) تمام محاسبات و اعداد فوتر (شامل جمع کل قبل از تخفیف، تخفیف کل، مبلغ مشمول مالیات، نرخ و مبلغ مالیات بر ارزش افزوده و عوارض، سایر کسورات/اضافات، مبلغ قابل پرداخت حروفی و عددی، و شماره حساب/شبا/کارت بانکی)؛ ۴) کلیه متون، یادداشت‌ها، شروط فاکتور، وضعیت مهر و امضاها. خروجی باید منحصراً یک ساختار JSON کاملاً شفاف با کلیدهای استاندارد فارسی باشد تا بدون نیاز به ویرایش دستی، مستقیماً وارد جدول و فایل اکسل شود." },
-                                { text: "📝 خلاصه این سند چیست؟", query: "لطفاً این سند مالی را به طور دقیق بررسی کن و خلاصه کاملی از مشخصات آن (صادرکننده، خریدار، شرح کلی فعالیت، مبلغ کل، تاریخ و ماهیت سند) به من ارائه بده." },
-                                { text: "⚙️ تبدیل مستقیم به JSON", query: "لطفاً تمام اطلاعات کلیدی، اقلام، مقادیر، مبالغ، مالیات، عوارض، جمع کل و کدهای اقتصادی این سند را به صورت مستقیم به قالب استاندارد ساختاریافته JSON تبدیل کرده و نمایش بده." },
-                                { text: "📊 تراز محاسباتی اقلام", query: "لطفاً موازنه ریاضی مبالغ این سند را دقیقاً بررسی کن. آیا حاصل ضرب تعداد در قیمت واحد در هر ردیف با جمع کل همخوانی دارد؟ جمع کل فاکتور چطور؟" },
-                                { text: "🏢 شناسه ملی و کد اقتصادی", query: "لطفاً مشخصات کامل خروجی شامل کدهای اقتصادی، شناسه‌های ملی، شماره‌های ثبت و آدرس‌های صادرکننده و خریدار در این سند را استخراج و بررسی کن." },
-                                { text: "📅 انطباق تقویمی تاریخ‌ها", query: "لطفاً تمام تاریخ‌های شمسی موجود در سند را پیدا کرده، با قالب دقیق میلادی YYYY-MM-DD معادل‌سازی کن و مهلت تسویه آن را گزارش بده." },
-                                { text: "⚠️ اقلام نامتعارف و ممیزی", query: "آیا در این سند هزینه غیرقابل قبول مالیاتی (مانند جرایمه‌ها) یا ارقام مخدوش، دست‌نویس مشکوک یا ابهامی در سطرها وجود دارد؟" },
-                                { text: "💡 پیشنهاد کدینگ معین", query: "با توجه به شرح تراکنش‌ها و اقلام موجود در سند، پیشنهاد می‌کنی هر سطر هزینه را در چه سرفصل، حساب معین یا حساب تفصیلی سیستم حسابداری ثبت کنم؟" }
-                              ].map((chip, idx) => (
-                                <button
-                                  key={idx}
-                                  type="button"
-                                  onClick={() => handleSendPreExtractChat(chip.query)}
-                                  disabled={isPreExtractChatLoading}
-                                  className={`px-2 py-1 rounded-lg text-[9.5px] text-right font-bold transition-all border ${
-                                    isDarkMode 
-                                      ? "bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:border-blue-500/40 hover:text-blue-300" 
-                                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-blue-500/30 hover:text-blue-600"
-                                  } cursor-pointer disabled:opacity-50`}
-                                >
-                                  {chip.text}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Chat Messages Viewport */}
-                          <div className={`flex flex-col gap-2.5 p-3 rounded-xl h-56 max-h-56 overflow-y-auto border transition-all ${
-                            isDarkMode 
-                              ? "bg-slate-950/60 border-slate-850/80" 
-                              : "bg-slate-50/50 border-slate-150 shadow-inner"
-                          }`}>
-                            {preExtractChat.length === 0 ? (
-                              <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                                <MessageSquare className={`w-8 h-8 mb-2 opacity-30 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`} />
-                                <p className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                                  مکالمه هنوز شروع نشده است.
-                                </p>
-                                <p className={`text-[9px] mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                                  یکی از ابزارهای ممیزی بالا را فشار دهید یا سوال خود را در کادر زیر بنویسید.
-                                </p>
-                              </div>
-                            ) : (
-                              preExtractChat.map((msg, i) => (
-                                <div 
-                                  key={i} 
-                                  className={`flex flex-col gap-1 max-w-[90%] rounded-2xl p-2.5 text-[10px] leading-relaxed transition-all ${
-                                    msg.role === 'user' 
-                                      ? (isDarkMode 
-                                          ? 'bg-blue-600/15 border border-blue-500/25 text-blue-200 ml-auto rounded-tr-none' 
-                                          : 'bg-blue-50/80 border border-blue-100 text-blue-800 ml-auto rounded-tr-none shadow-xs') 
-                                      : (isDarkMode 
-                                          ? 'bg-slate-900 border border-slate-800 text-slate-200 mr-auto rounded-tl-none' 
-                                          : 'bg-white border border-slate-200 text-slate-800 mr-auto rounded-tl-none shadow-xs')
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-1 mb-0.5 opacity-60 font-black text-[9px]">
-                                    {msg.role === 'user' ? (
-                                      <>
-                                        <span>👤 شما</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <span>🤖 حسابدار هوشمند (ممیز)</span>
-                                      </>
-                                    )}
-                                  </div>
-                                  <p className="whitespace-pre-wrap">{msg.text}</p>
-                                </div>
-                              ))
-                            )}
-                            {isPreExtractChatLoading && (
-                              <div className="flex items-center gap-2 p-2 mr-auto bg-slate-900/40 rounded-xl border border-slate-800/50">
-                                <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                                <span className="text-[9.5px] text-slate-400">حسابدار هوشمند در حال تحلیل سند است...</span>
-                              </div>
-                            )}
-                            <div ref={preExtractChatEndRef} />
-                          </div>
-
-                          {/* Chat Input Bar */}
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={preExtractInput}
-                              onChange={(e) => setPreExtractInput(e.target.value)}
-                              onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); handleSendPreExtractChat(); } }}
-                              placeholder="سوال خود یا نکته ممیزی جدید را بپرسید..."
-                              className={`flex-1 px-3 py-2 rounded-xl border text-[11px] outline-none transition-all ${
+                              className={`px-5 py-3 rounded-xl text-[11px] font-black flex items-center justify-center gap-2 shrink-0 transition-all cursor-pointer shadow-lg active:scale-95 ${
                                 isDarkMode 
-                                  ? "bg-slate-950 border-slate-850 text-slate-200 focus:border-blue-500/50" 
-                                  : "bg-white border-slate-200 text-slate-800 focus:border-blue-500/50 shadow-sm"
+                                  ? "bg-amber-500 text-amber-950 hover:bg-amber-400 shadow-amber-500/20 hover:shadow-amber-500/40" 
+                                  : "bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-400 hover:to-orange-400 shadow-amber-500/30"
                               }`}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleSendPreExtractChat()}
-                              disabled={isPreExtractChatLoading || !preExtractInput.trim()}
-                              className="px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-300 disabled:opacity-50 text-white rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
                             >
-                              <Send className="w-3.5 h-3.5" />
+                              <Code className="w-4 h-4" />
+                              <span>اجرای استخراج کامل</span>
                             </button>
-                          </div>
-
-                          {/* Verification and AI Comprehension Section */}
-                          <div className="flex flex-col gap-3 mt-2 pt-3 border-t border-dashed dark:border-slate-800/60 border-slate-200">
-                            {!verificationSummary ? (
-                              <button
-                                type="button"
-                                onClick={handleVerifyInstructions}
-                                disabled={isVerifying}
-                                className={`w-full py-3 px-4 rounded-xl text-xs font-extrabold transition-all border shadow-xs flex items-center justify-center gap-2 cursor-pointer ${
-                                  isDarkMode 
-                                    ? "bg-purple-600/10 border-purple-500/30 text-purple-300 hover:bg-purple-600/20" 
-                                    : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                                } disabled:opacity-50`}
-                              >
-                                {isVerifying ? (
-                                  <>
-                                    <div className="w-3.5 h-3.5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                                    <span>در حال تدوین گزارش ممیزی هوش مصنوعی...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Sparkles className="w-3.5 h-3.5 text-purple-500 animate-pulse" />
-                                    <span>📊 تولید گزارش ممیزی و تاییدیه درک هوش مصنوعی از سند (الزامی)</span>
-                                  </>
-                                )}
-                              </button>
-                            ) : (
-                              <div className={`p-4 rounded-xl border text-[11px] leading-relaxed transition-all ${
-                                isDarkMode 
-                                  ? "bg-purple-950/15 border-purple-900/40 text-slate-200" 
-                                  : "bg-purple-50/30 border-purple-100 text-slate-800"
-                              }`}>
-                                <div className="flex items-center justify-between gap-2 mb-2">
-                                  <div className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 font-extrabold text-[12px]">
-                                    <Sparkles className="w-4 h-4 animate-bounce" />
-                                    <span>گزارش درک و ممیزی نهایی سند توسط هوش مصنوعی:</span>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={handleVerifyInstructions}
-                                    disabled={isVerifying}
-                                    className={`px-2 py-0.5 rounded text-[9px] font-black transition-all ${
-                                      isDarkMode 
-                                        ? "bg-slate-900 hover:bg-slate-800 text-slate-400" 
-                                        : "bg-slate-100 hover:bg-slate-200 text-slate-600"
-                                    } cursor-pointer disabled:opacity-50`}
-                                  >
-                                    {isVerifying ? "..." : "🔄 به‌روزرسانی"}
-                                  </button>
-                                </div>
-                                <div className={`whitespace-pre-wrap max-h-40 overflow-y-auto mb-2 p-2.5 rounded-lg border text-[10.5px] font-medium leading-relaxed ${
-                                  isDarkMode ? "bg-slate-950 border-slate-850/60" : "bg-white border-slate-150"
-                                }`}>
-                                  {verificationSummary}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Confirmation Checkbox */}
-                            <div className={`p-3.5 rounded-2xl border transition-all ${
-                              isAiUnderstandingConfirmed 
-                                ? (isDarkMode ? "bg-emerald-500/10 border-emerald-500/30" : "bg-emerald-50 border-emerald-200") 
-                                : (isDarkMode ? "bg-amber-500/5 border-amber-500/20" : "bg-amber-50/50 border-amber-200")
-                            }`}>
-                              <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                                <input
-                                  type="checkbox"
-                                  checked={isAiUnderstandingConfirmed}
-                                  onChange={(e) => setIsAiUnderstandingConfirmed(e.target.checked)}
-                                  className="mt-0.5 w-4 h-4 rounded text-blue-600 focus:ring-blue-500/30 cursor-pointer"
-                                />
-                                <div className="flex flex-col gap-0.5">
-                                  <span className={`text-[11px] font-extrabold ${isAiUnderstandingConfirmed ? (isDarkMode ? "text-emerald-300" : "text-emerald-800") : (isDarkMode ? "text-amber-500" : "text-amber-800")}`}>
-                                    تاییدیه قطعی ممیزی و فهم ۱۰۰٪ سند توسط هوش مصنوعی
-                                  </span>
-                                  <span className={`text-[9.5px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                                    من تایید می‌کنم که هوش مصنوعی در تحلیل ممیزی فوق، اقلام، مبالغ، مالیات و الزامات این سند را کاملاً متوجه شده و مورد تایید اینجانب است.
-                                  </span>
-                                </div>
-                              </label>
-                            </div>
                           </div>
                         </div>
-
+                        
                         {/* Actions */}
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/60">
                           <button
@@ -4861,21 +4666,12 @@ export default function App() {
                               <button
                                 type="button"
                                 onClick={handleDirectExtraction}
-                                disabled={!isAiUnderstandingConfirmed}
-                                className={`px-5 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all ${
-                                  isAiUnderstandingConfirmed 
-                                    ? "bg-blue-600 hover:bg-blue-500 text-white shadow-md cursor-pointer hover:-translate-y-0.5" 
-                                    : "bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-500 cursor-not-allowed opacity-60"
-                                }`}
+                                className="px-5 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all bg-blue-600 hover:bg-blue-500 text-white shadow-md cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
                               >
                                 <Sparkles className="w-3.5 h-3.5 shrink-0 text-blue-200 animate-pulse" />
                                 <span>شروع استخراج نهایی</span>
                               </button>
-                              {!isAiUnderstandingConfirmed && (
-                                <span className={`text-[8.5px] font-black ${isDarkMode ? "text-amber-400/80" : "text-amber-600"}`}>
-                                  ⚠️ تاییدیه تفهیم هوش مصنوعی را در بالا علامت بزنید.
-                                </span>
-                              )}
+
                             </div>
                           </div>
                         </div>
