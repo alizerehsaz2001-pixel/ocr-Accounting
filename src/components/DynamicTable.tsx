@@ -31,6 +31,7 @@ export default function DynamicTable({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<TransactionItem | null>(null);
   const [highlightedRowIds, setHighlightedRowIds] = useState<Record<string, "new" | "edited">>({});
+  const [justConfirmedId, setJustConfirmedId] = useState<string | null>(null);
   const prevTransactionsRef = useRef<TransactionItem[]>(transactions);
 
   useEffect(() => {
@@ -113,14 +114,37 @@ export default function DynamicTable({
     setEditingData({ ...editingData, [key]: value });
   };
 
+  const handleConfirmRowAccuracy = (originalIndex: number, trId: string) => {
+    const updated = [...transactions];
+    updated[originalIndex] = {
+      ...updated[originalIndex],
+      ضریب_اطمینان: 100
+    };
+    onUpdateTransactions(updated);
+    setJustConfirmedId(trId);
+    setTimeout(() => {
+      setJustConfirmedId(null);
+    }, 1200);
+    onLogEvent("تایید صحت ردیف", `کاربر صحت داده‌های ردیف ${originalIndex + 1} را به ۱۰۰٪ ارتقا داد.`);
+    onShowNotification(`صحت ردیف ${originalIndex + 1} با موفقیت تایید و تثبیت شد 🛡️`, "success");
+  };
+
   const handleSaveRow = (originalIndex: number) => {
     if (!editingData) return;
     const updated = [...transactions];
+    const isPromotedToVerified = (editingData.ضریب_اطمینان ?? 100) === 100;
     updated[originalIndex] = editingData;
     onUpdateTransactions(updated);
+    if (editingData.id) {
+      setJustConfirmedId(editingData.id);
+      setTimeout(() => {
+        setJustConfirmedId(null);
+      }, 1200);
+    }
     setEditingIndex(null);
     setEditingData(null);
     onLogEvent("ویرایش دستی", `کاربر ردیف ${originalIndex + 1} را ویرایش کرد.`);
+    onShowNotification("تغییرات ردیف با موفقیت تایید و ذخیره شد.", "success");
   };
 
   const inputClass = `w-full text-[11px] px-1.5 py-1 rounded border outline-none font-sans ${
@@ -180,14 +204,27 @@ export default function DynamicTable({
             const isSelected = selectedRowIds.includes(tr.id);
             const isHighlighted = highlightedRowIds[tr.id];
             
+            const isJustConfirmed = justConfirmedId === tr.id;
+
             return (
               <motion.tr
                 key={tr.id || index}
                 initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
+                animate={
+                  isJustConfirmed
+                    ? { scale: [0.96, 1.035, 1], opacity: [0.6, 1] }
+                    : { opacity: 1, y: 0, scale: 1 }
+                }
+                transition={
+                  isJustConfirmed
+                    ? { duration: 0.5, ease: "easeOut" }
+                    : { duration: 0.25 }
+                }
                 exit={{ opacity: 0, y: -20 }}
                 className={`group hover:relative hover:z-10 hover:-translate-y-0.5 hover:scale-[1.002] hover:shadow-lg ${isSelected ? (isDarkMode ? "bg-blue-900/20" : "bg-blue-50/50") : ""} ${
-                  isHighlighted
+                  isJustConfirmed
+                    ? "bg-emerald-500/25 ring-2 ring-emerald-500/60 shadow-lg text-emerald-950 dark:text-emerald-100 transition-all duration-300"
+                    : isHighlighted
                     ? isHighlighted === "new"
                       ? isDarkMode
                         ? "bg-emerald-500/15 text-emerald-200 border-r-4 border-r-emerald-500 transition-none"
@@ -258,13 +295,24 @@ export default function DynamicTable({
                       {index + 1}
                     </td>
                     <td className="px-3 py-3.5 text-center border-b border-l border-slate-200/60 dark:border-slate-800/75">
-                      <div className="flex items-center justify-center gap-1.5 shrink-0" title={score === 100 ? "تأیید نهایی شده" : "پیش‌نویس استخراج (نیاز به بازبینی)"}>
+                      <div 
+                        onClick={(e) => {
+                          if (score < 100) {
+                            e.stopPropagation();
+                            handleConfirmRowAccuracy(originalIndex, tr.id);
+                          }
+                        }}
+                        className={`flex items-center justify-center gap-1.5 shrink-0 rounded-lg p-1 transition-all ${
+                          score < 100 ? "cursor-pointer hover:bg-emerald-500/10 hover:scale-105 active:scale-95" : "cursor-help"
+                        }`} 
+                        title={score === 100 ? "تأیید نهایی شده" : "کلیک کنید جهت تأیید سریع صحت و ارتقا به ۱۰۰٪"}
+                      >
                         {score === 100 ? (
-                          <ShieldCheck className="h-5 w-5 text-emerald-500 fill-emerald-500/5 cursor-help" />
+                          <ShieldCheck className="h-5 w-5 text-emerald-500 fill-emerald-500/5" />
                         ) : (
-                          <Shield className="h-5 w-5 text-amber-500 fill-amber-500/5 cursor-help" />
+                          <Shield className="h-5 w-5 text-amber-500 fill-amber-500/5 animate-pulse hover:text-emerald-500" />
                         )}
-                        <span className="text-xs text-slate-500 dark:text-slate-400 font-bold">{score}٪</span>
+                        <span className={`text-xs font-bold ${score === 100 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-500"}`}>{score}٪</span>
                       </div>
                     </td>
                     {columns.map(col => {
@@ -282,9 +330,28 @@ export default function DynamicTable({
                       );
                     })}
                     <td className="px-3 py-3.5 text-center border-b border-slate-200/60 dark:border-slate-800/75 last:rounded-l-xl">
-                       <button onClick={(e) => { e.stopPropagation(); setEditingIndex(originalIndex); setEditingData(tr); }} className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-bold text-[11px] flex items-center justify-center gap-1 mx-auto bg-blue-50 dark:bg-blue-500/10 px-2 py-1 rounded-lg">
-                          <FileEdit className="w-3.5 h-3.5"/> ویرایش
-                       </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        {score < 100 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConfirmRowAccuracy(originalIndex, tr.id);
+                            }}
+                            className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 font-bold text-[11px] flex items-center gap-1 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-xs active:scale-95"
+                            title="تأیید صحت داده‌های این ردیف (ارتقا به ۱۰۰٪)"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>تأیید</span>
+                          </button>
+                        )}
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); setEditingIndex(originalIndex); setEditingData(tr); }} 
+                          className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-bold text-[11px] flex items-center justify-center gap-1 bg-blue-50 dark:bg-blue-500/10 px-2 py-1 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-all cursor-pointer"
+                        >
+                          <FileEdit className="w-3.5 h-3.5"/> 
+                          <span>ویرایش</span>
+                        </button>
+                      </div>
                     </td>
                   </>
                 )}
