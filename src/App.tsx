@@ -4113,7 +4113,7 @@ export default function App() {
             })}
           </div>
 
-          <div className="px-3 py-1 mt-3 pb-6">
+          <div className="px-3 py-1 mt-3 pb-6 space-y-3">
             <button
               onClick={() => {
                 setModelQuotas({
@@ -4131,6 +4131,19 @@ export default function App() {
               <RotateCcw className="h-3.5 w-3.5" />
               <span>ریست محدودیت و ظرفیت‌ها</span>
             </button>
+
+            {/* Signature Credits Badge */}
+            <div className={`pt-3 border-t text-center ${isDarkMode ? "border-slate-800/80" : "border-slate-200/80"}`}>
+              <div className="inline-flex flex-col items-center gap-0.5 text-[10px] font-sans">
+                <span className={`font-semibold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                  <Sparkles className="w-3 h-3 text-purple-400 animate-pulse" />
+                  Powered by <span className="font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400">Gemini</span>
+                </span>
+                <span className={`text-[9.5px] font-medium ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                  Designed by <span className="font-bold text-indigo-400 dark:text-indigo-300">Ali Zerehsaz</span>
+                </span>
+              </div>
+            </div>
           </div>
         </nav>
       </aside>
@@ -4170,6 +4183,18 @@ export default function App() {
               <span>
                 {activeFile?.status === "processing" ? "در حال تحلیل هوشمند..." : "آماده تفکیک خودکار اسناد"}
               </span>
+            </span>
+
+            {/* Header Credit Badge */}
+            <span className={`hidden lg:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-sans border transition-all ${
+              isDarkMode 
+                ? "bg-slate-900/60 border-slate-800/90 text-slate-300" 
+                : "bg-slate-50 border-slate-200/90 text-slate-600"
+            }`}>
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              <span>Powered by <strong className="font-bold text-indigo-400">Gemini</strong></span>
+              <span className="opacity-40">•</span>
+              <span>Designed by <strong className="font-bold text-blue-500">Ali Zerehsaz</strong></span>
             </span>
           </div>
 
