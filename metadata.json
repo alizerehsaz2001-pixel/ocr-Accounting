@@ -1,6 +1,6 @@
 {
-  "name": "ocr Accounting",
-  "description": "An AI-powered OCR and comprehensive ERP financial system featuring Treasury, Cheque Management, Bank Reconciliation, and Petty Cash modules.",
+  "name": "زره اسکن (ZerehScan)",
+  "description": "سیستم هوشمند اسکن OCR، استخراج خودکار و حسابداری اسناد مالی - توسعه یافته توسط علی زره‌ساز",
   "requestFramePermissions": ["camera", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
