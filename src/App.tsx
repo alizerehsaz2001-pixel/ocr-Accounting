@@ -75,6 +75,11 @@ import {
   Bot,
   Headphones,
   UserX,
+  Bell,
+  RefreshCw,
+  Laptop,
+  Smartphone,
+  Cloud,
   Tag,
   ShieldAlert,
   Copy,
@@ -1980,7 +1985,13 @@ export default function App() {
 
   const [dragActive, setDragActive] = useState(false);
     const [isUserPanelOpen, setIsUserPanelOpen] = useState(false);
-  const [userPanelTab, setUserPanelTab] = useState<"profile" | "api" | "general" | "ai">("profile");
+    const [userPanelTab, setUserPanelTab] = useState<"profile" | "api" | "general" | "security" | "notifications" | "ai">("profile");
+  const [securityPass, setSecurityPass] = useState({ current: "", newPass: "", confirm: "" });
+  const [is2FAActive, setIs2FAActive] = useState(false);
+  const [userNotificationSettings, setUserNotificationSettings] = useState({ emailAlerts: true, smsDiscrepancy: true, weeklyReport: true, autoCloudBackup: "daily" });
+  const [isSyncingCloudManager, setIsSyncingCloudManager] = useState(false);
+  const [fileManagerSearch, setFileManagerSearch] = useState("");
+  const [fileManagerFormatFilter, setFileManagerFormatFilter] = useState<"all" | "pdf" | "image">("all");
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [adminPanelTab, setAdminPanelTab] = useState<"users" | "data" | "system" | "danger">("users");
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
@@ -7707,6 +7718,39 @@ export default function App() {
                           </button>
                         </div>
 
+                        {/* Cloud Quota Card */}
+                        <div className={`p-5 rounded-2xl mt-6 border ${isDarkMode ? "bg-gradient-to-r from-indigo-950/40 to-slate-900 border-indigo-500/20 text-slate-200" : "bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-100 text-slate-800"}`}>
+                          <div className="flex items-center justify-between flex-wrap gap-4">
+                            <div className="flex items-center gap-3">
+                              <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                                <HardDrive className="w-6 h-6" />
+                              </div>
+                              <div>
+                                <span className="text-xs font-black block">ظرفیت اختصاصی فضای ابری</span>
+                                <span className="text-[11px] opacity-75">
+                                  {5 + (currentUser?.extraStorage || 0)} گیگابایت (۵GB اصلی + {currentUser?.extraStorage || 0}GB اختصاصی هدیه)
+                                </span>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                if (currentUser) {
+                                  const updatedExtra = (currentUser.extraStorage || 0) + 5;
+                                  setCurrentUser({ ...currentUser, extraStorage: updatedExtra });
+                                  setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, extraStorage: updatedExtra } : u));
+                                  showNotification("۵ گیگابایت فضای ابری هدیه به حساب شما افزوده شد ☁️", "success");
+                                  logEvent("ارتقای فضای ابری", "کاربر ۵ گیگابایت فضای ابری هدیه دریافت کرد.");
+                                }
+                              }}
+                              className="px-4 py-2.5 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4" />
+                              درخواست ۵GB فضای ابری هدیه
+                            </button>
+                          </div>
+                        </div>
+
                         <div className={`grid grid-cols-2 gap-4 p-5 rounded-2xl mt-6 ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
                            <div className="flex flex-col gap-1.5">
                              <span className={`text-[10px] font-black uppercase tracking-wider ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>سطح دسترسی (Role)</span>
@@ -8831,11 +8875,39 @@ export default function App() {
             isDarkMode ? "bg-[#0b1120] border border-slate-800 text-slate-200 shadow-black/50" : "bg-white border border-slate-200 text-slate-800 shadow-slate-200/50"
           }`} dir="rtl">
             <div className={`px-6 py-4 border-b flex items-center justify-between shrink-0 ${isDarkMode ? "bg-[#0b1120]/80 border-slate-800/80" : "bg-white/80 border-slate-100"}`}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${isDarkMode ? "bg-slate-800/50 text-indigo-400" : "bg-slate-100 text-indigo-600"}`}>
-                  <HardDrive className="h-5 w-5" />
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${isDarkMode ? "bg-slate-800/50 text-indigo-400" : "bg-slate-100 text-indigo-600"}`}>
+                    <HardDrive className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-[15px] leading-tight">مدیریت اسناد و فضای ابری</h3>
+                    <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                      پایگاه ابری زره‌اسکن متصل و همگام
+                    </span>
+                  </div>
                 </div>
-                <h3 className="font-bold text-[15px]">مدیریت اسناد و فضای ابری</h3>
+
+                <button
+                  onClick={() => {
+                    setIsSyncingCloudManager(true);
+                    setTimeout(() => {
+                      setIsSyncingCloudManager(false);
+                      showNotification("همگام‌سازی ابری کلیه اسناد و دیتابیس ERP با موفقیت انجام شد ☁️", "success");
+                      logEvent("همگام‌سازی دستی ابر", "پشتیبان‌گیری کامل از کلیه اسناد روی فضای ابری اجرا شد.");
+                    }, 1200);
+                  }}
+                  disabled={isSyncingCloudManager}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-2 cursor-pointer ${
+                    isDarkMode 
+                      ? "bg-indigo-950/50 border-indigo-500/30 text-indigo-300 hover:bg-indigo-900/60" 
+                      : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                  }`}
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingCloudManager ? "animate-spin text-indigo-500" : ""}`} />
+                  <span>{isSyncingCloudManager ? "در حال پشتیبان‌گیری..." : "همگام‌سازی ابری یکپارچه"}</span>
+                </button>
               </div>
               <button 
                 onClick={() => setIsFileManagerOpen(false)}
@@ -9115,8 +9187,24 @@ export default function App() {
                           <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`}>
                             <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.max(2, percentUsed)}%` }} />
                           </div>
-                          <div className="w-full text-left mt-1">
-                            <span className="text-[8px] opacity-40">{percentUsed.toFixed(1)}% از {(5 + (currentUser?.extraStorage || 0))}GB</span>
+                          <div className="w-full flex items-center justify-between mt-1">
+                            <span className="text-[8px] opacity-60 font-mono">{percentUsed.toFixed(1)}% از {(5 + (currentUser?.extraStorage || 0))}GB</span>
+                            <button
+                              onClick={() => {
+                                if (currentUser) {
+                                  const updatedExtra = (currentUser.extraStorage || 0) + 5;
+                                  setCurrentUser({ ...currentUser, extraStorage: updatedExtra });
+                                  setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, extraStorage: updatedExtra } : u));
+                                  showNotification("۵ گیگابایت فضای ابری اضافی دریافت شد ☁️", "success");
+                                  logEvent("ارتقای فضای ابری", "۵ گیگابایت به فضای ابری اضافه شد.");
+                                }
+                              }}
+                              className="text-[9px] font-black text-indigo-500 hover:underline flex items-center gap-0.5 cursor-pointer"
+                              title="افزایش ۵ گیگابایت فضای ابری هدیه"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                              ارتقای ابر
+                            </button>
                           </div>
                         </div>
                       </div>
