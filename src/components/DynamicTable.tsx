@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShieldCheck, Shield, FileEdit, Check, ArrowUpDown, Calendar, AlertTriangle, CheckSquare, Square } from "lucide-react";
 import { TransactionItem, DynamicColumn } from "../types";
+import { numToWordsFa, toPersianDigits, isMonetaryKey } from "../utils/numberToPersianWords";
 
 interface DynamicTableProps {
   transactions: TransactionItem[];
@@ -161,40 +162,46 @@ export default function DynamicTable({
   const totalCredit = sortedTransactions.reduce((sum, tr) => sum + (Number(tr.مبلغ_بستانکار) || 0), 0);
 
   return (
-    <table className="w-full text-right border-collapse text-xs">
-      <thead className={`text-[10px] uppercase font-black sticky top-0 z-30 transition-colors duration-300 ${isDarkMode ? "text-slate-350" : "text-slate-500"}`}>
-        <tr>
-          {hasSelectionSupport && (
-            <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-100/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none w-10`}>
-              <button onClick={onToggleSelectAll} className="outline-none">
-                {allSelected ? <CheckSquare className="w-4 h-4 text-blue-500" /> : isIndeterminate ? <CheckSquare className="w-4 h-4 text-slate-400 opacity-60" /> : <Square className="w-4 h-4 opacity-40 hover:opacity-100" />}
-              </button>
+    <div className="w-full overflow-x-auto">
+      <table className="w-full min-w-[950px] text-right border-collapse text-xs font-sans">
+        <thead className={`text-[10.5px] uppercase font-black sticky top-0 z-30 transition-colors duration-300 ${isDarkMode ? "text-slate-300 bg-slate-900" : "text-slate-600 bg-slate-100"}`}>
+          <tr>
+            {hasSelectionSupport && (
+              <th className={`px-3 py-3.5 text-center sticky top-0 z-30 bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none w-10 shrink-0`}>
+                <button onClick={onToggleSelectAll} className="outline-none cursor-pointer">
+                  {allSelected ? <CheckSquare className="w-4 h-4 text-blue-500" /> : isIndeterminate ? <CheckSquare className="w-4 h-4 text-slate-400 opacity-60" /> : <Square className="w-4 h-4 opacity-40 hover:opacity-100" />}
+                </button>
+              </th>
+            )}
+            <th className={`px-3 py-3.5 text-center sticky top-0 z-30 bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none w-12 shrink-0`}>
+              #
             </th>
-          )}
-          <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-100/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none`}>
-            #
-          </th>
-          <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-100/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none`}>
-            دقت
-          </th>
-          {columns.map(col => (
-            <th 
-              key={col.کلید}
-              onClick={() => handleSort(col.کلید)}
-              className={`px-3 py-3 sticky top-0 z-30 bg-slate-100/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-100/70 dark:hover:bg-slate-800/70 hover:text-blue-600 dark:hover:text-blue-400 transition-colors`}
-              title={`مرتب‌سازی بر اساس ${col.عنوان}`}
-            >
-              <div className="flex items-center gap-1.5 font-bold">
-                <span>{col.عنوان}</span>
-                {renderSortIcon(col.کلید)}
-              </div>
+            <th className={`px-3 py-3.5 text-center sticky top-0 z-30 bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none w-16 shrink-0`}>
+              دقت
             </th>
-          ))}
-          <th className={`px-3 py-3 text-center sticky top-0 z-30 bg-slate-50/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} font-bold`}>
-            عملیات
-          </th>
-        </tr>
-      </thead>
+            {columns.map(col => {
+              const isLongText = col.کلید.includes("شرح") || col.کلید.includes("طرف_حساب") || col.کلید.includes("description") || col.کلید.includes("name");
+              return (
+                <th 
+                  key={col.کلید}
+                  onClick={() => handleSort(col.کلید)}
+                  className={`px-4 py-3.5 sticky top-0 z-30 bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} cursor-pointer select-none group hover:bg-slate-200/60 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 transition-colors ${
+                    isLongText ? "min-w-[200px]" : "min-w-[120px]"
+                  }`}
+                  title={`مرتب‌سازی بر اساس ${col.عنوان}`}
+                >
+                  <div className="flex items-center gap-1.5 font-black whitespace-nowrap">
+                    <span>{col.عنوان}</span>
+                    {renderSortIcon(col.کلید)}
+                  </div>
+                </th>
+              );
+            })}
+            <th className={`px-4 py-3.5 text-center sticky top-0 z-30 bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_1px_2px_rgba(0,0,0,0.03)] border-b ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} font-black min-w-[120px] shrink-0`}>
+              عملیات
+            </th>
+          </tr>
+        </thead>
       <tbody className="divide-y divide-slate-200 dark:divide-slate-800 relative">
         <AnimatePresence mode="popLayout">
           {sortedTransactions.map((tr, index) => {
@@ -318,18 +325,49 @@ export default function DynamicTable({
                     {columns.map(col => {
                       const val = tr[col.کلید];
                       const isNumber = col.نوع_داده === 'number';
-                      const isAmount = col.کلید.includes("مبلغ") || col.کلید.includes("amount");
+                      const isMonetary = isMonetaryKey(col.کلید);
+                      const isWordCol = col.کلید.endsWith("_به_حروف");
+                      const isLongText = col.کلید.includes("شرح") || col.کلید.includes("طرف_حساب") || col.کلید.includes("description") || col.کلید.includes("name");
+                      
+                      let numVal: number | null = null;
+                      if (val !== undefined && val !== null && val !== "") {
+                        if (typeof val === 'number') numVal = val;
+                        else {
+                          const parsed = Number(String(val).replace(/,/g, ""));
+                          if (!isNaN(parsed)) numVal = parsed;
+                        }
+                      }
+
+                      const wordsText = (numVal !== null && numVal >= 10 && isMonetary) ? numToWordsFa(numVal) : null;
+
                       return (
-                        <td key={col.کلید} className={`px-3 py-3.5 border-b border-l border-slate-200/60 dark:border-slate-800/75 max-w-[200px] truncate text-slate-700 dark:text-slate-300 text-[11.5px] font-semibold ${isNumber ? "font-mono" : ""}`}>
-                           {isNumber && val ? (
-                             <span className={isAmount ? (Number(val) > 0 ? (col.کلید.includes("بدهکار") ? (isDarkMode ? "text-emerald-400" : "text-emerald-600") : (isDarkMode ? "text-rose-400" : "text-rose-600")) : "") : ""}>
-                               {Number(val).toLocaleString("fa-IR")}
+                        <td 
+                          key={col.کلید} 
+                          className={`px-4 py-3.5 border-b border-l border-slate-200/60 dark:border-slate-800/75 text-slate-800 dark:text-slate-200 text-[12px] font-semibold leading-relaxed ${
+                            isNumber || isMonetary ? "font-mono whitespace-nowrap text-left" : isLongText ? "min-w-[220px] max-w-[380px] break-words" : "whitespace-nowrap"
+                          }`}
+                          title={wordsText ? `${numToWordsFa(numVal!)} ریال` : (typeof val === 'string' ? val : undefined)}
+                        >
+                           {isWordCol ? (
+                             <span className={`text-[11px] font-sans font-medium px-2 py-0.5 rounded ${isDarkMode ? "bg-blue-950/40 text-blue-300 border border-blue-800/50" : "bg-blue-50 text-blue-800 border border-blue-200"}`}>
+                               {val ? String(val) : "-"}
                              </span>
-                           ) : (val || "-")}
+                           ) : (isNumber || isMonetary) && numVal !== null ? (
+                             <div className="flex flex-col items-start gap-0.5" dir="rtl">
+                               <span className={`font-mono font-bold ${col.کلید.includes("بدهکار") ? (isDarkMode ? "text-emerald-400" : "text-emerald-600") : col.کلید.includes("بستانکار") ? (isDarkMode ? "text-rose-400" : "text-rose-600") : ""}`}>
+                                 {toPersianDigits(numVal.toLocaleString("en-US"))}
+                               </span>
+                               {wordsText && (
+                                 <span className={`text-[10px] font-sans font-normal opacity-80 leading-tight ${isDarkMode ? "text-blue-300" : "text-slate-600"}`}>
+                                   {wordsText} ریال
+                                 </span>
+                               )}
+                             </div>
+                           ) : (val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "-")}
                         </td>
                       );
                     })}
-                    <td className="px-3 py-3.5 text-center border-b border-slate-200/60 dark:border-slate-800/75 last:rounded-l-xl">
+                    <td className="px-4 py-3.5 text-center border-b border-slate-200/60 dark:border-slate-800/75 last:rounded-l-xl whitespace-nowrap">
                       <div className="flex items-center justify-center gap-1.5">
                         {score < 100 && (
                           <button
@@ -346,7 +384,7 @@ export default function DynamicTable({
                         )}
                         <button 
                           onClick={(e) => { e.stopPropagation(); setEditingIndex(originalIndex); setEditingData(tr); }} 
-                          className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-bold text-[11px] flex items-center justify-center gap-1 bg-blue-50 dark:bg-blue-500/10 px-2 py-1 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-all cursor-pointer"
+                          className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-bold text-[11px] flex items-center justify-center gap-1 bg-blue-50 dark:bg-blue-500/10 px-2.5 py-1 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-all cursor-pointer"
                         >
                           <FileEdit className="w-3.5 h-3.5"/> 
                           <span>ویرایش</span>
@@ -360,24 +398,50 @@ export default function DynamicTable({
           })}
         </AnimatePresence>
       </tbody>
-      <tfoot className={`sticky bottom-0 z-20 shadow-[0_-1px_2px_rgba(0,0,0,0.03)] backdrop-blur-md ${isDarkMode ? "bg-slate-900/95" : "bg-slate-50/95"}`}>
+      <tfoot className={`sticky bottom-0 z-20 shadow-[0_-1px_2px_rgba(0,0,0,0.03)] backdrop-blur-md ${isDarkMode ? "bg-slate-900/95 text-slate-200" : "bg-slate-50/95 text-slate-800"}`}>
         <tr>
-          <td colSpan={hasSelectionSupport ? 3 : 2} className={`px-3 py-3 text-left font-black border-t border-l ${isDarkMode ? "border-slate-700 text-slate-300" : "border-slate-200 text-slate-600"}`}>
+          <td colSpan={hasSelectionSupport ? 3 : 2} className={`px-4 py-3.5 text-left font-black border-t border-l ${isDarkMode ? "border-slate-700 text-slate-300" : "border-slate-200 text-slate-600"}`}>
             جمع کل صفحه:
           </td>
           {columns.map(col => {
             let footerContent: React.ReactNode = "";
-            if (col.کلید === "مبلغ_بدهکار") footerContent = <span className={`font-mono ${isDarkMode ? "text-emerald-400" : "text-emerald-600"}`}>{totalDebit.toLocaleString("fa-IR")}</span>;
-            else if (col.کلید === "مبلغ_بستانکار") footerContent = <span className={`font-mono ${isDarkMode ? "text-rose-400" : "text-rose-600"}`}>{totalCredit.toLocaleString("fa-IR")}</span>;
+            if (col.کلید === "مبلغ_بدهکار") {
+              footerContent = (
+                <div className="flex flex-col items-start gap-0.5" dir="rtl">
+                  <span className={`font-mono font-black ${isDarkMode ? "text-emerald-400" : "text-emerald-600"}`}>
+                    {toPersianDigits(totalDebit.toLocaleString("en-US"))} ریال
+                  </span>
+                  {totalDebit > 0 && (
+                    <span className="text-[10px] font-sans font-normal text-emerald-500">
+                      ({numToWordsFa(totalDebit)} ریال)
+                    </span>
+                  )}
+                </div>
+              );
+            } else if (col.کلید === "مبلغ_بستانکار") {
+              footerContent = (
+                <div className="flex flex-col items-start gap-0.5" dir="rtl">
+                  <span className={`font-mono font-black ${isDarkMode ? "text-rose-400" : "text-rose-600"}`}>
+                    {toPersianDigits(totalCredit.toLocaleString("en-US"))} ریال
+                  </span>
+                  {totalCredit > 0 && (
+                    <span className="text-[10px] font-sans font-normal text-rose-500">
+                      ({numToWordsFa(totalCredit)} ریال)
+                    </span>
+                  )}
+                </div>
+              );
+            }
             return (
-              <td key={col.کلید} className={`px-3 py-3 font-bold border-t border-l ${isDarkMode ? "border-slate-700" : "border-slate-200"}`}>
+              <td key={col.کلید} className={`px-4 py-3.5 font-bold border-t border-l ${isDarkMode ? "border-slate-700" : "border-slate-200"}`}>
                 {footerContent}
               </td>
             );
           })}
-          <td className={`px-3 py-3 border-t ${isDarkMode ? "border-slate-700" : "border-slate-200"}`}></td>
+          <td className={`px-4 py-3.5 border-t ${isDarkMode ? "border-slate-700" : "border-slate-200"}`}></td>
         </tr>
       </tfoot>
     </table>
+  </div>
   );
 }
