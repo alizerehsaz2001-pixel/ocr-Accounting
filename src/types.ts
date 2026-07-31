@@ -39,6 +39,7 @@ export interface DocumentExtractionSettings {
   erpDestinationModule: string;
   strictnessMode: "balanced" | "speed" | "audit";
   customPrompt: string;
+  pdfExtractionStrategy?: "direct" | "pdf_to_markdown_to_json";
   savedAt?: number;
 }
 
@@ -54,6 +55,7 @@ export interface UploadedFile {
   documentType?: string;
   mimeType?: string;
   documentAnalysis?: string;
+  markdownContent?: string;
   tokensUsed?: number;
   tokenDetails?: {
     promptTokenCount?: number;

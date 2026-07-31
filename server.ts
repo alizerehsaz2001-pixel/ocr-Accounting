@@ -227,7 +227,7 @@ async function generateContentWithRetry(
 // Persian/Farsi financial documents extraction endpoint
 app.post("/api/extract", async (req, res) => {
   try {
-    const { image, mimeType, model, tokenSettings, userPrompt, chatFiles } = req.body;
+    const { image, mimeType, model, tokenSettings, userPrompt, chatFiles, pdfExtractionStrategy } = req.body;
 
     if (!image) {
        res.status(400).json({ error: "تصویر سند ارسال نشده است." });
@@ -360,6 +360,45 @@ app.post("/api/extract", async (req, res) => {
         data: image, // base64 string
       },
     };
+
+    let markdownText: string | null = null;
+    const isPdfFile = mimeType === "application/pdf" || (mimeType && mimeType.includes("pdf"));
+    const shouldRunPdfToMarkdown = pdfExtractionStrategy === "pdf_to_markdown_to_json" || (isPdfFile && pdfExtractionStrategy !== "direct");
+
+    if (shouldRunPdfToMarkdown) {
+      try {
+        console.info("[PDF-to-Markdown OCR] Step 1: Converting PDF/Document to structured Markdown text...");
+        const markdownConversionPrompt = `شما یک موتور تبدیل اسناد چندصفحه‌ای و OCR ساختاری پیشرفته هستید.
+وظیفه شما تبدیل دقیق، کامل و خط به خط کلیه متون، جداول و مندرجات این سند/PDF به فرمت متنی غنی و ساختاریافته Markdown است.
+
+قواعد حیاتی تبدیل PDF به Markdown:
+۱. تمام جداول و سطرهای فاکتور را دقیقاً در قالب جداول استاندارد Markdown (مانند | ستون ۱ | ستون ۲ |) بازنویسی کنید.
+۲. تمامی عناوین، کدهای اقتصادی، شناسه‌های ملی، شماره فاکتور، تاریخ‌ها، آدرس‌ها، تلفن‌ها، مبالغ، تخفیف‌ها، مالیات و توضیحات را بدون حذف قید نمایید.
+۳. دست‌نوشته‌ها، مهرها و حاشیه‌نویسی‌ها را با برچسب [حاشیه‌نویسی/مهر] استخراج کنید.
+۴. تمامی اعداد فارسی را بازنویسی کنید.
+۵. پاسخ فقط و فقط متن نهایی Markdown بدون توضیحات اضافی باشد.`;
+
+        const mdConfig = {
+          model: selectedModel,
+          contents: {
+            parts: [
+              imagePart,
+              { text: markdownConversionPrompt }
+            ]
+          }
+        };
+
+        const mdResponse = await generateContentWithRetry(ai, mdConfig);
+        if (mdResponse && mdResponse.text && mdResponse.text.trim()) {
+          markdownText = mdResponse.text.trim();
+          console.info(`[PDF-to-Markdown OCR] Step 1 Succeeded! Generated Markdown (${markdownText.length} chars).`);
+          
+          promptText = `[متن ساختاریافته Markdown استخراج‌شده اولیه از سند/PDF جهت تحلیل دقیق]:\n\`\`\`markdown\n${markdownText}\n\`\`\`\n\n${promptText}\n\nنکته اکید: لطفاً اطلاعات مالی را هم بر اساس متن Markdown فوق‌العاده دقیق فوق و هم تصویر اصلی سند تحلیل و استخراج نمایید.`;
+        }
+      } catch (mdErr) {
+        console.warn("[PDF-to-Markdown OCR] Step 1 conversion encountered an error, falling back to direct pass:", mdErr);
+      }
+    }
 
     const textPart = {
       text: promptText,
@@ -525,7 +564,14 @@ ${JSON.stringify(parsedData)}
       cachedContentTokenCount: response.usageMetadata?.cachedContentTokenCount || 0,
     };
 
-    res.json({ success: true, data: parsedData, tokensUsed, tokenDetails });
+    res.json({ 
+      success: true, 
+      data: parsedData, 
+      markdownContent: markdownText || undefined,
+      extractionMethod: markdownText ? "pdf_to_markdown_to_json" : "direct",
+      tokensUsed, 
+      tokenDetails 
+    });
   } catch (error: any) {
     console.error("API Error in extraction:", error);
     res.status(500).json({ success: false, error: error.message || "خطای ناشناخته در پردازش فایل" });

@@ -43,6 +43,7 @@ export interface BatchOCRProgressItem {
   startTime: number;
   endTime?: number;
   folder?: string;
+  markdownContent?: string;
   modelUsed?: string;
   confidenceScore?: number;
   documentType?: string;

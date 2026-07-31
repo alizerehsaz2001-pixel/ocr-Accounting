@@ -28,6 +28,8 @@ interface AiSettingsModalProps {
   setStrictnessMode: (mode: "balanced" | "speed" | "audit") => void;
   customPrompt: string;
   setCustomPrompt: (prompt: string) => void;
+  pdfExtractionStrategy?: "direct" | "pdf_to_markdown_to_json";
+  setPdfExtractionStrategy?: (strategy: "direct" | "pdf_to_markdown_to_json") => void;
   pendingFiles: Array<{
     base64: string;
     name: string;
@@ -55,6 +57,8 @@ export default function AiSettingsModal({
   setStrictnessMode,
   customPrompt,
   setCustomPrompt,
+  pdfExtractionStrategy = "pdf_to_markdown_to_json",
+  setPdfExtractionStrategy,
   pendingFiles,
   setPendingFiles,
   onUploadClick,
@@ -310,6 +314,82 @@ export default function AiSettingsModal({
                    <option value="balanced">حالت متعادل و خودکار (Balanced)</option>
                    <option value="audit">ممیزی موشکافانه و سخت‌گیرانه (Strict Audit)</option>
                 </select>
+              </div>
+
+              {/* PDF Extraction Strategy (PDF -> Markdown -> JSON) */}
+              <div className={`flex flex-col gap-2.5 md:col-span-2 p-3.5 rounded-2xl border transition-all ${
+                isDarkMode 
+                  ? "bg-indigo-950/20 border-indigo-500/30 text-slate-100" 
+                  : "bg-indigo-50/50 border-indigo-200 text-slate-800"
+              }`}>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <label className={`text-[11.5px] font-black flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                    <FileText className="w-4 h-4 text-indigo-500 animate-pulse shrink-0" />
+                    تنظیمات اختصاصی آپلود PDF (افزایش هوشمند دقت استخراج):
+                  </label>
+                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-extrabold bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-indigo-500" />
+                    ویژه اسناد و فاکتورهای PDF
+                  </span>
+                </div>
+
+                <p className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                  جهت دستیابی به حداکثر دقت در استخراج جداول و متون اسناد PDF، می‌توانید فرآیند تبدیل اولیه‌ی PDF به متن ساختاریافته Markdown و سپس تحلیل و استخراج JSON را فعال نمایید.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setPdfExtractionStrategy?.("pdf_to_markdown_to_json")}
+                    className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between gap-1.5 cursor-pointer relative ${
+                      pdfExtractionStrategy === "pdf_to_markdown_to_json"
+                        ? isDarkMode
+                          ? "bg-indigo-600/25 border-indigo-500 text-white shadow-md ring-1 ring-indigo-500/50"
+                          : "bg-white border-indigo-500 text-indigo-950 shadow-md ring-1 ring-indigo-500/30"
+                        : isDarkMode
+                          ? "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+                          : "bg-white/80 border-slate-200 text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-[11px] font-black flex items-center gap-1.5">
+                        <span>📝 تبدیل PDF به Markdown ⬅️ استخراج JSON</span>
+                      </span>
+                      {pdfExtractionStrategy === "pdf_to_markdown_to_json" && (
+                        <CheckCircle className="w-4 h-4 text-indigo-500 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-[9.5px] leading-relaxed opacity-80">
+                      پیرامون اسناد چندصفحه‌ای و فاکتورها، ابتدا ساختار Markdown دقیق شکل گرفته و سپس به JSON تبدیل می‌گردد (حداکثر دقت).
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPdfExtractionStrategy?.("direct")}
+                    className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between gap-1.5 cursor-pointer relative ${
+                      pdfExtractionStrategy === "direct"
+                        ? isDarkMode
+                          ? "bg-indigo-600/25 border-indigo-500 text-white shadow-md ring-1 ring-indigo-500/50"
+                          : "bg-white border-indigo-500 text-indigo-950 shadow-md ring-1 ring-indigo-500/30"
+                        : isDarkMode
+                          ? "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+                          : "bg-white/80 border-slate-200 text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-[11px] font-black flex items-center gap-1.5">
+                        <span>📷 استخراج مستقیم تصویری PDF به JSON</span>
+                      </span>
+                      {pdfExtractionStrategy === "direct" && (
+                        <CheckCircle className="w-4 h-4 text-indigo-500 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-[9.5px] leading-relaxed opacity-80">
+                      پردازش یک‌مرحله‌ای مستقیم از فایل PDF به خروجی JSON (حالت عادی).
+                    </p>
+                  </button>
+                </div>
               </div>
 
               {/* Custom Prompt */}

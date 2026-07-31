@@ -748,6 +748,7 @@ export default function App() {
       }
 
       try {
+        const isPdf = item.mimeType === "application/pdf" || item.name.toLowerCase().endsWith(".pdf");
         if (attempt > 1) {
           updateProgress({
             status: "retrying",
@@ -760,7 +761,9 @@ export default function App() {
             status: "processing",
             stage: "extracting_fields",
             attempt: 1,
-            statusMessage: "در حال استخراج هوشمند لایه‌ها و جدول اقلام..."
+            statusMessage: isPdf && pdfExtractionStrategy === "pdf_to_markdown_to_json"
+              ? "در حال تبدیل PDF به متن ساختاریافته Markdown و استخراج JSON..."
+              : "در حال استخراج هوشمند لایه‌ها و جدول اقلام..."
           });
         }
 
@@ -774,6 +777,7 @@ export default function App() {
             tokenSettings,
             userPrompt: finalPrompt,
             chatFiles,
+            pdfExtractionStrategy,
           }),
         });
 
@@ -825,6 +829,7 @@ export default function App() {
             erpDestinationModule,
             strictnessMode,
             customPrompt,
+            pdfExtractionStrategy,
             savedAt: Date.now()
           };
 
@@ -839,6 +844,7 @@ export default function App() {
             columns: columnsArray,
             documentType,
             documentAnalysis,
+            markdownContent: result.markdownContent,
             tokensUsed: realTokensUsed,
             tokenDetails: result.tokenDetails,
             extractionSettings: (item as any).extractionSettings || currentDocExtractionSettings
@@ -1051,6 +1057,7 @@ export default function App() {
         if (docSettings.erpDestinationModule) setErpDestinationModule(docSettings.erpDestinationModule);
         if (docSettings.strictnessMode) setStrictnessMode(docSettings.strictnessMode);
         if (docSettings.customPrompt !== undefined) setCustomPrompt(docSettings.customPrompt);
+        if (docSettings.pdfExtractionStrategy) setPdfExtractionStrategy(docSettings.pdfExtractionStrategy);
       }
       showNotification(`سند «${scan.file.name}» بارگذاری شد.`, "info");
     }
@@ -1278,6 +1285,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("selected_ai_model", selectedModel);
   }, [selectedModel]);
+
+  const [pdfExtractionStrategy, setPdfExtractionStrategy] = useState<"direct" | "pdf_to_markdown_to_json">(
+    () => (localStorage.getItem("pdf_extraction_strategy") as any) || "pdf_to_markdown_to_json"
+  );
+
+  useEffect(() => {
+    localStorage.setItem("pdf_extraction_strategy", pdfExtractionStrategy);
+  }, [pdfExtractionStrategy]);
 
   useEffect(() => {
     localStorage.setItem("ai_model_quotas", JSON.stringify(modelQuotas));
@@ -2536,6 +2551,7 @@ export default function App() {
       erpDestinationModule,
       strictnessMode,
       customPrompt,
+      pdfExtractionStrategy,
       savedAt: Date.now()
     };
 
@@ -2904,6 +2920,7 @@ export default function App() {
           tokenSettings,
           userPrompt,
           chatFiles,
+          pdfExtractionStrategy,
         }),
       });
 
@@ -2986,6 +3003,7 @@ export default function App() {
         columns: columnsArray,
         documentType: documentType,
         documentAnalysis: documentAnalysis,
+        markdownContent: result.markdownContent,
         tokensUsed: result.tokensUsed || 0,
         tokenDetails: result.tokenDetails,
       };
@@ -3234,6 +3252,7 @@ export default function App() {
       if (docSettings.erpDestinationModule) setErpDestinationModule(docSettings.erpDestinationModule);
       if (docSettings.strictnessMode) setStrictnessMode(docSettings.strictnessMode);
       if (docSettings.customPrompt !== undefined) setCustomPrompt(docSettings.customPrompt);
+      if (docSettings.pdfExtractionStrategy) setPdfExtractionStrategy(docSettings.pdfExtractionStrategy);
     }
     setTransactions(scan.transactions);
     const formatted = JSON.stringify(scan.transactions, null, 2);
@@ -3585,6 +3604,8 @@ export default function App() {
         setStrictnessMode={setStrictnessMode}
         customPrompt={customPrompt}
         setCustomPrompt={setCustomPrompt}
+        pdfExtractionStrategy={pdfExtractionStrategy}
+        setPdfExtractionStrategy={setPdfExtractionStrategy}
         pendingFiles={pendingFiles}
         setPendingFiles={setPendingFiles}
         onUploadClick={() => fileInputRef.current?.click()}
