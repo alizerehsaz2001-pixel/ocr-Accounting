@@ -35,7 +35,7 @@ service cloud.firestore {
         && data.name.size() <= 200
         && data.email is string
         && data.email.size() <= 200
-        && data.role in ['admin', 'user']
+        && data.role in ['admin', 'user', 'manager', 'auditor']
         && data.status in ['active', 'suspended'];
     }
 
@@ -61,9 +61,9 @@ service cloud.firestore {
 
     // User Profile Rules
     match /users/{userId} {
-      allow get: if isSignedIn() && (request.auth.uid == userId || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+      allow get: if isSignedIn() && (request.auth.uid == userId || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager', 'auditor']));
       
-      allow list: if isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow list: if isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager', 'auditor'];
 
       // Creating own user document is allowed upon first sign-in
       allow create: if isSignedIn() 
@@ -75,10 +75,10 @@ service cloud.firestore {
       allow update: if isSignedIn() 
         && (
           (isOwner(userId) && incoming().role == resource.data.role && incoming().status == resource.data.status && isValidUser(incoming())) 
-          || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' && isValidUser(incoming()))
+          || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager', 'auditor'] && isValidUser(incoming()))
         );
 
-      allow delete: if isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager', 'auditor'];
 
       // Subcollections of users for custom folders
       match /folders/{folderId} {

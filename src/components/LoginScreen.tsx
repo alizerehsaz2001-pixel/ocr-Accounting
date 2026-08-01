@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { signInWithPopup, signInAnonymously } from "firebase/auth";
 import { auth, googleProvider } from "../lib/firebase";
 import { motion } from "motion/react";
-import { ShieldCheck, Lock, Fingerprint, Sparkles, Loader2, Zap, ArrowRight, ExternalLink, UserCheck, Mail } from "lucide-react";
+import { ShieldCheck, Lock, Sparkles, Loader2, Zap, ArrowRight, ExternalLink, UserCheck, Mail } from "lucide-react";
 
 interface LoginScreenProps {
   isDarkMode: boolean;

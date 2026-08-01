@@ -1,36 +1,15 @@
 import re
 
-with open("src/App.tsx", "r", encoding="utf-8") as f:
+with open('src/App.tsx', 'r') as f:
     content = f.read()
 
-# Fix pendingFiles state declaration
-content = content.replace("""  const [pendingFiles, setPendingFiles] = useState<Array<{ 
-    base64: string; 
-    name: string; 
-    mimeType: string; 
-    size: number;
-    id?: string;
-    folder?: string;
-    preview?: string;
-    folder?: string;
-  }>([]);""", """  const [pendingFiles, setPendingFiles] = useState<Array<{ 
-    base64: string; 
-    name: string; 
-    mimeType: string; 
-    size: number;
-    id?: string;
-    folder?: string;
-    preview?: string;
-  }>>([]);""")
+content = re.sub(
+    r'u\.role === "admin"[\s\n]*\? "bg-purple-100 text-purple-700"[\s\n]*: "bg-blue-100 text-blue-700"',
+    r'u.role === "admin" ? "bg-purple-100 text-purple-700" : u.role === "manager" ? "bg-amber-100 text-amber-700" : u.role === "auditor" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"',
+    content,
+    flags=re.MULTILINE
+)
 
-# Fix notification state
-content = content.replace("""  const [notification, setNotification] = useState<{
-    text: string;
-    type: "success" | "error" | "info";
-  }>([]);""", """  const [notification, setNotification] = useState<{
-    text: string;
-    type: "success" | "error" | "info" | "warning";
-  } | null>(null);""")
-
-with open("src/App.tsx", "w", encoding="utf-8") as f:
+with open('src/App.tsx', 'w') as f:
     f.write(content)
+

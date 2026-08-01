@@ -4,11 +4,14 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
 import { enrichJSONWithWords } from "./src/utils/numberToPersianWords";
+import { AsyncLocalStorage } from "async_hooks";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
+
+const apiKeyStorage = new AsyncLocalStorage<string>();
 
 // Security Hardening: Disable Express signature header
 app.disable("x-powered-by");
@@ -55,12 +58,35 @@ app.use("/api/", apiRateLimiter);
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
+// Custom middleware to intercept client-provided Gemini API key
+app.use((req, res, next) => {
+  const customKey = req.headers["x-gemini-api-key"] as string | undefined;
+  if (customKey) {
+    apiKeyStorage.run(customKey, () => {
+      next();
+    });
+  } else {
+    next();
+  }
+});
+
 let aiClient: GoogleGenAI | null = null;
 
 function getGeminiClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const customKey = apiKeyStorage.getStore();
+  const apiKey = customKey || process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("کلید API جمینای (GEMINI_API_KEY) در سرور یافت نشد. لطفا در پنل Secrets یا فایل .env کلید معتبر تنظیم کنید.");
+  }
+  if (customKey) {
+    return new GoogleGenAI({
+      apiKey: customKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    });
   }
   if (!aiClient) {
     aiClient = new GoogleGenAI({

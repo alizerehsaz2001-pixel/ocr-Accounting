@@ -42,7 +42,6 @@ import {
   SlidersHorizontal,
   Search,
   Filter,
-  Fingerprint,
   Eye,
   Info,
   ExternalLink,
@@ -91,7 +90,7 @@ import {
   Maximize,
   Minimize,
   Printer,
-  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench, Star, Brain, FileSpreadsheet, Building, Phone, Edit2, Ban
+  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench, Star, Brain, FileSpreadsheet, Building, Phone, Edit2, Ban, KeyRound, Terminal, UserPlus, EyeOff
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan, DocumentExtractionSettings } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -102,18 +101,41 @@ import AiSettingsModal from "./components/AiSettingsModal";
 import DocumentExclusiveChatModal from "./components/DocumentExclusiveChatModal";
 import OnboardingProfileModal from "./components/OnboardingProfileModal";
 import AuditLogsModal from "./components/AuditLogsModal";
+import AdminPinModal from "./components/AdminPinModal";
+import AdminPanelModal from "./components/AdminPanelModal";
 import LoginScreen from "./components/LoginScreen";
 import PdfThumbnail from "./components/PdfThumbnail";
 import PdfViewer from "./components/PdfViewer";
 import { BatchOCRProgressPanel, BatchOCRProgressItem } from "./components/BatchOCRProgressPanel";
 import { auth, db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, onSnapshot } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
 import Markdown from "react-markdown";
 import DynamicTable from "./components/DynamicTable";
+
+// Shadow global fetch locally in this module to inject custom Gemini API Key automatically if present
+const customFetch = async function (input: RequestInfo | URL, init?: RequestInit) {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+  if (url.includes("/api/")) {
+    init = init || {};
+    init.headers = init.headers || {};
+    const customApiKey = (window as any).__custom_gemini_api_key__ || "";
+    if (customApiKey) {
+      if (init.headers instanceof Headers) {
+        init.headers.set("x-gemini-api-key", customApiKey);
+      } else if (Array.isArray(init.headers)) {
+        init.headers.push(["x-gemini-api-key", customApiKey]);
+      } else {
+        (init.headers as any)["x-gemini-api-key"] = customApiKey;
+      }
+    }
+  }
+  return window.fetch(input, init);
+};
+const fetch = customFetch;
 
 const DEFAULT_COLUMNS = [
   { کلید: "تاریخ", عنوان: "تاریخ", نوع_داده: "string" },
@@ -1349,15 +1371,8 @@ export default function App() {
   const [isRenamingDoc, setIsRenamingDoc] = useState<boolean>(false);
   const [tempDocName, setTempDocName] = useState<string>("");
 
-  // Biometric / WebAuthn States
-  const [biometricModalOpen, setBiometricModalOpen] = useState<boolean>(false);
-  const [biometricTarget, setBiometricTarget] = useState<'admin' | 'user' | null>(null);
-  const [biometricStatus, setBiometricStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
-  const [biometricErrorMessage, setBiometricErrorMessage] = useState<string>("");
-
   // AI Extraction Guide Tab State
   const [activeGuideTab, setActiveGuideTab] = useState<'general' | 'bypass' | 'advanced'>('general');
-  const [isBiometricSupported, setIsBiometricSupported] = useState<boolean>(false);
 
   // AI Extraction Control Center States
   const [extractionControlTab, setExtractionControlTab] = useState<'settings' | 'guide'>('settings');
@@ -1366,20 +1381,7 @@ export default function App() {
   const [strictnessMode, setStrictnessMode] = useState<'balanced' | 'speed' | 'audit'>('balanced');
   const [selectedScopes, setSelectedScopes] = useState<string[]>(["items", "parties", "tax", "currency"]);
 
-  // Check if browser/hardware has User Verifying Platform Authenticator
-  useEffect(() => {
-    if (window.PublicKeyCredential) {
-      window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.()
-        .then((available) => {
-          setIsBiometricSupported(available);
-        })
-        .catch(() => {
-          setIsBiometricSupported(false);
-        });
-    } else {
-      setIsBiometricSupported(false);
-    }
-  }, []);
+
 
   // QR Code Scanner / Digital Invoice Link States
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
@@ -2083,8 +2085,18 @@ export default function App() {
   const [isSyncingCloudManager, setIsSyncingCloudManager] = useState(false);
   const [fileManagerSearch, setFileManagerSearch] = useState("");
   const [fileManagerFormatFilter, setFileManagerFormatFilter] = useState<"all" | "pdf" | "image">("all");
+  // Dedicated Admin PIN Code & Security States
+  const [adminMasterPin, setAdminMasterPin] = useState<string>(() => {
+    return localStorage.getItem("admin_master_pin") || "7788";
+  });
+  const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState<boolean>(false);
+  const [enteredAdminPin, setEnteredAdminPin] = useState<string>("");
+  const [adminPinError, setAdminPinError] = useState<string>("");
+  const [showAdminPinText, setShowAdminPinText] = useState<boolean>(false);
+  const [changeAdminPinForm, setChangeAdminPinForm] = useState({ currentPin: "", newPin: "", confirmPin: "" });
+  const [adminUserSearch, setAdminUserSearch] = useState<string>("");
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
-  const [adminPanelTab, setAdminPanelTab] = useState<"users" | "data" | "system" | "danger">("users");
+  const [adminPanelTab, setAdminPanelTab] = useState<"users" | "security" | "system" | "data" | "danger">("users");
   const [isTokenManagerOpen, setIsTokenManagerOpen] = useState(false);
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false);
   const [inspectingScanId, setInspectingScanId] = useState<string | null>(null);
@@ -2124,7 +2136,8 @@ export default function App() {
               status: "active",
               apiUsage: 0,
               extraStorage: 0,
-              isOnboarded: false
+              isOnboarded: false,
+              geminiApiKey: ""
             };
             // Do not block initial render for user creation
             setDoc(userRef, dbUser).catch(err => console.warn("Background user doc creation error", err));
@@ -2265,24 +2278,32 @@ export default function App() {
     const firstName = nameParts[0] || "کاربر";
     const lastName = nameParts.slice(1).join(" ") || "ممیزی";
 
+    const isDemoMode = !customName;
+    const roleToUse = (emailToUse === "alizerehsaz2001@gmail.com" || isDemoMode) ? "admin" : "user";
+
     const demoUser = { 
       id: "user_" + Date.now(), 
       name: nameToUse, 
       firstName: firstName,
       lastName: lastName,
-      companyName: "مؤسسه مالی و حسابداری",
-      phone: "09121111111",
-      jobTitle: "مدیر مالی / ممیز ارشد",
+      companyName: isDemoMode ? "مؤسسه مالی و حسابداری" : "",
+      phone: isDemoMode ? "09121111111" : "",
+      jobTitle: isDemoMode ? "مدیر مالی / ممیز ارشد" : "",
       email: emailToUse,
-      role: "admin", 
+      role: roleToUse, 
       status: "active", 
-      apiUsage: 45000, 
+      apiUsage: isDemoMode ? 45000 : 0, 
       extraStorage: 0,
-      isOnboarded: true
+      isOnboarded: isDemoMode,
+      geminiApiKey: ""
     };
-    localStorage.setItem("is_demo_mode", "true");
+    localStorage.setItem("is_demo_mode", isDemoMode ? "true" : "false");
     localStorage.setItem("demo_user_data", JSON.stringify(demoUser));
     setCurrentUser(demoUser);
+
+    // Save user to Firestore immediately so that the Admin can see and manage them!
+    const userRef = doc(db, "users", demoUser.id);
+    setDoc(userRef, demoUser).catch(err => console.warn("Failed to auto-save user to Firestore:", err));
   };
 
   const [profileFirstName, setProfileFirstName] = useState("");
@@ -2359,6 +2380,52 @@ export default function App() {
     }
   };
 
+
+
+
+  // Listen to current user changes in real-time
+  useEffect(() => {
+    if (currentUser?.id) {
+      const userRef = doc(db, "users", String(currentUser.id));
+      const unsubscribe = onSnapshot(userRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const userData = snapshot.data();
+          setCurrentUser(prev => prev ? { ...prev, ...userData } : userData);
+        }
+      }, (err) => {
+        console.warn("Error listening to current user:", err);
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser?.id]);
+
+  // Sync users from Firestore if admin
+  useEffect(() => {
+    if (currentUser && ['admin', 'manager', 'auditor'].includes(currentUser.role)) {
+      const usersRef = collection(db, "users");
+      const unsubscribe = onSnapshot(usersRef, (snapshot) => {
+        if (!snapshot.empty) {
+          const allUsers = snapshot.docs.map(doc => doc.data());
+          setUsers(prev => {
+            const merged = [...prev];
+            allUsers.forEach(u => {
+              const idx = merged.findIndex(mu => String(mu.id) === String(u.id));
+              if (idx >= 0) {
+                merged[idx] = { ...merged[idx], ...u };
+              } else {
+                merged.push(u);
+              }
+            });
+            return merged;
+          });
+        }
+      }, (err) => {
+        console.warn("Failed to listen to all users:", err);
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser?.role, currentUser?.id]);
+
   useEffect(() => {
     localStorage.setItem("system_users", JSON.stringify(users));
   }, [users]);
@@ -2384,6 +2451,17 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("user_preferences", JSON.stringify(userPreferences));
   }, [userPreferences]);
+
+  // Synchronize global custom API key for fetch interceptor
+  useEffect(() => {
+    if (currentUser?.geminiApiKey) {
+      (window as any).__custom_gemini_api_key__ = currentUser.geminiApiKey;
+    } else if (userPreferences?.geminiApiKey) {
+      (window as any).__custom_gemini_api_key__ = userPreferences.geminiApiKey;
+    } else {
+      (window as any).__custom_gemini_api_key__ = "";
+    }
+  }, [currentUser?.geminiApiKey, userPreferences?.geminiApiKey]);
 
   // Keep currentUser synced with users list when admin changes fields (like extraStorage)
   useEffect(() => {
@@ -2625,84 +2703,55 @@ export default function App() {
   };
 
   const handleOpenProtectedPanel = (target: "admin" | "user") => {
-    setBiometricTarget(target);
-    setBiometricStatus("idle");
-    setBiometricErrorMessage("");
-    setBiometricModalOpen(true);
+    if (target === "admin") {
+      if (currentUser?.role !== "admin") {
+        showNotification("دسترسی غیرمجاز! فقط حساب‌های با سطح دسترسی مدیر سیستم (Admin) مجاز به ورود هستند.", "error");
+        logEvent("تلاش ناموفق ورود به ادمین", `کاربر «${currentUser?.name || "مهمان"}» بدون نقش Admin قصد ورود داشت.`, "warning");
+        return;
+      }
+      setEnteredAdminPin("");
+      setAdminPinError("");
+      setIsAdminPinModalOpen(true);
+    } else {
+      setIsUserPanelOpen(true);
+    }
   };
 
-  // Perform actual WebAuthn action or falling back to safe local simulator in iframe sandboxes
-  const triggerBiometricScan = async () => {
-    setBiometricStatus("scanning");
-    setBiometricErrorMessage("");
-
-    try {
-      if (window.PublicKeyCredential && typeof navigator.credentials?.create === "function") {
-        const randomChallenge = new Uint8Array(32);
-        window.crypto.getRandomValues(randomChallenge);
-
-        const userId = new Uint8Array(16);
-        window.crypto.getRandomValues(userId);
-
-        const creationOptions: CredentialCreationOptions = {
-          publicKey: {
-            challenge: randomChallenge,
-            rp: {
-              name: "OCR Accounting App",
-              id: window.location.hostname || "localhost",
-            },
-            user: {
-              id: userId,
-              name: currentUser?.username || "user@ocr.accounting",
-              displayName: currentUser?.fullName || "کاربر ممیزی",
-            },
-            pubKeyCredParams: [
-              { alg: -7, type: "public-key" },
-              { alg: -257, type: "public-key" },
-            ],
-            authenticatorSelection: {
-              authenticatorAttachment: "platform",
-              userVerification: "required",
-            },
-            timeout: 10000, // 10 seconds limit
-          },
-        };
-
-        const credential = await navigator.credentials.create(creationOptions);
-        if (credential) {
-          setBiometricStatus("success");
-          showNotification("احراز هویت زیستی با موفقیت انجام شد.", "success");
-          setTimeout(() => {
-            setBiometricModalOpen(false);
-            if (biometricTarget === "admin") {
-              setIsAdminPanelOpen(true);
-            } else {
-              setIsUserPanelOpen(true);
-            }
-          }, 1200);
-        } else {
-          throw new Error("سنسور تشخیص چهره یا اثرانگشت پاسخی ارسال نکرد.");
-        }
-      } else {
-        throw new Error("پشتیبانی مستقیم WebAuthn یافت نشد.");
-      }
-    } catch (err: any) {
-      console.warn("Native WebAuthn could not complete. Launching secure fallback emulator...", err);
-      
-      // Fallback is extremely visual and robust, especially inside restricted iframes
-      setTimeout(() => {
-        setBiometricStatus("success");
-        showNotification("تأییدیه هویت امن محلی صادر گردید.", "success");
-        setTimeout(() => {
-          setBiometricModalOpen(false);
-          if (biometricTarget === "admin") {
-            setIsAdminPanelOpen(true);
-          } else {
-            setIsUserPanelOpen(true);
-          }
-        }, 1200);
-      }, 2000);
+  const handleVerifyAdminPin = (pinToTest?: string) => {
+    const code = pinToTest !== undefined ? pinToTest : enteredAdminPin;
+    if (code.trim() === adminMasterPin) {
+      setIsAdminPinModalOpen(false);
+      setEnteredAdminPin("");
+      setAdminPinError("");
+      setIsAdminPanelOpen(true);
+      showNotification("کد اختصاصی ادمین تأیید شد. خوش آمدید.", "success");
+      logEvent("ورود موفق به ادمین", "مدیر سیستم با کد اختصاصی وارد پنل مدیریت شد.", "auth");
+    } else {
+      setAdminPinError("کد اختصاصی نادرست است. لطفاً کد معتبر را وارد کنید.");
+      showNotification("کد اختصاصی ادمین اشتباه است.", "error");
+      logEvent("خطای کد اختصاصی ادمین", "تلاش ناموفق برای احراز هویت ادمین با کد اشتباه", "warning");
     }
+  };
+
+  const handleUpdateAdminPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (changeAdminPinForm.currentPin !== adminMasterPin) {
+      showNotification("کد اختصاصی فعلی نادرست است.", "error");
+      return;
+    }
+    if (changeAdminPinForm.newPin.length < 4) {
+      showNotification("کد اختصاصی جدید باید حداقل ۴ رقم باشد.", "error");
+      return;
+    }
+    if (changeAdminPinForm.newPin !== changeAdminPinForm.confirmPin) {
+      showNotification("تکرار کد اختصاصی جدید مطابقت ندارد.", "error");
+      return;
+    }
+    setAdminMasterPin(changeAdminPinForm.newPin);
+    localStorage.setItem("admin_master_pin", changeAdminPinForm.newPin);
+    setChangeAdminPinForm({ currentPin: "", newPin: "", confirmPin: "" });
+    showNotification("کد اختصاصی ادمین با موفقیت تغییر یافت.", "success");
+    logEvent("تغییر کد اختصاصی ادمین", "کد اختصاصی جدید برای دسترسی ادمین تعریف شد.", "auth");
   };
 
   const handleLinkDigitalInvoice = (codeOrUrl: string) => {
@@ -4348,8 +4397,8 @@ export default function App() {
                       {currentUser?.name || currentUser?.email || "کاربر مهمان"}
                     </span>
                     <span className="text-[10px] text-slate-500 flex items-center gap-1.5">
-                      <div className={`w-1.5 h-1.5 rounded-full ${currentUser?.role === 'admin' ? 'bg-indigo-500' : 'bg-emerald-500'}`} />
-                      {currentUser?.role === "admin" ? "مدیر ارشد" : "حسابدار"}
+                      <div className={`w-1.5 h-1.5 rounded-full ${currentUser?.role === 'admin' ? 'bg-indigo-500' : currentUser?.role === 'manager' ? 'bg-amber-500' : currentUser?.role === 'auditor' ? 'bg-emerald-500' : 'bg-blue-500'}`} />
+                      {currentUser?.role === "admin" ? "مدیر ارشد" : currentUser?.role === "manager" ? "مدیر مالی" : currentUser?.role === "auditor" ? "حسابرس" : "حسابدار"}
                     </span>
                   </div>
 
@@ -6915,167 +6964,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Biometric Verification Layer Modal */}
-      {biometricModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-slate-950/70 backdrop-blur-md transition-opacity duration-300"
-            onClick={() => setBiometricModalOpen(false)}
-          ></div>
 
-          {/* Dialog Container */}
-          <div className={`relative w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden font-sans transition-all duration-300 border ${
-            isDarkMode ? "bg-[#0b0f19] border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-800"
-          }`} dir="rtl">
-            
-            {/* Header */}
-            <div className={`flex items-center justify-between p-4 border-b ${
-              isDarkMode ? "border-slate-800/80 bg-slate-900/45" : "border-slate-100 bg-slate-55"
-            }`}>
-              <div className="flex items-center gap-2">
-                <Fingerprint className={`h-5 w-5 ${isDarkMode ? "text-blue-400" : "text-blue-600"}`} />
-                <span className="text-xs font-bold font-sans">احراز هویت زیستی و امنیتی</span>
-              </div>
-              <button 
-                onClick={() => setBiometricModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-6 flex flex-col items-center text-center">
-              
-              {/* Context Label info */}
-              <div className={`mb-3 px-3 py-1 text-[10px] font-bold rounded-full ${
-                biometricTarget === "admin" 
-                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" 
-                  : "bg-blue-500/10 text-blue-500 border border-blue-500/20"
-              }`}>
-                {biometricTarget === "admin" 
-                  ? "درخواست دسترسی به پنل فوق‌حساس مدیریت و تراکنش‌ها" 
-                  : "درخواست دسترسی به اطلاعات کاربری و مدیریت API"}
-              </div>
-
-              {/* Status Header text */}
-              <h4 className="text-sm font-bold mb-1">تأیید هویت کاربری (Biometric Validation)</h4>
-              <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed mb-6">
-                برای باز شدن صفحه درخواستی، لطفاً اثر انگشت یا سیستم تشخیص چهره زیستی خود را تأیید کنید.
-              </p>
-
-              {/* Central Scan Area & Pulse Animation */}
-              <div className="relative mb-6 flex items-center justify-center">
-                
-                {/* Background circles */}
-                <div className={`absolute inset-0 rounded-full scale-[1.3] animate-ping opacity-15 duration-1000 ${
-                  biometricStatus === "scanning" 
-                    ? "bg-blue-500" 
-                    : biometricStatus === "success" 
-                    ? "bg-emerald-500" 
-                    : biometricStatus === "error" 
-                    ? "bg-rose-500" 
-                    : "bg-slate-400"
-                }`}></div>
-
-                <div className={`h-24 w-24 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-lg ${
-                  biometricStatus === "scanning"
-                    ? "border-blue-500 bg-blue-500/10 scale-105"
-                    : biometricStatus === "success"
-                    ? "border-emerald-500 bg-emerald-500/10"
-                    : biometricStatus === "error"
-                    ? "border-rose-500 bg-rose-500/10"
-                    : isDarkMode ? "border-slate-800 bg-slate-900/60" : "border-slate-200 bg-slate-50"
-                }`}>
-                  
-                  {biometricStatus === "scanning" ? (
-                    <Loader2 className="h-10 w-10 text-blue-500 animate-spin" />
-                  ) : biometricStatus === "success" ? (
-                    <CheckCircle2 className="h-10 w-10 text-emerald-500 animate-bounce" />
-                  ) : biometricStatus === "error" ? (
-                    <AlertCircle className="h-10 w-10 text-rose-500" />
-                  ) : (
-                    <Fingerprint className={`h-11 w-11 ${
-                      isDarkMode ? "text-slate-400 group-hover:text-blue-400" : "text-slate-500 group-hover:text-blue-600"
-                    }`} />
-                  )}
-                </div>
-              </div>
-
-              {/* Sub-status label */}
-              <div className="min-h-[24px] mb-6">
-                {biometricStatus === "idle" && (
-                  <span className="text-xs text-slate-400">آماده دریافت اثرانگشت یا تشخیص چهره</span>
-                )}
-                {biometricStatus === "scanning" && (
-                  <span className="text-xs text-blue-500 font-semibold animate-pulse">در حال ارتباط با حسگر بیومتریک دستگاه...</span>
-                )}
-                {biometricStatus === "success" && (
-                  <span className="text-xs text-emerald-500 font-bold">هویت شما با موفقیت تأیید شد. صادر شد.</span>
-                )}
-                {biometricStatus === "error" && (
-                  <span className="text-xs text-rose-500 font-semibold">{biometricErrorMessage || "خطا در احراز هویت."}</span>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="w-full flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={triggerBiometricScan}
-                  disabled={biometricStatus === "scanning" || biometricStatus === "success"}
-                  className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-md ${
-                    biometricStatus === "scanning"
-                      ? "bg-slate-800 text-slate-500 cursor-not-allowed"
-                      : biometricStatus === "success"
-                      ? "bg-emerald-600 text-white cursor-none"
-                      : "bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white"
-                  }`}
-                >
-                  <Fingerprint className="h-4 w-4" />
-                  <span>
-                    {biometricStatus === "scanning" 
-                      ? "در حال پردازش..." 
-                      : biometricStatus === "success" 
-                      ? "هویت احراز شد!" 
-                      : "شروع اسکن بیومتریک"}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setBiometricModalOpen(false)}
-                  className={`w-full py-2 text-xs font-semibold rounded-xl border transition-colors ${
-                    isDarkMode 
-                      ? "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" 
-                      : "bg-white border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  انصراف
-                </button>
-              </div>
-            </div>
-
-            {/* Footer with browser support details */}
-            <div className={`p-3 text-[10px] text-center border-t flex justify-center items-center gap-1.5 font-mono ${
-              isDarkMode ? "bg-slate-900/30 border-slate-800/80 text-slate-500" : "bg-slate-50 border-slate-100 text-slate-400"
-            }`}>
-              {isBiometricSupported ? (
-                <>
-                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                  <span>WebAuthn API is supported in this browser</span>
-                </>
-              ) : (
-                <>
-                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
-                  <span>WebAuthn hardware not detected (Secure local emulator active)</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* QR Code Scanner / Digital Invoice Link Modal */}
       {isQrModalOpen && (
@@ -7535,9 +7424,12 @@ export default function App() {
                            <div className="flex flex-col gap-1.5">
                              <span className={`text-[10px] font-black uppercase tracking-wider ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>سطح دسترسی (Role)</span>
                              <span className={`inline-flex items-center self-start px-3 py-1.5 rounded-lg text-[11px] font-black shadow-sm ${
-                                currentUser?.role === "admin" ? "text-purple-700 bg-purple-100 border border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20" : "text-blue-700 bg-blue-100 border border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20"
+                                currentUser?.role === "admin" ? "text-purple-700 bg-purple-100 border border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20" : 
+                                currentUser?.role === "manager" ? "text-amber-700 bg-amber-100 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20" : 
+                                currentUser?.role === "auditor" ? "text-emerald-700 bg-emerald-100 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20" : 
+                                "text-blue-700 bg-blue-100 border border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20"
                              }`}>
-                               {currentUser?.role === "admin" ? "مدیر کل سیستم (Admin)" : "همکار حسابدار (User)"}
+                               {currentUser?.role === "admin" ? "مدیر کل سیستم (Admin)" : currentUser?.role === "manager" ? "مدیر مالی (Manager)" : currentUser?.role === "auditor" ? "حسابرس (Auditor)" : "همکار حسابدار (User)"}
                              </span>
                            </div>
                            <div className="flex flex-col gap-1.5">
@@ -7838,8 +7730,46 @@ export default function App() {
       )}
 
       
+      {/* Admin Dedicated PIN Modal */}
+      <AdminPinModal
+        isOpen={isAdminPinModalOpen}
+        onClose={() => setIsAdminPinModalOpen(false)}
+        adminMasterPin={adminMasterPin}
+        onSuccess={() => {
+          setIsAdminPinModalOpen(false);
+          setIsAdminPanelOpen(true);
+        }}
+        isDarkMode={isDarkMode}
+        showNotification={showNotification}
+        logEvent={logEvent}
+      />
+
       {/* Admin Panel Modal */}
-      {isAdminPanelOpen && currentUser?.role === "admin" && (
+      <AdminPanelModal
+        isOpen={isAdminPanelOpen}
+        onClose={() => setIsAdminPanelOpen(false)}
+        isDarkMode={isDarkMode}
+        currentUser={currentUser}
+        users={users}
+        setUsers={setUsers}
+        adminMasterPin={adminMasterPin}
+        setAdminMasterPin={setAdminMasterPin}
+        transactions={transactions}
+        setTransactions={setTransactions}
+        previousScans={previousScans}
+        setPreviousScans={setPreviousScans}
+        modelQuotas={modelQuotas}
+        setModelQuotas={setModelQuotas}
+        auditLogs={auditLogs}
+        showNotification={showNotification}
+        logEvent={logEvent}
+        setIsTokenManagerOpen={setIsTokenManagerOpen}
+        rawJsonText={rawJsonText}
+        setRawJsonText={setRawJsonText}
+        setActiveFile={setActiveFile}
+      />
+
+      {false && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
           <div 
             className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300"
@@ -8609,10 +8539,8 @@ export default function App() {
                                 <td className="p-3 font-semibold">{u.name}</td>
                                 <td className="p-3 text-center">
                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                                      u.role === "admin" 
-                                      ? "bg-purple-100 text-purple-700" 
-                                      : "bg-blue-100 text-blue-700"
-                                   }`}>{u.role === "admin" ? "مدیر" : "کاربر"}</span>
+                                      u.role === "admin" ? "bg-purple-100 text-purple-700" : u.role === "manager" ? "bg-amber-100 text-amber-700" : u.role === "auditor" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
+                                   }`}>{u.role === "admin" ? "مدیر کل" : u.role === "manager" ? "مدیر مالی" : u.role === "auditor" ? "حسابرس" : "کاربر"}</span>
                                 </td>
                                 <td className="p-3 text-center font-mono text-[10px] text-blue-500 font-bold">{(u.apiUsage || 0).toLocaleString("fa-IR")}</td>
                                 <td className="p-3 text-center font-mono text-[10px] text-emerald-500 font-bold">${cost.toFixed(4)}</td>
@@ -8620,6 +8548,7 @@ export default function App() {
                                    <button
                                        onClick={() => {
                                           setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, apiUsage: 0} : usr));
+                                          setDoc(doc(db, "users", String(u.id)), { apiUsage: 0 }, { merge: true }).catch(err => console.warn("Failed to reset apiUsage in Firestore:", err));
                                           logEvent("ریست توکن کاربر", `آمار مصرف توکن کاربر ${u.name} صفر شد.`);
                                           showNotification(`آمار مصرف توکن کاربر ${u.name} بازنشانی شد.`, 'success');
                                        }}

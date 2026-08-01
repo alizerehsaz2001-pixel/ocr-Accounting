@@ -7,7 +7,6 @@ import {
   ChevronLeft, 
   Info, 
   BookOpen, 
-  Fingerprint, 
   Settings, 
   Plus, 
   Trash2, 
@@ -477,14 +476,14 @@ export default function PayrollModule({ isDarkMode, showNotification }: PayrollM
     }
   };
 
-  // Add dummy biometric logs
-  const simulateBiometricLog = () => {
+  // Add dummy attendance logs
+  const simulateAttendanceLog = () => {
     const timestamp = `${selectedDate} ${logTime}:00`;
     const newId = rawLogs.length > 0 ? Math.max(...rawLogs.map(l => l.id)) + 1 : 1;
     
     const duplicate = rawLogs.find(l => l.employee_id === selectedEmployeeId && l.log_timestamp === timestamp);
     if (duplicate) {
-      showNotification("این اثر انگشت یا تردد قبلاً در این لحظه ثبت شده است.", "error");
+      showNotification("این تردد قبلاً در این لحظه ثبت شده است.", "error");
       return;
     }
 
@@ -492,12 +491,12 @@ export default function PayrollModule({ isDarkMode, showNotification }: PayrollM
       id: newId,
       employee_id: selectedEmployeeId,
       log_timestamp: timestamp,
-      device_id: "BIOMETRIC_TERMINAL_X9",
+      device_id: "ATTENDANCE_TERMINAL_X9",
       log_type: logDirection
     };
 
     setRawLogs(prev => [...prev, log]);
-    showNotification(`اثر انگشت ثبت شد: پرسنل #${selectedEmployeeId} جهت ${logDirection === LogType.IN ? "ورود" : "خروج"} در ساعت ${logTime}`, "success");
+    showNotification(`تردد ثبت شد: پرسنل #${selectedEmployeeId} جهت ${logDirection === LogType.IN ? "ورود" : "خروج"} در ساعت ${logTime}`, "success");
   };
 
   // Monthly Aggregator Engine
@@ -837,7 +836,7 @@ export default function PayrollModule({ isDarkMode, showNotification }: PayrollM
             </button>
             <div>
               <h2 className={`text-base font-black ${isDarkMode ? "text-slate-100" : "text-slate-900"} flex items-center gap-2`}>
-                <Fingerprint className="w-5 h-5 text-indigo-500" /> محاسب کارکرد پرسنل و تطبیق بیومتریک
+                <Clock className="w-5 h-5 text-indigo-500" /> محاسب کارکرد پرسنل و مدیریت ترددها
               </h2>
               <p className="text-xs text-slate-500 mt-1">
                 رهگیری تردد خام دستگاه ساعت‌زن، پردازش شیفت‌های چرخشی و شناور منطبق با قانون کار جمهوری اسلامی ایران.
@@ -862,7 +861,7 @@ export default function PayrollModule({ isDarkMode, showNotification }: PayrollM
           {[
             { id: "dashboard", label: "داشبورد عمومی", icon: Layers },
             { id: "shifts", label: "پیکربندی شیفت‌ها", icon: Settings },
-            { id: "logs", label: "تردد خام بیومتریک", icon: Fingerprint },
+            { id: "logs", label: "تردد خام دستگاه", icon: Clock },
             { id: "daily", label: "کارکرد روزانه روزمزد", icon: Calendar },
             { id: "monthly", label: "تجمیع ماهانه حقوق", icon: FileText },
             { id: "technical", label: "پایگاه داده و کدهای فنی", icon: Code },
@@ -904,12 +903,12 @@ export default function PayrollModule({ isDarkMode, showNotification }: PayrollM
               </div>
 
               <div className={`p-5 rounded-2xl border ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
-                <span className="text-[10px] font-bold text-slate-400 block mb-1">کل تردهای ثبت شده خام</span>
+                <span className="text-[10px] font-bold text-slate-400 block mb-1">کل ترددهای ثبت شده خام</span>
                 <div className="flex items-center justify-between">
                   <strong className={`text-xl font-black font-mono ${isDarkMode ? "text-white" : "text-slate-800"}`}>
                     {rawLogs.length} آرتیکل
                   </strong>
-                  <Fingerprint className="w-5 h-5 text-emerald-500 opacity-80" />
+                  <Clock className="w-5 h-5 text-emerald-500 opacity-80" />
                 </div>
               </div>
 
@@ -944,7 +943,7 @@ export default function PayrollModule({ isDarkMode, showNotification }: PayrollM
                 <Cpu className="w-4 h-4" /> راهنمای گام‌به‌گام شبیه‌سازی برای کارشناس ارشد HR:
               </h3>
               <ol className="text-xs space-y-2 list-decimal list-inside opacity-90 leading-relaxed pr-2">
-                <li>ابتدا در تب <strong>تردد خام بیومتریک</strong>، برای یکی از کارمندان (مثلاً علیرضا رضایی) ورود یا خروجی ثبت کنید.</li>
+                <li>ابتدا در تب <strong>تردد خام دستگاه</strong>، برای یکی از کارمندان (مثلاً علیرضا رضایی) ورود یا خروجی ثبت کنید.</li>
                 <li>برای شبیه‌سازی خطا، یک ورود ثبت کنید اما خروجی نزنید.</li>
                 <li>سپس به تب <strong>کارکرد روزانه روزمزد</strong> بروید و دکمه <strong>محاسبه مجدد روز</strong> را فشار دهید.</li>
                 <li>خواهید دید که لایه اعتبارسنجی آنی، تردد ناقص را ردیابی کرده و وضعیت را به <span className="text-rose-500 font-bold">INCOMPLETE_LOG</span> تغییر می‌دهد!</li>
@@ -1140,16 +1139,16 @@ export default function PayrollModule({ isDarkMode, showNotification }: PayrollM
           </div>
         )}
 
-        {/* Tab: Biometric Raw Logs */}
+        {/* Tab: Clock Attendance Raw Logs */}
         {attendanceTab === "logs" && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
-              {/* Biometric Terminal Simulator Form */}
+              {/* Terminal Simulator Form */}
               <div className={`p-5 rounded-2xl border ${isDarkMode ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"}`}>
                 <div className="flex items-center gap-2 text-indigo-500 mb-4">
-                  <Fingerprint className="w-5 h-5 animate-pulse" />
-                  <h3 className="font-black text-xs">شبیه‌ساز دستگاه کارت‌زنی بیومتریک</h3>
+                  <Clock className="w-5 h-5 animate-pulse" />
+                  <h3 className="font-black text-xs">شبیه‌ساز دستگاه کارت‌زنی و ثبت تردد</h3>
                 </div>
 
                 <div className="space-y-4">
@@ -1223,10 +1222,10 @@ export default function PayrollModule({ isDarkMode, showNotification }: PayrollM
                   </div>
 
                   <button
-                    onClick={simulateBiometricLog}
+                    onClick={simulateAttendanceLog}
                     className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-500/10 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Fingerprint className="w-4 h-4" /> ثبت در لاگ خام دستگاه ساعت‌زن
+                    <Clock className="w-4 h-4" /> ثبت در لاگ خام دستگاه ساعت‌زن
                   </button>
                 </div>
               </div>
@@ -1628,7 +1627,7 @@ CREATE TABLE attendance_daily_sheets (
         employee_id: employeeId,
         date: date,
         status: 'INCOMPLETE_LOG',
-        warning_message: 'Incomplete biometric matching: missing log sequence.'
+        warning_message: 'Incomplete log matching: missing entry or exit sequence.'
       });
       return;
     }
