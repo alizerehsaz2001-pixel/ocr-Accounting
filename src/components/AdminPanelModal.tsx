@@ -303,185 +303,366 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
 
                   {/* Users Cards */}
-                  <div className="space-y-3">
-                    {filteredUsers.map(u => (
-                      <div key={u.id} className={`p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all border ${
-                        isDarkMode 
-                          ? "bg-slate-900/60 border-slate-800 hover:border-slate-700 shadow-sm" 
-                          : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"
-                      }`}>
-                        <div className="flex items-start sm:items-center gap-3">
-                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-[15px] shrink-0 border ${
+                  <div className="space-y-4">
+                    {filteredUsers.map(u => {
+                      const costUsd = ((u.apiUsage || 0) / 1000000) * 0.15;
+                      const hasCustomKey = !!u.geminiApiKey;
+                      return (
+                        <div key={u.id} className={`p-5 rounded-2xl flex flex-col gap-5 transition-all duration-300 border relative overflow-hidden ${
+                          isDarkMode 
+                            ? "bg-slate-900/40 border-slate-800/80 hover:border-slate-700/80 hover:bg-slate-900/60 shadow-lg shadow-black/10" 
+                            : "bg-white border-slate-200/80 hover:border-slate-300/80 hover:bg-slate-50/20 shadow-md shadow-slate-100/50"
+                        }`}>
+                          {/* Top ambient color-accent based on user role */}
+                          <div className={`absolute top-0 right-0 left-0 h-[3px] opacity-70 ${
                             u.role === "admin" 
-                              ? (isDarkMode ? "bg-indigo-900/40 border-indigo-800 text-indigo-400" : "bg-indigo-50 border-indigo-200 text-indigo-600")
+                              ? "bg-gradient-to-l from-indigo-500 to-purple-500"
                               : u.role === "manager"
-                              ? (isDarkMode ? "bg-amber-900/40 border-amber-800 text-amber-400" : "bg-amber-50 border-amber-200 text-amber-600")
+                              ? "bg-gradient-to-l from-amber-500 to-orange-500"
                               : u.role === "auditor"
-                              ? (isDarkMode ? "bg-emerald-900/40 border-emerald-800 text-emerald-400" : "bg-emerald-50 border-emerald-200 text-emerald-600")
-                              : (isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300" : "bg-slate-100 border-slate-200 text-slate-600")
-                          }`}>
-                            {u.name ? u.name.charAt(0) : "U"}
+                              ? "bg-gradient-to-l from-emerald-500 to-teal-500"
+                              : "bg-slate-400"
+                          }`} />
+
+                          {/* Profile Header & Actions Row */}
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
+                            <div className="flex items-center gap-3.5">
+                              {/* Avatar Block */}
+                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-base shrink-0 border transition-all ${
+                                u.role === "admin" 
+                                  ? (isDarkMode ? "bg-indigo-950/50 border-indigo-500/30 text-indigo-400 shadow-[0_0_12px_rgba(99,102,241,0.15)]" : "bg-indigo-50 border-indigo-200/80 text-indigo-600 shadow-sm")
+                                  : u.role === "manager"
+                                  ? (isDarkMode ? "bg-amber-950/50 border-amber-500/30 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.15)]" : "bg-amber-50 border-amber-200/80 text-amber-600 shadow-sm")
+                                  : u.role === "auditor"
+                                  ? (isDarkMode ? "bg-emerald-950/50 border-emerald-500/30 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.15)]" : "bg-emerald-50 border-emerald-200/80 text-emerald-600 shadow-sm")
+                                  : (isDarkMode ? "bg-slate-800/80 border-slate-700/60 text-slate-300" : "bg-slate-100 border-slate-200 text-slate-600")
+                              }`}>
+                                {u.name ? u.name.charAt(0) : "U"}
+                              </div>
+                              
+                              <div className="space-y-1.5 text-right">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h5 className="font-extrabold text-[14px] text-slate-800 dark:text-slate-100">{u.name}</h5>
+                                  
+                                  {/* Role Tags */}
+                                  {u.role === "admin" && (
+                                    <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black ${isDarkMode ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" : "bg-indigo-50 text-indigo-700 border border-indigo-200"}`}>
+                                      مدیر سیستم
+                                    </span>
+                                  )}
+                                  {u.role === "manager" && (
+                                    <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black ${isDarkMode ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
+                                      مدیر مالی
+                                    </span>
+                                  )}
+                                  {u.role === "auditor" && (
+                                    <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black ${isDarkMode ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
+                                      حسابرس
+                                    </span>
+                                  )}
+                                  {!u.isOnboarded && (
+                                    <span className="text-[9px] px-2 py-0.5 rounded-lg bg-rose-500/10 text-rose-500 font-bold border border-rose-500/20">
+                                      پروفایل ناقص
+                                    </span>
+                                  )}
+                                </div>
+                                
+                                <div className={`text-[10px] flex flex-wrap gap-x-3.5 gap-y-1 font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                  {u.email && <span className="opacity-80">{u.email}</span>}
+                                  {u.companyName && (
+                                    <span className="flex items-center gap-1 opacity-90 text-indigo-500 dark:text-indigo-400">
+                                      <Building className="w-3 h-3"/> {u.companyName}
+                                    </span>
+                                  )}
+                                  {u.phone && (
+                                    <span className="flex items-center gap-1 opacity-80" dir="ltr">
+                                      <Phone className="w-3 h-3 opacity-60"/> {u.phone}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions bar with highly refined pill shapes */}
+                            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                              {/* Role Selector Dropdown */}
+                              <select
+                                value={u.role || "user"}
+                                onChange={(e) => {
+                                  const newRole = e.target.value;
+                                  setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, role: newRole } : usr));
+                                  updateUserInFirestore(u.id, { role: newRole });
+                                  showNotification(`نقش کاربر «${u.name}» به ${newRole} تغییر یافت.`, "success");
+                                  logEvent("تغییر نقش کاربر", `نقش ${u.name} به ${newRole} تغییر کرد.`, "info");
+                                }}
+                                className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold border outline-none transition-all cursor-pointer ${
+                                  u.role === "admin"
+                                    ? (isDarkMode ? "bg-indigo-950/40 border-indigo-800 text-indigo-300 hover:border-indigo-700" : "bg-indigo-50 border-indigo-200 text-indigo-750 hover:bg-indigo-100")
+                                    : u.role === "manager"
+                                    ? (isDarkMode ? "bg-amber-950/40 border-amber-800 text-amber-300 hover:border-amber-700" : "bg-amber-50 border-amber-200 text-amber-750 hover:bg-amber-100")
+                                    : u.role === "auditor"
+                                    ? (isDarkMode ? "bg-emerald-950/40 border-emerald-800 text-emerald-300 hover:border-emerald-700" : "bg-emerald-50 border-emerald-200 text-emerald-750 hover:bg-emerald-100")
+                                    : (isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600" : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200")
+                                }`}
+                                title="تغییر نقش دسترسی"
+                              >
+                                <option value="user">کاربر / حسابدار</option>
+                                <option value="manager">مدیر مالی</option>
+                                <option value="auditor">حسابرس</option>
+                                <option value="admin">مدیر سیستم (Admin)</option>
+                              </select>
+
+                              {/* Status Badge */}
+                              <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border ${
+                                u.status === "active" 
+                                  ? (isDarkMode ? "bg-emerald-950/30 border-emerald-900/60 text-emerald-400" : "bg-emerald-50 border-emerald-150 text-emerald-600")
+                                  : (isDarkMode ? "bg-rose-950/30 border-rose-900/60 text-rose-400" : "bg-rose-50 border-rose-150 text-rose-600")
+                              }`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${u.status === "active" ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`}></div>
+                                <span>{u.status === "active" ? "فعال" : "مسدود"}</span>
+                              </div>
+
+                              {/* Edit Profile Button */}
+                              <button
+                                onClick={() => {
+                                  setEditingUser({ ...u });
+                                  setShowEditUserModal(true);
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border cursor-pointer ${
+                                  isDarkMode 
+                                    ? "bg-slate-800/80 border-slate-750 text-indigo-400 hover:text-indigo-300 hover:border-slate-650 hover:bg-slate-850" 
+                                    : "bg-indigo-50/50 border-indigo-100/80 text-indigo-600 hover:bg-indigo-100 hover:border-indigo-200"
+                                }`}
+                                title="ویرایش کامل شناسنامه و پروفایل کاربر"
+                              >
+                                <Settings className="w-3.5 h-3.5 text-indigo-500" />
+                                <span>ویرایش کامل</span>
+                              </button>
+
+                              {/* Set Storage Limit Button */}
+                              <button
+                                onClick={() => {
+                                  const currentExtra = u.extraStorage || 0;
+                                  const input = prompt(`فضای اضافه تخصیص یافته به ${u.name} را وارد کنید (گیگابایت):`, currentExtra.toString());
+                                  if (input !== null) {
+                                    const parsed = parseFloat(input);
+                                    if (!isNaN(parsed) && parsed >= 0) {
+                                      setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, extraStorage: parsed } : usr));
+                                      updateUserInFirestore(u.id, { extraStorage: parsed });
+                                      logEvent("تخصیص فضا", `فضا کاربر «${u.name}» به ${parsed} گیگابایت تغییر یافت.`);
+                                      showNotification(`فضای کاربر «${u.name}» به ${parsed} گیگابایت بروزرسانی شد.`, "success");
+                                    }
+                                  }
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border cursor-pointer ${
+                                  isDarkMode 
+                                    ? "bg-slate-800/50 border-slate-750 text-slate-300 hover:bg-slate-800 hover:border-slate-650" 
+                                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300"
+                                }`}
+                                title="افزایش یا ویرایش حجم فضای ابری اختصاص یافته"
+                              >
+                                <HardDrive className="w-3.5 h-3.5 text-amber-500" />
+                                <span dir="ltr">{(5 + (u.extraStorage || 0)).toLocaleString("fa-IR")} GB</span>
+                                <Edit2 className="w-2.5 h-2.5 opacity-60 mr-0.5" />
+                              </button>
+
+                              {/* API Key Connection Button */}
+                              <button
+                                onClick={() => {
+                                  const currentApiKey = u.geminiApiKey || "";
+                                  const input = prompt(`کلید API جمینای اختصاصی (GEMINI_API_KEY) برای ${u.name} را وارد کنید:`, currentApiKey);
+                                  if (input !== null) {
+                                    setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, geminiApiKey: input } : usr));
+                                    updateUserInFirestore(u.id, { geminiApiKey: input });
+                                    logEvent("تخصیص کلید API", `کلید API برای کاربر «${u.name}» تنظیم یا تغییر یافت.`);
+                                    showNotification(`کلید API کاربر «${u.name}» بروزرسانی شد.`, "success");
+                                  }
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all border cursor-pointer ${
+                                  isDarkMode 
+                                    ? "bg-slate-800/50 border-slate-750 text-slate-300 hover:bg-slate-800 hover:border-slate-650" 
+                                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300"
+                                }`}
+                                title="تنظیم کلید API اختصاصی کاربر جهت عدم محاسبه در سهمیه سیستم"
+                              >
+                                <KeyRound className="w-3.5 h-3.5 text-purple-500" />
+                                <span className="truncate max-w-[110px]" dir="ltr">
+                                  {u.geminiApiKey ? `${u.geminiApiKey.substring(0, 8)}...` : "بدون کلید اختصاصی"}
+                                end
+                                </span>
+                                <Edit2 className="w-2.5 h-2.5 opacity-60 mr-0.5" />
+                              </button>
+
+                              {/* Quick Block / Unblock Icon Button */}
+                              <button
+                                onClick={() => {
+                                  const newStatus = u.status === "active" ? "suspended" : "active";
+                                  setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, status: newStatus} : usr));
+                                  updateUserInFirestore(u.id, { status: newStatus });
+                                  logEvent("تغییر وضعیت کاربر", `کاربر ${u.name} به وضعیت ${newStatus === "active" ? "فعال" : "مسدود"} تغییر یافت.`);
+                                  showNotification(`وضعیت کاربر ${u.name} به ${newStatus === "active" ? "فعال" : "مسدود"} تغییر یافت.`, "success");
+                                }}
+                                className={`p-2 rounded-xl transition-all border cursor-pointer ${
+                                  u.status === "active"
+                                    ? (isDarkMode ? "border-slate-800 text-slate-400 hover:bg-rose-950/40 hover:text-rose-400 hover:border-rose-900/50" : "border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200")
+                                    : (isDarkMode ? "border-rose-900/50 bg-rose-950/20 text-rose-400 hover:bg-emerald-950/40 hover:text-emerald-400 hover:border-emerald-900/50" : "border-rose-200 bg-rose-50 text-rose-600 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200")
+                                }`}
+                                title={u.status === "active" ? "مسدود کردن کاربر" : "فعال‌سازی مجدد کاربر"}
+                              >
+                                {u.status === "active" ? <Ban className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                              </button>
+                            </div>
                           </div>
-                          <div className="space-y-1 text-right">
-                            <div className="flex items-center gap-2">
-                              <h5 className="font-bold text-[13px]">{u.name}</h5>
-                              {u.role === "admin" && (
-                                <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold ${isDarkMode ? "bg-indigo-900/40 text-indigo-400 border border-indigo-800" : "bg-indigo-50 text-indigo-700 border border-indigo-200"}`}>
-                                  مدیر سیستم
-                                </span>
-                              )}
-                              {u.role === "manager" && (
-                                <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold ${isDarkMode ? "bg-amber-900/40 text-amber-400 border border-amber-800" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
-                                  مدیر مالی
-                                </span>
-                              )}
-                              {u.role === "auditor" && (
-                                <span className={`px-2 py-0.5 rounded-lg text-[9px] font-bold ${isDarkMode ? "bg-emerald-900/40 text-emerald-400 border border-emerald-800" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>
-                                  حسابرس
-                                </span>
-                              )}
-                              {!u.isOnboarded && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500 font-bold border border-amber-500/20">
-                                  پروفایل ناقص
-                                </span>
-                              )}
+
+                          {/* Beautiful Bento-inspired Live User Statistics Block */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mt-1.5">
+                            
+                            {/* Card 1: Token Usage */}
+                            <div className={`p-4 rounded-2xl border transition-all duration-300 hover:translate-y-[-2px] relative group ${
+                              isDarkMode 
+                                ? "bg-slate-950/45 border-slate-800/80 hover:border-indigo-500/30 hover:bg-slate-950/70" 
+                                : "bg-indigo-50/20 border-indigo-100/50 hover:border-indigo-300 hover:bg-indigo-50/30"
+                            }`}>
+                              <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                  <span className="block text-[10px] font-extrabold text-slate-400 dark:text-slate-500">توکن‌های مصرفی هوش مصنوعی</span>
+                                  <div className="flex items-baseline gap-1.5">
+                                    <span className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-lg">
+                                      {(u.apiUsage || 0).toLocaleString("fa-IR")}
+                                    </span>
+                                    <span className="text-[9px] font-bold text-slate-400">توکن</span>
+                                  </div>
+                                </div>
+                                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/10 shrink-0">
+                                  <Coins className="w-4 h-4" />
+                                </div>
+                              </div>
+                              
+                              {/* Inline mini progress bar & Action button */}
+                              <div className="mt-4 flex items-center justify-between gap-3 border-t border-dashed dark:border-slate-800 border-slate-200/60 pt-3">
+                                <div className="flex-1">
+                                  <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full" 
+                                      style={{ width: `${Math.min(100, ((u.apiUsage || 0) / 1000000) * 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[8px] text-slate-400 dark:text-slate-500 font-bold block mt-1">تخمینی از حجم سقف مصرفی</span>
+                                </div>
+                                
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`آیا از بازنشانی و صفر کردن آمار توکن‌های مصرفی کاربر «${u.name}» مطمئن هستید؟`)) {
+                                      setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, apiUsage: 0} : usr));
+                                      setDoc(doc(db, "users", String(u.id)), { apiUsage: 0 }, { merge: true })
+                                        .then(() => {
+                                          logEvent("ریست توکن کاربر", `آمار مصرف توکن کاربر ${u.name} صفر شد.`);
+                                          showNotification(`آمار مصرف توکن کاربر ${u.name} بازنشانی شد.`, 'success');
+                                        })
+                                        .catch(err => {
+                                          console.warn("Failed to reset apiUsage in Firestore:", err);
+                                          showNotification("ریست توکن با شکست مواجه شد.", "error");
+                                        });
+                                    }
+                                  }}
+                                  className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 dark:text-rose-400 border border-rose-500/15 text-[8px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                                  title="صفر کردن و ریست توکن‌های مصرفی"
+                                >
+                                  <RefreshCw className="w-3 h-3 animate-hover-spin" />
+                                  <span>صفر کردن</span>
+                                </button>
+                              </div>
                             </div>
-                            <div className={`text-[10px] flex flex-wrap gap-x-3 gap-y-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                              {u.email && <span>{u.email}</span>}
-                              {u.companyName && <span className="flex items-center gap-1 opacity-90"><Building className="w-3 h-3"/> {u.companyName}</span>}
-                              {u.phone && <span className="flex items-center gap-1 opacity-90" dir="ltr"><Phone className="w-3 h-3"/> {u.phone}</span>}
+
+                            {/* Card 2: Estimated Cost in USD */}
+                            <div className={`p-4 rounded-2xl border transition-all duration-300 hover:translate-y-[-2px] relative ${
+                              isDarkMode 
+                                ? "bg-slate-950/45 border-slate-800/80 hover:border-emerald-500/30 hover:bg-slate-950/70" 
+                                : "bg-emerald-50/20 border-emerald-100/50 hover:border-emerald-300 hover:bg-emerald-50/30"
+                            }`}>
+                              <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                  <span className="block text-[10px] font-extrabold text-slate-400 dark:text-slate-500">هزینه کل پردازش تخمینی</span>
+                                  <div className="flex items-baseline gap-1" dir="ltr">
+                                    <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-lg">
+                                      ${costUsd.toFixed(4)}
+                                    </span>
+                                    <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase">USD</span>
+                                  </div>
+                                </div>
+                                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/10 shrink-0">
+                                  <Database className="w-4 h-4" />
+                                </div>
+                              </div>
+
+                              <div className="mt-4 pt-3 border-t border-dashed dark:border-slate-800 border-slate-200/60 text-right">
+                                <span className="block text-[8px] text-slate-400 dark:text-slate-500 font-bold mb-0.5">مبنای قیمت‌گذاری دلار</span>
+                                <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400">
+                                  ۰.۱۵ دلار بر ۱M توکن پردازش
+                                </span>
+                              </div>
                             </div>
+
+                            {/* Card 3: Cloud Storage Gauge */}
+                            <div className={`p-4 rounded-2xl border transition-all duration-300 hover:translate-y-[-2px] relative ${
+                              isDarkMode 
+                                ? "bg-slate-950/45 border-slate-800/80 hover:border-amber-500/30 hover:bg-slate-950/70" 
+                                : "bg-amber-50/20 border-amber-100/50 hover:border-amber-300 hover:bg-amber-50/30"
+                            }`}>
+                              <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                  <span className="block text-[10px] font-extrabold text-slate-400 dark:text-slate-500">سقف فضای اختصاصی مجاز</span>
+                                  <div className="flex items-baseline gap-1.5">
+                                    <span className="font-mono font-black text-amber-600 dark:text-amber-400 text-lg">
+                                      {(5 + (u.extraStorage || 0)).toLocaleString("fa-IR")}
+                                    </span>
+                                    <span className="text-[9px] font-bold text-slate-400">گیگابایت</span>
+                                  </div>
+                                </div>
+                                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/10 shrink-0">
+                                  <HardDrive className="w-4 h-4" />
+                                </div>
+                              </div>
+
+                              <div className="mt-4 pt-3 border-t border-dashed dark:border-slate-800 border-slate-200/60 flex items-center justify-between text-[8px] font-extrabold text-slate-400 dark:text-slate-500">
+                                <span>۵GB پایه رایگان</span>
+                                <span className="text-amber-500 dark:text-amber-400">+{u.extraStorage || 0}GB ویژه</span>
+                              </div>
+                            </div>
+
+                            {/* Card 4: AI Connection / Gemini Key status */}
+                            <div className={`p-4 rounded-2xl border transition-all duration-300 hover:translate-y-[-2px] relative ${
+                              isDarkMode 
+                                ? "bg-slate-950/45 border-slate-800/80 hover:border-purple-500/30 hover:bg-slate-950/70" 
+                                : "bg-purple-50/20 border-purple-100/50 hover:border-purple-300 hover:bg-purple-50/30"
+                            }`}>
+                              <div className="flex items-start justify-between">
+                                <div className="space-y-1 text-right">
+                                  <span className="block text-[10px] font-extrabold text-slate-400 dark:text-slate-500">مکانیزم اتصال هوش مصنوعی</span>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <div className={`w-2 h-2 rounded-full ${hasCustomKey ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]"}`} />
+                                    <span className={`text-[11px] font-black ${hasCustomKey ? "text-purple-600 dark:text-purple-400" : "text-slate-500 dark:text-slate-400"}`}>
+                                      {hasCustomKey ? "کلید API اختصاصی" : "اشتراکی (سیستم)"}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className={`p-2 rounded-xl shrink-0 border ${hasCustomKey ? "bg-purple-500/10 text-purple-500 border-purple-500/10" : "bg-slate-500/10 text-slate-500 border-slate-500/10"}`}>
+                                  <KeyRound className="w-4 h-4" />
+                                </div>
+                              </div>
+
+                              <div className="mt-4 pt-3 border-t border-dashed dark:border-slate-800 border-slate-200/60 text-right">
+                                <span className="block text-[8px] text-slate-400 dark:text-slate-500 font-bold mb-0.5">شناسه امنیتی کوتاه کلید</span>
+                                <span className="font-mono text-[9px] text-slate-400 dark:text-slate-500" dir="ltr">
+                                  {hasCustomKey ? `${u.geminiApiKey.substring(0, 12)}...` : "SHARED_KEY_POOL"}
+                                </span>
+                              </div>
+                            </div>
+
                           </div>
                         </div>
-
-                        <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                          {/* Role Switcher */}
-                          <select
-                            value={u.role || "user"}
-                            onChange={(e) => {
-                              const newRole = e.target.value;
-                              setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, role: newRole } : usr));
-                              updateUserInFirestore(u.id, { role: newRole });
-                              showNotification(`نقش کاربر «${u.name}» به ${newRole} تغییر یافت.`, "success");
-                              logEvent("تغییر نقش کاربر", `نقش ${u.name} به ${newRole} تغییر کرد.`, "info");
-                            }}
-                            className={`px-2 py-1.5 rounded-xl text-[10px] font-bold border outline-none transition-colors ${
-                              u.role === "admin"
-                                ? (isDarkMode ? "bg-indigo-950/40 border-indigo-800 text-indigo-300" : "bg-indigo-50 border-indigo-200 text-indigo-700")
-                                : u.role === "manager"
-                                ? (isDarkMode ? "bg-amber-950/40 border-amber-800 text-amber-300" : "bg-amber-50 border-amber-200 text-amber-700")
-                                : u.role === "auditor"
-                                ? (isDarkMode ? "bg-emerald-950/40 border-emerald-800 text-emerald-300" : "bg-emerald-50 border-emerald-200 text-emerald-700")
-                                : (isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300" : "bg-slate-100 border-slate-200 text-slate-700")
-                            }`}
-                            title="تغییر نقش دسترسی"
-                          >
-                            <option value="user">کاربر / حسابدار</option>
-                            <option value="manager">مدیر مالی</option>
-                            <option value="auditor">حسابرس</option>
-                            <option value="admin">مدیر سیستم (Admin)</option>
-                          </select>
-
-                          {/* Status Badge */}
-                          <div className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-[10px] font-bold border ${
-                            u.status === "active" 
-                              ? (isDarkMode ? "bg-emerald-950/20 border-emerald-900/50 text-emerald-400" : "bg-emerald-50 border-emerald-100 text-emerald-600")
-                              : (isDarkMode ? "bg-rose-950/20 border-rose-900/50 text-rose-400" : "bg-rose-50 border-rose-100 text-rose-600")
-                          }`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${u.status === "active" ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`}></div>
-                            {u.status === "active" ? "فعال" : "مسدود"}
-                          </div>
-
-                          {/* Full Edit Profile Button */}
-                          <button
-                            onClick={() => {
-                              setEditingUser({ ...u });
-                              setShowEditUserModal(true);
-                            }}
-                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-colors border cursor-pointer ${
-                              isDarkMode 
-                                ? "bg-slate-900 border-indigo-900/40 text-indigo-300 hover:bg-slate-800" 
-                                : "bg-indigo-50 border-indigo-100 text-indigo-600 hover:bg-indigo-100"
-                            }`}
-                            title="ویرایش کامل مشخصات کاربر"
-                          >
-                            <Settings className="w-3.5 h-3.5 text-indigo-500" />
-                            <span>ویرایش کامل</span>
-                          </button>
-
-                          {/* Storage */}
-                          <button
-                            onClick={() => {
-                              const currentExtra = u.extraStorage || 0;
-                              const input = prompt(`فضای اضافه تخصیص یافته به ${u.name} را وارد کنید (گیگابایت):`, currentExtra.toString());
-                              if (input !== null) {
-                                const parsed = parseFloat(input);
-                                if (!isNaN(parsed) && parsed >= 0) {
-                                  setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, extraStorage: parsed } : usr));
-                                  updateUserInFirestore(u.id, { extraStorage: parsed });
-                                  logEvent("تخصیص فضا", `فضا کاربر «${u.name}» به ${parsed} گیگابایت تغییر یافت.`);
-                                  showNotification(`فضای کاربر «${u.name}» به ${parsed} گیگابایت بروزرسانی شد.`, "success");
-                                }
-                              }
-                            }}
-                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-colors border ${
-                              isDarkMode 
-                                ? "bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800" 
-                                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                            }`}
-                            title="تغییر فضای اختصاصی"
-                          >
-                            <HardDrive className="w-3.5 h-3.5 opacity-60 text-indigo-500" />
-                            <span dir="ltr">{(5 + (u.extraStorage || 0)).toLocaleString("fa-IR")} GB</span>
-                            <Edit2 className="w-3 h-3 opacity-40 mr-0.5" />
-                          </button>
-
-                          {/* API Key */}
-                          <button
-                            onClick={() => {
-                              const currentApiKey = u.geminiApiKey || "";
-                              const input = prompt(`کلید API جمینای اختصاصی (GEMINI_API_KEY) برای ${u.name} را وارد کنید:`, currentApiKey);
-                              if (input !== null) {
-                                setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, geminiApiKey: input } : usr));
-                                updateUserInFirestore(u.id, { geminiApiKey: input });
-                                logEvent("تخصیص کلید API", `کلید API برای کاربر «${u.name}» تنظیم یا تغییر یافت.`);
-                                showNotification(`کلید API کاربر «${u.name}» بروزرسانی شد.`, "success");
-                              }
-                            }}
-                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-colors border ${
-                              isDarkMode 
-                                ? "bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800" 
-                                : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                            }`}
-                            title="تنظیم کلید API اختصاصی"
-                          >
-                            <KeyRound className="w-3.5 h-3.5 opacity-60 text-indigo-500" />
-                            <span className="truncate max-w-[100px]" dir="ltr">
-                              {u.geminiApiKey ? `${u.geminiApiKey.substring(0, 8)}...` : "بدون کلید"}
-                            </span>
-                            <Edit2 className="w-3 h-3 opacity-40 mr-0.5" />
-                          </button>
-
-                          {/* Status Toggle */}
-                          <button
-                             onClick={() => {
-                                const newStatus = u.status === "active" ? "suspended" : "active";
-                                setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, status: newStatus} : usr));
-                                updateUserInFirestore(u.id, { status: newStatus });
-                                showNotification(`وضعیت کاربر ${u.name} تغییر یافت.`, "success");
-                             }}
-                             className={`p-2 rounded-xl transition-colors border ${
-                                u.status === "active"
-                                  ? (isDarkMode ? "border-slate-800 text-slate-400 hover:bg-rose-950/40 hover:text-rose-400 hover:border-rose-900/50" : "border-slate-200 text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200")
-                                  : (isDarkMode ? "border-rose-900/50 bg-rose-950/20 text-rose-400 hover:bg-emerald-950/40 hover:text-emerald-400 hover:border-emerald-900/50" : "border-rose-200 bg-rose-50 text-rose-600 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-200")
-                             }`}
-                             title={u.status === "active" ? "مسدود کردن کاربر" : "فعال‌سازی کاربر"}
-                          >
-                             {u.status === "active" ? <Ban className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Add User Modal */}
