@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } from "firebase/auth";
-import { getFirestore, doc, getDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, getDocFromServer } from "firebase/firestore";
 
 // Configuration from firebase-applet-config.json
 const firebaseConfig = {
@@ -24,12 +24,16 @@ export const googleProvider = new GoogleAuthProvider();
 // Custom connection validation
 export async function testFirebaseConnection() {
   try {
-    // Attempt to read a test document using standard getDoc (uses cache/network)
-    await getDoc(doc(db, "test", "connection"));
+    // Attempt to test server reachability using getDocFromServer
+    await getDocFromServer(doc(db, "test", "connection"));
     console.log("Firebase Connection verified successfully.");
     return true;
   } catch (error: any) {
-    console.warn("Firebase test connection warning (normal if collection not yet populated):", error?.message || error);
+    if (error?.code === "unavailable" || error?.message?.includes("offline") || error?.message?.includes("Could not reach")) {
+      console.warn("Firestore operates in offline/cached mode until connection is re-established.");
+    } else {
+      console.warn("Firebase test connection info:", error?.message || error);
+    }
     return false;
   }
 }

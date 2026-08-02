@@ -569,8 +569,7 @@ export default function AudioNotesSection({
                           max="100"
                           value={progress}
                           onChange={(e) => handleSeek(note.id, parseFloat(e.target.value))}
-                          disabled={!isPlaying}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         />
                       </div>
                     </div>
