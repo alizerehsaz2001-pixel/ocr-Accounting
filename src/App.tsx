@@ -2311,20 +2311,23 @@ export default function App() {
   const [profileCompanyName, setProfileCompanyName] = useState("");
   const [profileJobTitle, setProfileJobTitle] = useState("");
   const [profilePhone, setProfilePhone] = useState("");
+  const [profileNationalCode, setProfileNationalCode] = useState("");
 
   useEffect(() => {
     if (currentUser) {
       setProfileFirstName(currentUser.firstName || "");
       setProfileLastName(currentUser.lastName || "");
-      setProfileCompanyName(currentUser.companyName || "");
+      setProfileCompanyName(currentUser.companyName || currentUser.company || "");
       setProfileJobTitle(currentUser.jobTitle || "");
       setProfilePhone(currentUser.phone || "");
+      setProfileNationalCode(currentUser.nationalCode || "");
     } else {
       setProfileFirstName("");
       setProfileLastName("");
       setProfileCompanyName("");
       setProfileJobTitle("");
       setProfilePhone("");
+      setProfileNationalCode("");
     }
   }, [currentUser]);
 
@@ -2340,27 +2343,41 @@ export default function App() {
     }
 
     try {
+      const regSnapshot = currentUser.registrationData || {
+        firstName: profileFirstName.trim(),
+        lastName: profileLastName.trim(),
+        fullName: `${profileFirstName.trim()} ${profileLastName.trim()}`,
+        email: currentUser.email || "",
+        phone: profilePhone.trim(),
+        companyName: profileCompanyName.trim(),
+        jobTitle: profileJobTitle.trim(),
+        nationalCode: profileNationalCode.trim(),
+        registeredAt: Date.now()
+      };
+
       const updatedUser = {
         ...currentUser,
         firstName: profileFirstName.trim(),
         lastName: profileLastName.trim(),
         name: `${profileFirstName.trim()} ${profileLastName.trim()}`,
         companyName: profileCompanyName.trim(),
+        company: profileCompanyName.trim(),
         jobTitle: profileJobTitle.trim(),
         phone: profilePhone.trim(),
+        nationalCode: profileNationalCode.trim(),
+        registrationData: regSnapshot,
         isOnboarded: true
       };
 
-      const isDemo = localStorage.getItem("is_demo_mode") === "true";
-      if (!isDemo && auth.currentUser) {
+      if (currentUser.id) {
         const userRef = doc(db, "users", String(currentUser.id));
         await setDoc(userRef, updatedUser, { merge: true });
       }
 
       setCurrentUser(updatedUser);
-      setUsers(prev => prev.map(u => u.id === currentUser.id ? updatedUser : u));
-      showNotification("مشخصات حساب کاربری شما با موفقیت بروزرسانی شد.", "success");
-      logEvent("بروزرسانی حساب", `کاربر مشخصات حساب کاربری خود را بروزرسانی کرد.`);
+      setUsers(prev => prev.map(u => String(u.id) === String(currentUser.id) ? updatedUser : u));
+      showNotification("مشخصات حساب کاربری شما با موفقیت بروزرسانی شد و با پنل ارشد همگام گردید.", "success");
+      logEvent("بروزرسانی شناسنامه کاربر", `کاربر مشخصات حساب کاربری خود (${updatedUser.name}) را ویرایش و همگام ساخت.`);
     } catch (error) {
       console.error("Error updating profile:", error);
       showNotification("خطا در بروزرسانی مشخصات حساب کاربری.", "error");
@@ -7318,9 +7335,45 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6 pt-6 border-t border-slate-700/20">
+                        {/* Registration Snapshot Card (Protected / Locked Info) */}
+                        <div className={`p-5 rounded-2xl mb-6 border ${
+                          isDarkMode 
+                            ? "bg-slate-950/60 border-slate-800 text-slate-200" 
+                            : "bg-slate-50 border-slate-200 text-slate-800"
+                        }`}>
+                          <div className="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-700/20">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                              <span className="text-xs font-black">اطلاعات ثبت‌نام اولیه کاربر (سینک با پنل ارشد ادمین)</span>
+                            </div>
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center gap-1">
+                              <Lock className="w-3 h-3" /> ثبت رسمی اولیه
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-right">
+                            <div className="p-2.5 rounded-xl bg-slate-900/20 dark:bg-slate-900/40 border border-slate-700/10">
+                              <span className="text-[9px] text-slate-400 block mb-0.5">نام ثبت‌نامی:</span>
+                              <span className="text-xs font-bold text-indigo-400">{currentUser?.registrationData?.fullName || currentUser?.name || "مشخص نشده"}</span>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-slate-900/20 dark:bg-slate-900/40 border border-slate-700/10">
+                              <span className="text-[9px] text-slate-400 block mb-0.5">ایمیل اکانت:</span>
+                              <span className="text-[11px] font-mono font-bold text-slate-300 truncate block" dir="ltr">{currentUser?.email || "گوگل ممیزی"}</span>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-slate-900/20 dark:bg-slate-900/40 border border-slate-700/10">
+                              <span className="text-[9px] text-slate-400 block mb-0.5">همراه اولیه:</span>
+                              <span className="text-xs font-mono font-bold text-slate-300" dir="ltr">{currentUser?.registrationData?.phone || currentUser?.phone || "ثبت نشده"}</span>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-slate-900/20 dark:bg-slate-900/40 border border-slate-700/10">
+                              <span className="text-[9px] text-slate-400 block mb-0.5">مجموعه اولیه:</span>
+                              <span className="text-xs font-bold text-slate-300">{currentUser?.registrationData?.companyName || currentUser?.companyName || currentUser?.company || "مؤسسه حسابداری"}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-4">
                           <div className="space-y-1.5 text-right">
-                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نام</label>
+                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نام فعلی کاربر</label>
                             <input 
                               type="text"
                               value={profileFirstName}
@@ -7331,7 +7384,7 @@ export default function App() {
                             />
                           </div>
                           <div className="space-y-1.5 text-right">
-                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نام خانوادگی</label>
+                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نام خانوادگی فعلی</label>
                             <input 
                               type="text"
                               value={profileLastName}
@@ -7342,7 +7395,7 @@ export default function App() {
                             />
                           </div>
                           <div className="space-y-1.5 text-right">
-                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نام شرکت / مجموعه اقتصادی</label>
+                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>نام شرکت / مجموعه اقتصادی فعلی</label>
                             <input 
                               type="text"
                               value={profileCompanyName}
@@ -7353,7 +7406,7 @@ export default function App() {
                             />
                           </div>
                           <div className="space-y-1.5 text-right">
-                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>سمت شغلی</label>
+                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>سمت شغلی فعلی</label>
                             <input 
                               type="text"
                               value={profileJobTitle}
@@ -7363,7 +7416,7 @@ export default function App() {
                               }`}
                             />
                           </div>
-                          <div className="space-y-1.5 text-right md:col-span-2">
+                          <div className="space-y-1.5 text-right">
                             <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>شماره تلفن همراه</label>
                             <input 
                               type="text"
@@ -7375,15 +7428,28 @@ export default function App() {
                               dir="ltr"
                             />
                           </div>
+                          <div className="space-y-1.5 text-right">
+                            <label className={`text-[10px] font-black ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>کد ملی / شناسه ملی</label>
+                            <input 
+                              type="text"
+                              value={profileNationalCode}
+                              onChange={(e) => setProfileNationalCode(e.target.value)}
+                              placeholder="۰۰۱۲۳۴۵۶۷۸"
+                              className={`w-full text-xs px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all text-left font-mono ${
+                                isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-slate-50 border-slate-200 text-slate-800"
+                              }`}
+                              dir="ltr"
+                            />
+                          </div>
                         </div>
 
                         <div className="mt-5 flex justify-end">
                           <button
                             onClick={handleUpdateProfile}
-                            className="flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-lg shadow-blue-500/10 cursor-pointer"
+                            className="flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-lg shadow-blue-500/10 cursor-pointer active:scale-95"
                           >
                             <Save className="w-4 h-4" />
-                            ثبت و بروزرسانی مشخصات حساب
+                            ذخیره تغییرات و همگام‌سازی با پنل ارشد
                           </button>
                         </div>
 
@@ -7750,6 +7816,7 @@ export default function App() {
         onClose={() => setIsAdminPanelOpen(false)}
         isDarkMode={isDarkMode}
         currentUser={currentUser}
+        setCurrentUser={setCurrentUser}
         users={users}
         setUsers={setUsers}
         adminMasterPin={adminMasterPin}

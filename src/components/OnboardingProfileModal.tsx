@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { doc, updateDoc, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { motion, AnimatePresence } from "motion/react";
-import { User, Building2, Briefcase, Phone, Mail, Sparkles, Loader2, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { User, Building2, Briefcase, Phone, Mail, Sparkles, Loader2, ShieldCheck, CheckCircle2, FileText } from "lucide-react";
 
 interface OnboardingProfileModalProps {
   isOpen: boolean;
@@ -24,6 +24,7 @@ export default function OnboardingProfileModal({
   const [companyName, setCompanyName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [phone, setPhone] = useState("");
+  const [nationalCode, setNationalCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -59,7 +60,20 @@ export default function OnboardingProfileModal({
       const trimmedCompanyName = companyName.trim();
       const trimmedJobTitle = jobTitle.trim();
       const trimmedPhone = phone.trim();
+      const trimmedNationalCode = nationalCode.trim();
       const fullName = `${trimmedFirstName} ${trimmedLastName}`;
+
+      const regSnapshot = {
+        firstName: trimmedFirstName,
+        lastName: trimmedLastName,
+        fullName: fullName,
+        email: currentUser.email || "",
+        phone: trimmedPhone,
+        companyName: trimmedCompanyName,
+        jobTitle: trimmedJobTitle,
+        nationalCode: trimmedNationalCode,
+        registeredAt: Date.now()
+      };
 
       const updatedUser = {
         ...currentUser,
@@ -67,8 +81,12 @@ export default function OnboardingProfileModal({
         lastName: trimmedLastName,
         name: fullName,
         companyName: trimmedCompanyName,
+        company: trimmedCompanyName,
         jobTitle: trimmedJobTitle,
         phone: trimmedPhone,
+        nationalCode: trimmedNationalCode,
+        registrationData: currentUser.registrationData || regSnapshot,
+        registeredAt: currentUser.registeredAt || Date.now(),
         isOnboarded: true
       };
 
@@ -79,7 +97,7 @@ export default function OnboardingProfileModal({
         await setDoc(userRef, updatedUser, { merge: true });
       }
 
-      showNotification("اطلاعات حساب کاربری شما با موفقیت ثبت و فعال شد.", "success");
+      showNotification("اطلاعات حساب کاربری شما با موفقیت ثبت و با پنل ارشد همگام شد.", "success");
       onComplete(updatedUser);
     } catch (error: any) {
       console.error("Onboarding profile save error:", error);
@@ -263,6 +281,28 @@ export default function OnboardingProfileModal({
                   />
                 </div>
                 {errors.phone && <p className="text-[10px] text-rose-500 font-bold">{errors.phone}</p>}
+              </div>
+            </div>
+
+            {/* National Code / Identity */}
+            <div className="space-y-1">
+              <label className={`text-[10px] font-black block ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                کد ملی / شناسه ملی شخص حقوقی (اختیاری)
+              </label>
+              <div className="relative">
+                <FileText className={`w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
+                <input
+                  type="text"
+                  value={nationalCode}
+                  onChange={(e) => setNationalCode(e.target.value)}
+                  placeholder="مثال: ۰۰۱۲۳۴۵۶۷۸"
+                  className={`w-full text-xs pr-11 pl-4 py-3.5 rounded-2xl border focus:outline-none focus:ring-2 transition-all font-mono ${
+                    isDarkMode 
+                      ? "bg-slate-950/40 border-slate-800 text-slate-200 focus:border-indigo-500 focus:ring-indigo-500/20" 
+                      : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:ring-indigo-500/20"
+                  }`}
+                  dir="ltr"
+                />
               </div>
             </div>
 
