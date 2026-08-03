@@ -495,7 +495,7 @@ export default function App() {
     {
       id: "welcome",
       role: "assistant",
-      text: "سلام! من مهرآیین، پشتیبان هوشمند شما هستم. چطور می‌توانم در کار با نرم‌افزار، استخراج اسناد فاکتور یا ماژول‌های حسابداری و مالی به شما کمک کنم؟",
+      text: "سلام! من مهرآیین، پشتیبان هوشمند شما هستم. چطور می‌توانم در کار با نرم‌افزار، استخراج اسناد فاکتور یا ماژول‌های حسابداری و مالی به شما کمک کنم؟ همچنین می‌توانید جهت هرگونه سوال یا راهنمایی فنی مستقیماً با توسعه‌دهنده سیستم (علی زره‌ساز) از طریق ایمیل alizerehsaz2001@gmail.com در ارتباط باشید.",
       timestamp: new Date(),
     }
   ]);
@@ -9885,9 +9885,18 @@ export default function App() {
                   </div>
                   <div>
                     <h4 className="font-bold text-xs text-right">مهرآیین - پشتیبان هوشمند ERP</h4>
-                    <p className={`text-[10px] mt-0.5 text-right ${isDarkMode ? "text-emerald-400" : "text-emerald-600"} flex items-center gap-1`}>
-                      <span>•</span> پاسخگوی آنلاین فعال
-                    </p>
+                    <div className="flex flex-col gap-0.5 mt-0.5 text-right">
+                      <p className={`text-[9.5px] ${isDarkMode ? "text-emerald-400" : "text-emerald-600"} flex items-center gap-1`}>
+                        <span>•</span> پاسخگوی آنلاین فعال
+                      </p>
+                      <a 
+                        href="mailto:alizerehsaz2001@gmail.com" 
+                        className={`text-[9px] hover:underline font-semibold block ${isDarkMode ? "text-indigo-400 hover:text-indigo-300" : "text-indigo-600 hover:text-indigo-700"}`}
+                        title="ارتباط مستقیم با علی زره‌ساز (توسعه‌دهنده سیستم)"
+                      >
+                        توسعه‌دهنده: alizerehsaz2001@gmail.com
+                      </a>
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -9898,7 +9907,7 @@ export default function App() {
                           {
                             id: "welcome",
                             role: "assistant",
-                            text: "سلام! من مهرآیین، پشتیبان هوشمند شما هستم. چطور می‌توانم در کار با نرم‌افزار، استخراج اسناد فاکتور یا ماژول‌های حسابداری و مالی به شما کمک کنم؟",
+                            text: "سلام! من مهرآیین، پشتیبان هوشمند شما هستم. چطور می‌توانم در کار با نرم‌افزار، استخراج اسناد فاکتور یا ماژول‌های حسابداری و مالی به شما کمک کنم؟ همچنین می‌توانید جهت هرگونه سوال یا راهنمایی فنی مستقیماً با توسعه‌دهنده سیستم (علی زره‌ساز) از طریق ایمیل alizerehsaz2001@gmail.com در ارتباط باشید.",
                             timestamp: new Date(),
                           }
                         ]);
