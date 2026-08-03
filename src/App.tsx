@@ -3358,6 +3358,17 @@ export default function App() {
     showNotification("سند از تاریخچه اسکن‌ها حذف شد.", "info");
   };
 
+  const toggleStarScan = (scanId: string) => {
+    setPreviousScans(prev => prev.map(s => {
+      if (s.id === scanId) {
+        const nextVal = !s.isStarred;
+        showNotification(nextVal ? "سند به برگزیده‌ها اضافه شد ⭐" : "سند از برگزیده‌ها حذف شد", "info");
+        return { ...s, isStarred: nextVal };
+      }
+      return s;
+    }));
+  };
+
   const isRowEdited = (current: TransactionItem, index: number) => {
     if (!activeFile || !activeFile.results) return false;
     const original = activeFile.results[index];
@@ -4090,6 +4101,11 @@ export default function App() {
                           : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:shadow-md"
                     }`}
                   >
+                    {scan.isStarred && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full flex items-center justify-center shadow-sm z-10">
+                         <Star className="w-2 h-2 text-white fill-white" />
+                      </div>
+                    )}
                     <div className="flex items-center gap-2.5 overflow-hidden min-w-0 flex-1">
                       {/* Thumbnail Container */}
                       <div className={`w-9 h-9 rounded-xl overflow-hidden shrink-0 relative shadow-sm border ${
@@ -4119,33 +4135,69 @@ export default function App() {
                             <span>•</span>
                             <span>{timeStr}</span>
                           </div>
-                          {scan.file.documentType && (
-                            <span className={`border rounded px-1 text-[8px] font-bold shrink-0 max-w-[70px] truncate ${
-                              isDarkMode 
-                                ? "bg-slate-950/60 text-indigo-400 border-slate-850" 
-                                : "bg-slate-200/50 text-indigo-700 border-slate-300/40"
-                            }`} title={scan.file.documentType}>
-                              {scan.file.documentType}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {scan.file.tokensUsed ? (
+                              <span className={`border rounded px-1 text-[8px] font-bold shrink-0 max-w-[60px] truncate flex items-center gap-0.5 ${
+                                isDarkMode ? "bg-indigo-950/40 text-indigo-400 border-indigo-900/50" : "bg-indigo-50 text-indigo-600 border-indigo-200"
+                              }`} title={`توکن مصرفی: ${scan.file.tokensUsed.toLocaleString("fa-IR")}`}>
+                                <Zap className="w-2 h-2" />
+                                {scan.file.tokensUsed.toLocaleString("fa-IR")}
+                              </span>
+                            ) : null}
+                            {scan.folder && (
+                              <span className={`border rounded px-1 text-[8px] font-bold shrink-0 max-w-[60px] truncate flex items-center gap-0.5 ${
+                                isDarkMode ? "bg-amber-950/40 text-amber-500 border-amber-900/50" : "bg-amber-50 text-amber-600 border-amber-200"
+                              }`} title={`پوشه: ${scan.folder}`}>
+                                <Folder className="w-2 h-2" />
+                                {scan.folder}
+                              </span>
+                            )}
+                            {scan.file.documentType && (
+                              <span className={`border rounded px-1 text-[8px] font-bold shrink-0 max-w-[70px] truncate ${
+                                isDarkMode 
+                                  ? "bg-slate-950/60 text-slate-400 border-slate-850" 
+                                  : "bg-slate-200/50 text-slate-700 border-slate-300/40"
+                              }`} title={scan.file.documentType}>
+                                {scan.file.documentType}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
                     
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deletePreviousScan(scan.id);
-                      }}
-                      className={`p-1 rounded-lg transition-opacity duration-250 opacity-0 group-hover:opacity-100 shrink-0 ml-1 hover:scale-105 ${
-                        isDarkMode
-                          ? "text-slate-500 hover:text-rose-400 hover:bg-slate-800"
-                          : "text-slate-450 hover:text-rose-600 hover:bg-slate-200"
-                      }`}
-                      title="حذف از تاریخچه"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    <div className={`flex flex-col gap-1 transition-opacity duration-250 ${scan.isStarred ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} shrink-0 ml-1`}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleStarScan(scan.id);
+                        }}
+                        className={`p-1 rounded-lg hover:scale-105 transition-colors ${
+                          scan.isStarred
+                            ? "text-amber-500 hover:bg-amber-500/10"
+                            : isDarkMode
+                              ? "text-slate-500 hover:text-amber-400 hover:bg-slate-800"
+                              : "text-slate-450 hover:text-amber-500 hover:bg-slate-200"
+                        }`}
+                        title={scan.isStarred ? "حذف از برگزیده‌ها" : "افزودن به برگزیده‌ها"}
+                      >
+                        <Star className={`h-3.5 w-3.5 ${scan.isStarred ? "fill-current" : ""}`} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deletePreviousScan(scan.id);
+                        }}
+                        className={`p-1 rounded-lg transition-colors hover:scale-105 ${
+                          isDarkMode
+                            ? "text-slate-500 hover:text-rose-400 hover:bg-slate-800"
+                            : "text-slate-450 hover:text-rose-600 hover:bg-slate-200"
+                        }`}
+                        title="حذف از تاریخچه"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </motion.div>
                 );
               })
@@ -8191,16 +8243,7 @@ export default function App() {
                   }).length;
                 };
 
-                const toggleStarScan = (scanId: string) => {
-                  setPreviousScans(prev => prev.map(s => {
-                    if (s.id === scanId) {
-                      const nextVal = !s.isStarred;
-                      showNotification(nextVal ? "سند به برگزیده‌ها اضافه شد ⭐" : "سند از برگزیده‌ها حذف شد", "info");
-                      return { ...s, isStarred: nextVal };
-                    }
-                    return s;
-                  }));
-                };
+
 
                 const addTagToScan = (scanId: string, tag: string) => {
                   if (!tag.trim()) return;
