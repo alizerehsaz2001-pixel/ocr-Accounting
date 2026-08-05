@@ -98,6 +98,8 @@ import AudioNotesSection from "./components/AudioNotesSection";
 import ThemeSwitcher from "./components/ThemeSwitcher";
 import OnboardingModal from "./components/OnboardingModal";
 import AiSettingsModal from "./components/AiSettingsModal";
+import AdaptiveMlDashboardModal from "./components/AdaptiveMlDashboardModal";
+import AnalysisRatingWidget from "./components/AnalysisRatingWidget";
 import DocumentExclusiveChatModal from "./components/DocumentExclusiveChatModal";
 import OnboardingProfileModal from "./components/OnboardingProfileModal";
 import AuditLogsModal from "./components/AuditLogsModal";
@@ -425,7 +427,15 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<any>(() => {
      try {
        const stored = localStorage.getItem("current_user");
-       return stored ? JSON.parse(stored) : null;
+       if (stored) {
+         const parsed = JSON.parse(stored);
+         if (parsed && (parsed.email === "alizerehsaz2001@gmail.com" || parsed.email?.toLowerCase() === "alizerehsaz2001@gmail.com")) {
+           parsed.role = "admin";
+           localStorage.setItem("current_user", JSON.stringify(parsed));
+         }
+         return parsed;
+       }
+       return null;
      } catch {
        return null;
      }
@@ -1778,6 +1788,7 @@ export default function App() {
     return localStorage.getItem("has_seen_onboarding") !== "true";
   });
   const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false);
+  const [isMlDashboardOpen, setIsMlDashboardOpen] = useState(false);
   const [isTopLeftMenuOpen, setIsTopLeftMenuOpen] = useState(false);
   const [isCompressionEnabled, setIsCompressionEnabled] = useState<boolean>(() => {
     return localStorage.getItem("is_compression_enabled") === "true";
@@ -2032,7 +2043,14 @@ export default function App() {
     }
   }, []);
 
-  const handleEnterDemo = (customName?: string, customEmail?: string) => {
+  const handleEnterDemo = (
+    customName?: string, 
+    customEmail?: string,
+    customPhone?: string,
+    customCompany?: string,
+    customNationalCode?: string,
+    customJob?: string
+  ) => {
     const nameToUse = customName?.trim() || "سمانه رسولی";
     const emailToUse = customEmail?.trim() || "samaneh.rasouli@example.com";
     const nameParts = nameToUse.split(" ");
@@ -2040,16 +2058,17 @@ export default function App() {
     const lastName = nameParts.slice(1).join(" ") || "ممیزی";
 
     const isDemoMode = !customName;
-    const roleToUse = (emailToUse === "alizerehsaz2001@gmail.com" || isDemoMode) ? "admin" : "user";
+    const roleToUse = (emailToUse?.toLowerCase() === "alizerehsaz2001@gmail.com" || isDemoMode) ? "admin" : "user";
 
     const demoUser = { 
       id: "user_" + Date.now(), 
       name: nameToUse, 
       firstName: firstName,
       lastName: lastName,
-      companyName: isDemoMode ? "مؤسسه مالی و حسابداری" : "",
-      phone: isDemoMode ? "09121111111" : "",
-      jobTitle: isDemoMode ? "مدیر مالی / ممیز ارشد" : "",
+      companyName: customCompany?.trim() || (isDemoMode ? "مؤسسه مالی و حسابداری" : ""),
+      phone: customPhone?.trim() || (isDemoMode ? "09121111111" : ""),
+      jobTitle: customJob?.trim() || (isDemoMode ? "مدیر مالی / ممیز ارشد" : ""),
+      nationalCode: customNationalCode?.trim() || "",
       email: emailToUse,
       role: roleToUse, 
       status: "active", 
@@ -2487,9 +2506,9 @@ export default function App() {
 
   const handleOpenProtectedPanel = (target: "admin" | "user") => {
     if (target === "admin") {
-      if (currentUser?.role !== "admin") {
-        showNotification("دسترسی غیرمجاز! فقط حساب‌های با سطح دسترسی مدیر سیستم (Admin) مجاز به ورود هستند.", "error");
-        logEvent("تلاش ناموفق ورود به ادمین", `کاربر «${currentUser?.name || "مهمان"}» بدون نقش Admin قصد ورود داشت.`, "warning");
+      if (currentUser?.email !== "alizerehsaz2001@gmail.com") {
+        showNotification("دسترسی غیرمجاز! فقط حساب ادمین اصلی مجاز به ورود است.", "error");
+        logEvent("تلاش ناموفق ورود به ادمین", `کاربر «${currentUser?.email || "مهمان"}» قصد ورود داشت.`, "warning");
         return;
       }
       setEnteredAdminPin("");
@@ -3541,6 +3560,13 @@ export default function App() {
         showNotification={(text, type) => showNotification(text, type)}
       />
 
+      <AdaptiveMlDashboardModal
+        isOpen={isMlDashboardOpen}
+        onClose={() => setIsMlDashboardOpen(false)}
+        isDarkMode={isDarkMode}
+        onShowNotification={showNotification}
+      />
+
       {/* Toast Notifications */}
       {notification && (
         <div
@@ -3618,6 +3644,27 @@ export default function App() {
             <Settings className={`h-4 w-4 ml-2.5 shrink-0 transition-colors ${isAiSettingsOpen ? "text-fuchsia-500" : isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
             <span className="text-[11.5px]">تنظیمات هوش مصنوعی و راهنمای استخراج</span>
           </button>
+          
+          {currentUser?.email === "alizerehsaz2001@gmail.com" && (
+            <button
+              onClick={() => setIsMlDashboardOpen(true)}
+              className={`w-full flex items-center px-4 py-2 transition-all duration-200 text-right ${
+                isMlDashboardOpen 
+                   ? isDarkMode 
+                     ? "bg-indigo-500/10 text-indigo-400 border-r-2 border-indigo-500 font-bold animate-pulse-slow" 
+                     : "bg-indigo-50 text-indigo-700 border-r-2 border-indigo-600 font-bold"
+                   : isDarkMode 
+                     ? "text-slate-400 hover:bg-slate-800/40 hover:text-white" 
+                     : "text-slate-600 hover:bg-slate-200/50 hover:text-slate-900"
+              }`}
+            >
+              <Brain className={`h-4 w-4 ml-2.5 shrink-0 transition-colors ${isMlDashboardOpen ? "text-indigo-500" : isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
+              <span className="text-[11.5px] font-black flex items-center gap-1">
+                یادگیری هوشمند و شخصی‌سازی (ML)
+                <span className="px-1 py-0.5 rounded-full text-[7.5px] bg-indigo-500 text-white leading-none">فعال (ادمین)</span>
+              </span>
+            </button>
+          )}
           <button
             onClick={() => setShowOnboarding(true)}
             className={`w-full flex items-center px-4 py-2 transition-all duration-200 text-right ${
@@ -4380,7 +4427,7 @@ export default function App() {
                       حساب کاربری
                     </button>
 
-                    {currentUser?.role === "admin" && (
+                    {currentUser?.email === "alizerehsaz2001@gmail.com" && (
                       <button
                         onClick={() => {
                           setIsTopLeftMenuOpen(false);
@@ -4464,17 +4511,14 @@ export default function App() {
                 <span className="hidden sm:inline">فایل‌ها</span>
               </button>
 
-              {currentUser?.role === "admin" && (
+              {currentUser?.email === "alizerehsaz2001@gmail.com" && (
                 <button
                   onClick={() => handleOpenProtectedPanel("admin")}
-                  className={`p-1.5 rounded-md transition-colors ${
-                    isDarkMode 
-                      ? "text-slate-400 hover:text-rose-400 hover:bg-slate-800" 
-                      : "text-slate-500 hover:text-rose-600 hover:bg-slate-100"
-                  }`}
-                  title="پنل مدیریت"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all text-[11px] font-black bg-gradient-to-r from-rose-600 to-indigo-600 hover:from-rose-500 hover:to-indigo-500 text-white shadow-md shadow-indigo-500/10 cursor-pointer animate-pulse-slow"
+                  title="ورود به پنل مدیریت ارشد کل سیستم (کد پیش‌فرض: 7788)"
                 >
-                  <Shield className="w-4 h-4 shrink-0 opacity-80" />
+                  <Shield className="w-3.5 h-3.5 shrink-0" />
+                  <span>پنل مدیریت (ادمین)</span>
                 </button>
               )}
             </div>
@@ -5762,12 +5806,47 @@ export default function App() {
                     {activeFile.status === "success" && transactions.length > 0 && (
                       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden h-full w-full">
                           <div className="flex-1 min-w-0 overflow-x-auto w-full">
+                          <AnalysisRatingWidget
+                            fileId={activeFile.id}
+                            fileName={activeFile.name}
+                            transactions={transactions}
+                            isDarkMode={isDarkMode}
+                            onShowNotification={showNotification}
+                          />
                           <DynamicTable 
                              transactions={transactions} 
                              columns={(activeFile.columns && activeFile.columns.length > 0) ? activeFile.columns : DEFAULT_COLUMNS} 
                              isDarkMode={isDarkMode} 
                              onUpdateTransactions={(updated) => {
-                                setTransactions(updated);
+                                 // Auto-learn corrections from edits
+                                 try {
+                                   const autoLearn = async (prev: any[], next: any[]) => {
+                                     if (!prev || prev.length === 0 || !next || next.length === 0) return;
+                                     for (let i = 0; i < prev.length; i++) {
+                                       const pRow = prev[i];
+                                       const nRow = next.find(r => r.id === pRow.id);
+                                       if (!nRow) continue;
+                                       for (const key of Object.keys(pRow)) {
+                                         if (key === "id" || key === "ضریب_اطمینان" || key === "wordsText" || key === "مبلغ_به_حروف") continue;
+                                         const pVal = String(pRow[key] || "").trim();
+                                         const nVal = String(nRow[key] || "").trim();
+                                         if (pVal && nVal && pVal !== nVal) {
+                                           await fetch("/api/ml/learn", {
+                                             method: "POST",
+                                             headers: { "Content-Type": "application/json" },
+                                             body: JSON.stringify({
+                                               type: "correction",
+                                               item: { original: pVal, corrected: nVal, field: key }
+                                             })
+                                           });
+                                         }
+                                       }
+                                     }
+                                   };
+                                   autoLearn(transactions, updated);
+                                 } catch (err) {}
+
+                                 setTransactions(updated);
                                 try { setRawJsonText(JSON.stringify(updated, null, 2)); } catch (err) {}
                              }} 
                              onLogEvent={logEvent}
@@ -7744,7 +7823,7 @@ export default function App() {
         </div>
       )}
       {/* Token Management Panel Modal */}
-      {isTokenManagerOpen && currentUser?.role === "admin" && (
+      {isTokenManagerOpen && currentUser?.email === "alizerehsaz2001@gmail.com" && (
         <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 sm:p-6">
           <div 
             className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-fade-in"

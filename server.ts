@@ -5,6 +5,7 @@ import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
 import { enrichJSONWithWords } from "./src/utils/numberToPersianWords";
 import { AsyncLocalStorage } from "async_hooks";
+import fs from "fs";
 
 dotenv.config();
 
@@ -251,6 +252,269 @@ async function generateContentWithRetry(
   throw finalError;
 }
 
+const MEMORY_FILE_PATH = path.join(process.cwd(), "learned_memory.json");
+
+interface LearnerMemory {
+  adaptiveEnabled: boolean;
+  corrections: Array<{ id: string; original: string; corrected: string; field: string; count: number }>;
+  categorizations: Array<{ id: string; description: string; category: string; count: number }>;
+  customRules: Array<{ id: string; rule: string; category?: string; count: number }>;
+}
+
+const getInitialMemory = (): LearnerMemory => ({
+  adaptiveEnabled: true,
+  corrections: [
+    { id: "c1", original: "فیلتـ", corrected: "فیلتر روغن کارگاه", field: "شرح_کالا", count: 1 },
+    { id: "c2", original: "اسنپ", corrected: "هزینه حمل و نقل و ایاب ذهاب", field: "بابت", count: 1 }
+  ],
+  categorizations: [
+    { id: "cat1", description: "خرید مانیتور اداری", category: "دارایی‌های جاری / موجودی کالا (ملزومات اداری)", count: 1 },
+    { id: "cat2", description: "پرداخت قبض برق کارگاه", category: "هزینه‌ها / هزینه آب و برق و گاز", count: 1 }
+  ],
+  customRules: [
+    { id: "r1", rule: "نام خریدار در کلیه فاکتورها همواره باید 'شرکت توسعه فناوری مهرآیین' ثبت شود مگر آنکه صریحاً نام دیگری ذکر شده باشد.", count: 1 }
+  ]
+});
+
+function loadLearnedMemory(): LearnerMemory {
+  try {
+    if (fs.existsSync(MEMORY_FILE_PATH)) {
+      const data = fs.readFileSync(MEMORY_FILE_PATH, "utf-8");
+      const parsed = JSON.parse(data);
+      return {
+        adaptiveEnabled: parsed.adaptiveEnabled !== false,
+        corrections: Array.isArray(parsed.corrections) ? parsed.corrections : [],
+        categorizations: Array.isArray(parsed.categorizations) ? parsed.categorizations : [],
+        customRules: Array.isArray(parsed.customRules) ? parsed.customRules : []
+      };
+    }
+  } catch (err) {
+    console.error("Error loading learned memory:", err);
+  }
+  const init = getInitialMemory();
+  saveLearnedMemory(init);
+  return init;
+}
+
+function saveLearnedMemory(memory: LearnerMemory) {
+  try {
+    fs.writeFileSync(MEMORY_FILE_PATH, JSON.stringify(memory, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error saving learned memory:", err);
+  }
+}
+
+// 1. GET /api/ml/memory
+app.get("/api/ml/memory", (req, res) => {
+  const memory = loadLearnedMemory();
+  res.json({ success: true, memory });
+});
+
+// 2. POST /api/ml/learn
+app.post("/api/ml/learn", (req, res) => {
+  try {
+    const { type, item } = req.body;
+    const memory = loadLearnedMemory();
+    const id = "ml_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+
+    if (type === "correction") {
+      const { original, corrected, field } = item;
+      if (!original || !corrected) {
+        res.status(400).json({ error: "فیلدهای ورودی نامعتبر هستند." });
+        return;
+      }
+      const existing = memory.corrections.find(c => c.original === original.trim() && c.field === field);
+      if (existing) {
+        existing.corrected = corrected.trim();
+        existing.count = (existing.count || 0) + 1;
+      } else {
+        memory.corrections.push({ id, original: original.trim(), corrected: corrected.trim(), field: field || "شرح", count: 1 });
+      }
+    } else if (type === "categorization") {
+      const { description, category } = item;
+      if (!description || !category) {
+        res.status(400).json({ error: "فیلدهای ورودی نامعتبر هستند." });
+        return;
+      }
+      const existing = memory.categorizations.find(c => c.description === description.trim());
+      if (existing) {
+        existing.category = category.trim();
+        existing.count = (existing.count || 0) + 1;
+      } else {
+        memory.categorizations.push({ id, description: description.trim(), category: category.trim(), count: 1 });
+      }
+    } else if (type === "rule") {
+      const { rule } = item;
+      if (!rule) {
+        res.status(400).json({ error: "فیلدهای ورودی نامعتبر هستند." });
+        return;
+      }
+      const existing = memory.customRules.find(r => r.rule === rule.trim());
+      if (existing) {
+        existing.count = (existing.count || 0) + 1;
+      } else {
+        memory.customRules.push({ id, rule: rule.trim(), count: 1 });
+      }
+    } else {
+      res.status(400).json({ error: "نوع یادگیری نامعتبر است." });
+      return;
+    }
+
+    saveLearnedMemory(memory);
+    res.json({ success: true, memory });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 3. POST /api/ml/delete
+app.post("/api/ml/delete", (req, res) => {
+  try {
+    const { type, id } = req.body;
+    const memory = loadLearnedMemory();
+
+    if (type === "correction") {
+      memory.corrections = memory.corrections.filter(c => c.id !== id);
+    } else if (type === "categorization") {
+      memory.categorizations = memory.categorizations.filter(c => c.id !== id);
+    } else if (type === "rule") {
+      memory.customRules = memory.customRules.filter(r => r.id !== id);
+    } else {
+      res.status(400).json({ error: "نوع نامعتبر است." });
+      return;
+    }
+
+    saveLearnedMemory(memory);
+    res.json({ success: true, memory });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 4. POST /api/ml/toggle
+app.post("/api/ml/toggle", (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const memory = loadLearnedMemory();
+    memory.adaptiveEnabled = !!enabled;
+    saveLearnedMemory(memory);
+    res.json({ success: true, memory });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 5. POST /api/ml/reset
+app.post("/api/ml/reset", (req, res) => {
+  try {
+    const init = getInitialMemory();
+    saveLearnedMemory(init);
+    res.json({ success: true, memory: init });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 6. POST /api/ml/feedback
+app.post("/api/ml/feedback", async (req, res) => {
+  try {
+    const { fileId, rating, feedbackText, transactions } = req.body;
+    const memory = loadLearnedMemory();
+
+    if (!memory.adaptiveEnabled) {
+      res.json({ success: true, message: "حالت تطبیقی غیرفعال است." });
+      return;
+    }
+
+    if (rating < 5 && feedbackText && feedbackText.trim() !== "") {
+      try {
+        const ai = getGeminiClient();
+        const prompt = `شما یک دستیار حسابداری ارشد و مغز پردازش یادگیری تطبیقی هستید.
+کاربر یک سند مالی را با موفقیت اسکن کرده است، اما نمره کیفیت ${rating} از 5 داده است و بازخورد زیر را جهت بهبود استخراج ارائه کرده است:
+"${feedbackText}"
+
+تراکنش‌های استخراج شده فعلی جهت اطلاع شما:
+${JSON.stringify(transactions || [])}
+
+وظیفه شما این است که بررسی کنید چه اشتباهی رخ داده است و راهکارها یا اصلاحات لازم را استخراج کنید. قوانین مورد نظر را در سه گروه زیر مشخص کنید:
+1. corrections: برای هر اصطلاحی که کاربر اعلام کرده اشتباه استخراج شده است. مثلاً اگر نوشته "فیلتـ" باید اصلاح شود به "فیلتر روغن کارگاه". فیلدها می‌توانند "شرح_کالا"، "بابت" یا "طرف_حساب" باشند.
+2. categorizations: تغییر سرفصل یا دسته‌بندی پیشنهادی. مثلاً اگر کاربر اعلام کرده پرداخت آبونمان باید در سرفصل هزینه‌های آموزش قرار گیرد.
+3. customRules: قوانین کلی دیگر. مثلاً "در تمام فاکتورها، نام خریدار همواره باید شرکت مهرآیین ثبت شود".
+
+پاسخ را دقیقاً به صورت یک شیء JSON استاندارد بدون هیچ توضیح اضافه یا فرمت‌های مارک‌داون دیگر برگردانید:
+{
+  "corrections": [
+    {"original": "...", "corrected": "...", "field": "شرح_کالا"}
+  ],
+  "categorizations": [
+    {"description": "...", "category": "..."}
+  ],
+  "customRules": [
+    {"rule": "..."}
+  ]
+}`;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3.6-flash",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json"
+          }
+        });
+
+        const text = response.text || "";
+        const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
+        const mlData = JSON.parse(cleanJson);
+
+        let learnedCount = 0;
+        if (Array.isArray(mlData.corrections)) {
+          mlData.corrections.forEach((c: any) => {
+            if (c.original && c.corrected) {
+              const id = "ml_fb_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+              memory.corrections.push({ id, original: c.original.trim(), corrected: c.corrected.trim(), field: c.field || "شرح_کالا", count: 1 });
+              learnedCount++;
+            }
+          });
+        }
+        if (Array.isArray(mlData.categorizations)) {
+          mlData.categorizations.forEach((c: any) => {
+            if (c.description && c.category) {
+              const id = "ml_fb_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+              memory.categorizations.push({ id, description: c.description.trim(), category: c.category.trim(), count: 1 });
+              learnedCount++;
+            }
+          });
+        }
+        if (Array.isArray(mlData.customRules)) {
+          mlData.customRules.forEach((r: any) => {
+            if (r.rule) {
+              const id = "ml_fb_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
+              memory.customRules.push({ id, rule: r.rule.trim(), count: 1 });
+              learnedCount++;
+            }
+          });
+        }
+
+        saveLearnedMemory(memory);
+        res.json({ success: true, learned: true, learnedCount, memory });
+        return;
+      } catch (geminiErr) {
+        console.error("Error analyzing feedback with Gemini:", geminiErr);
+        // Fallback: save raw feedback as a custom rule directly
+        const id = "ml_fb_fallback_" + Date.now();
+        memory.customRules.push({ id, rule: `بازخورد کاربر: ${feedbackText}`, count: 1 });
+        saveLearnedMemory(memory);
+        res.json({ success: true, learned: true, fallback: true, memory });
+        return;
+      }
+    }
+
+    res.json({ success: true, learned: false, memory });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Persian/Farsi financial documents extraction endpoint
 app.post("/api/extract", async (req, res) => {
   try {
@@ -272,12 +536,45 @@ app.post("/api/extract", async (req, res) => {
     ];
     let selectedModel = allowedModels.includes(model) ? model : "gemini-3.6-flash";
 
+    const memory = loadLearnedMemory();
+    let mlPromptAdditions = "";
+
+    if (memory.adaptiveEnabled) {
+      if (memory.corrections.length > 0 || memory.categorizations.length > 0 || memory.customRules.length > 0) {
+        mlPromptAdditions = `\n\n🧠 [حافظه فعال و الگوهای آموخته‌شده سیستم (Adaptive Machine Learning Memory)]:\nشما باید از رفتارهای پیشین و اصلاحات کاربر که در زیر آمده است درس بگیرید و آن‌ها را به عنوان الگوهای استخراج و دسته‌بندی قطعی در این سند پیاده‌سازی کنید:`;
+        
+        if (memory.corrections.length > 0) {
+          mlPromptAdditions += `\n- اصلاحات املایی و نگارشی آموخته‌شده:`;
+          memory.corrections.forEach(c => {
+            mlPromptAdditions += `\n  * عبارت "${c.original}" در فیلد "${c.field}" را ترجیحاً به صورت تصحیح‌شده "${c.corrected}" استخراج کنید.`;
+          });
+        }
+
+        if (memory.categorizations.length > 0) {
+          mlPromptAdditions += `\n- قوانین تخصیص سرفصل و دسته‌بندی آموخته‌شده:`;
+          memory.categorizations.forEach(c => {
+            mlPromptAdditions += `\n  * برای شرح کالا/خدمات یا بابت نزدیک به "${c.description}"، سرفصل پیشنهادی ترجیحاً باید "${c.category}" یا نزدیک به آن باشد.`;
+          });
+        }
+
+        if (memory.customRules.length > 0) {
+          mlPromptAdditions += `\n- قوانین استخراج اختصاصی ممیزی آموخته‌شده:`;
+          memory.customRules.forEach(r => {
+            mlPromptAdditions += `\n  * قانون: ${r.rule}`;
+          });
+        }
+        
+        mlPromptAdditions += `\n\nنکته بسیار مهم: این الگوها بر اساس اصلاحات واقعی کاربر استخراج و یادگیری شده‌اند، لذا نادیده گرفتن آن‌ها مغایر با اصول یادگیری تطبیقی سیستم است.`;
+      }
+    }
+
     // Specific strict instructions tailored to Persian accounting standards and system instructions
     const systemInstruction = `شما یک حسابدار رسمی (CPA)، ممیز مالیاتی خبره، حسابرس ارشد و موتور هوش مصنوعی OCR هستید که با تمام اصول حسابداری عمومی پذیرفته شده (GAAP)، استانداردهای حسابداری ایران (مصوب سازمان حسابرسی)، ماهیت حساب‌ها (بدهکار/بستانکار) و فرآیندهای مالیاتی کشور آشنایی و تسلط کامل دارید.
 
 وظیفه شما استخراج دقیق، سازمان‌دهی، ممیزی و بازبینی اسناد مالی، فاکتورها، صورت‌حساب‌ها، فیشهای واریزی، اسناد دست‌نویس کارگاه‌ها، دفاتر کل/معین/روزنامه و حسابرسی خط به خط اقلام است.
 
 راهنمای جامع تخصصی، قوانین و اصول حسابداری ایران و استانداردهای حسابرسی که باید به طور کامل روی سند پیاده کنید:
+${mlPromptAdditions}
 
 ۱. ساختار کدینگ و سرفصل حساب‌ها (Ledger Hierarchy):
    در تحلیل اسناد، ماهیت اقلام را با توجه به ساختار استاندارد کدینگ حسابداری ایران در سطح گروه حساب، حساب کل، حساب معین و تفصیلی ردیابی و دسته بندی کنید:
