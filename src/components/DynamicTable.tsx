@@ -16,6 +16,15 @@ interface DynamicTableProps {
   onToggleSelectAll?: () => void;
 }
 
+const normalizeKey = (k: any): string => {
+  if (typeof k !== "string") return String(k || "");
+  return k
+    .trim()
+    .replace(/[\u064A\u0649]/g, "\u06CC") // Arabic Yeh to Persian Yeh
+    .replace(/[\u0643]/g, "\u06A9")      // Arabic Kaf to Persian Kaf
+    .replace(/\s+/g, "_");               // Replace spaces with underscores
+};
+
 export default function DynamicTable({
   transactions,
   columns,
@@ -34,6 +43,26 @@ export default function DynamicTable({
   const [highlightedRowIds, setHighlightedRowIds] = useState<Record<string, "new" | "edited">>({});
   const [justConfirmedId, setJustConfirmedId] = useState<string | null>(null);
   const prevTransactionsRef = useRef<TransactionItem[]>(transactions);
+
+  const uniqueColumns = React.useMemo(() => {
+    if (!Array.isArray(columns)) return [];
+    const seen = new Set<string>();
+    const res: DynamicColumn[] = [];
+    columns.forEach((col, idx) => {
+      if (!col) return;
+      const rawK = col.کلید || col.عنوان || `col-${idx}`;
+      const k = normalizeKey(rawK);
+      if (!seen.has(k)) {
+        seen.add(k);
+        res.push({
+          ...col,
+          کلید: k,
+          عنوان: col.عنوان || rawK
+        });
+      }
+    });
+    return res;
+  }, [columns]);
 
   useEffect(() => {
     const prevTransactions = prevTransactionsRef.current;
@@ -179,7 +208,7 @@ export default function DynamicTable({
             <th className={`px-3 py-3.5 text-center sticky top-0 z-30 bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-l ${isDarkMode ? "border-slate-800/80" : "border-slate-200"} select-none w-16 shrink-0`}>
               دقت
             </th>
-            {columns.map(col => {
+            {uniqueColumns.map(col => {
               const isLongText = col.کلید.includes("شرح") || col.کلید.includes("طرف_حساب") || col.کلید.includes("description") || col.کلید.includes("name");
               return (
                 <th 
@@ -249,7 +278,7 @@ export default function DynamicTable({
                 }`}
               >
                 {isCurrentlyEditing && editingData ? (
-                  <td colSpan={columns.length + (hasSelectionSupport ? 4 : 3)} className="p-0">
+                  <td colSpan={uniqueColumns.length + (hasSelectionSupport ? 4 : 3)} className="p-0">
                      <div className={`mx-4 my-5 p-6 rounded-2xl border-2 shadow-sm ${isDarkMode ? "bg-slate-900 border-blue-500/30" : "bg-white border-blue-200"}`}>
                          <div className="flex justify-between items-center mb-6 gap-4 border-b pb-4 border-slate-100 dark:border-slate-800">
                             <div className="flex items-center gap-4">
@@ -266,7 +295,7 @@ export default function DynamicTable({
                             </div>
                          </div>
                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
-                            {columns.map(col => (
+                            {uniqueColumns.map(col => (
                               <div key={col.کلید} className="space-y-2 cursor-text">
                                 <label className={`text-[11px] font-semibold tracking-wide ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>{col.عنوان}</label>
                                 <input 
@@ -322,7 +351,7 @@ export default function DynamicTable({
                         <span className={`text-xs font-bold ${score === 100 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-500"}`}>{score}٪</span>
                       </div>
                     </td>
-                    {columns.map(col => {
+                    {uniqueColumns.map(col => {
                       const val = tr[col.کلید];
                       const isNumber = col.نوع_داده === 'number';
                       const isMonetary = isMonetaryKey(col.کلید);
@@ -403,7 +432,7 @@ export default function DynamicTable({
           <td colSpan={hasSelectionSupport ? 3 : 2} className={`px-4 py-3.5 text-left font-black border-t border-l ${isDarkMode ? "border-slate-700 text-slate-300" : "border-slate-200 text-slate-600"}`}>
             جمع کل صفحه:
           </td>
-          {columns.map(col => {
+          {uniqueColumns.map(col => {
             let footerContent: React.ReactNode = "";
             if (col.کلید === "مبلغ_بدهکار") {
               footerContent = (

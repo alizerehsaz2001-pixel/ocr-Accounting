@@ -107,9 +107,6 @@ import LoginScreen from "./components/LoginScreen";
 import PdfThumbnail from "./components/PdfThumbnail";
 import PdfViewer from "./components/PdfViewer";
 import { BatchOCRProgressPanel, BatchOCRProgressItem } from "./components/BatchOCRProgressPanel";
-import { auth, db, handleFirestoreError, OperationType } from "./lib/firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, onSnapshot } from "firebase/firestore";
 import * as XLSX from "xlsx";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
 import { motion, AnimatePresence } from "motion/react";
@@ -148,6 +145,36 @@ const DEFAULT_COLUMNS = [
   { کلید: "نوع_ارز", عنوان: "نوع ارز", نوع_داده: "string" },
   { کلید: "توضیحات", عنوان: "توضیحات", نوع_داده: "string" },
 ];
+
+const normalizeKey = (k: any): string => {
+  if (typeof k !== "string") return String(k || "");
+  return k
+    .trim()
+    .replace(/[\u064A\u0649]/g, "\u06CC") // Arabic Yeh to Persian Yeh
+    .replace(/[\u0643]/g, "\u06A9")      // Arabic Kaf to Persian Kaf
+    .replace(/\s+/g, "_");               // Replace spaces with underscores
+};
+
+const deduplicateColumns = (cols: any[]): any[] => {
+  if (!Array.isArray(cols)) return [];
+  const seenKeys = new Set<string>();
+  const result: any[] = [];
+  cols.forEach((col, idx) => {
+    if (!col || typeof col !== "object") return;
+    const rawKey = col.کلید || col.عنوان || `col_${idx}`;
+    const key = normalizeKey(rawKey);
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      result.push({
+        ...col,
+        کلید: key,
+        عنوان: col.عنوان || rawKey,
+        نوع_داده: col.نوع_داده || "string"
+      });
+    }
+  });
+  return result;
+};
 
 const ERP_MODULES = [
   { id: 0, name: "آنالیز تصویر پیشرفته", icon: Sparkles, isLive: true },
@@ -568,146 +595,11 @@ export default function App() {
     localStorage.setItem("user_defined_folders", JSON.stringify(userDefinedFolders));
   }, [userDefinedFolders]);
 
-  // Refs to track synced states and prevent infinite write-back loops
-  const lastSyncedScansRef = useRef<string>("");
-  const lastSyncedFoldersRef = useRef<string>("");
-
-  const saveScanToCloud = async (scan: PreviousScan) => {
-    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
-    try {
-      const scanDocRef = doc(db, "users", auth.currentUser.uid, "scans", scan.id);
-      const scanData = {
-        id: scan.id,
-        timestamp: scan.timestamp || Date.now(),
-        folder: scan.folder || "",
-        isStarred: !!scan.isStarred,
-        tags: scan.tags || [],
-        extractionSettings: scan.extractionSettings || scan.file?.extractionSettings || null,
-        file: {
-          id: scan.file?.id || scan.id,
-          name: scan.file?.name || "سند بی‌نام",
-          size: scan.file?.size || 0,
-          preview: scan.file?.preview || "",
-          status: scan.file?.status || "success",
-          error: scan.file?.error || null,
-          documentType: scan.file?.documentType || null,
-          mimeType: scan.file?.mimeType || null,
-          documentAnalysis: scan.file?.documentAnalysis || null,
-          tokensUsed: scan.file?.tokensUsed || null,
-          extractionSettings: scan.file?.extractionSettings || scan.extractionSettings || null
-        },
-        transactions: scan.transactions || []
-      };
-      await setDoc(scanDocRef, scanData).catch(err => handleFirestoreError(err, OperationType.WRITE, scanDocRef.path));
-    } catch (e) {
-      console.error("Error saving scan to cloud:", e);
-    }
-  };
-
-  const deleteScanFromCloud = async (scanId: string) => {
-    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
-    try {
-      const scanDocRef = doc(db, "users", auth.currentUser.uid, "scans", scanId);
-      await deleteDoc(scanDocRef).catch(err => handleFirestoreError(err, OperationType.DELETE, scanDocRef.path));
-    } catch (e) {
-      console.error("Error deleting scan from cloud:", e);
-    }
-  };
-
   const getFolderId = (folderName: string) => {
     const clean = folderName.replace(/[^a-zA-Z0-9_\-]/g, "_") || "folder";
     const hash = Math.abs(folderName.split("").reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0));
     return (clean.substring(0, 60) + "_" + hash).substring(0, 128);
   };
-
-  const saveFolderToCloud = async (folder: any) => {
-    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
-    try {
-      const folderName = typeof folder === "string" ? folder : (folder?.name || "پوشه جدید");
-      const folderId = getFolderId(folderName);
-      const folderDocRef = doc(db, "users", auth.currentUser.uid, "folders", folderId);
-      const folderData = {
-        name: folderName,
-        color: (typeof folder === "object" && folder?.color) || "indigo",
-        description: (typeof folder === "object" && folder?.description) || "",
-        createdAt: (typeof folder === "object" && folder?.createdAt) || new Date().toISOString()
-      };
-      await setDoc(folderDocRef, folderData).catch(err => handleFirestoreError(err, OperationType.WRITE, folderDocRef.path));
-    } catch (e) {
-      console.error("Error saving folder to cloud:", e);
-    }
-  };
-
-  const deleteFolderFromCloud = async (folderName: string) => {
-    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
-    try {
-      const folderId = getFolderId(folderName);
-      const folderDocRef = doc(db, "users", auth.currentUser.uid, "folders", folderId);
-      await deleteDoc(folderDocRef).catch(err => handleFirestoreError(err, OperationType.DELETE, folderDocRef.path));
-    } catch (e) {
-      console.error("Error deleting folder from cloud:", e);
-    }
-  };
-
-  // Smart Sync effect for previousScans
-  useEffect(() => {
-    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
-    
-    const serializeScans = (scansList: PreviousScan[]) => {
-      return scansList.map(s => `${s.id}:${s.file?.status || ""}:${s.transactions?.length || 0}:${s.folder || ""}:${s.file?.name || ""}`).join("|");
-    };
-
-    const currentFingerprint = serializeScans(previousScans);
-    if (currentFingerprint === lastSyncedScansRef.current) return;
-
-    // Save additions and updates
-    previousScans.forEach((scan) => {
-      saveScanToCloud(scan);
-    });
-
-    // Handle deleted scans
-    if (lastSyncedScansRef.current) {
-      const prevIds = lastSyncedScansRef.current.split("|").map(item => item.split(":")[0]).filter(Boolean);
-      const currentIds = new Set(previousScans.map(s => s.id));
-      prevIds.forEach((id) => {
-        if (!currentIds.has(id)) {
-          deleteScanFromCloud(id);
-        }
-      });
-    }
-
-    lastSyncedScansRef.current = currentFingerprint;
-  }, [previousScans, currentUser]);
-
-  // Smart Sync effect for userDefinedFolders
-  useEffect(() => {
-    if (!currentUser || localStorage.getItem("is_demo_mode") === "true" || !auth.currentUser) return;
-
-    const serializeFolders = (foldersList: any[]) => {
-      return foldersList.map(f => `${f.name}:${f.color}:${f.description || ""}`).join("|");
-    };
-
-    const currentFingerprint = serializeFolders(userDefinedFolders);
-    if (currentFingerprint === lastSyncedFoldersRef.current) return;
-
-    // Save additions and updates
-    userDefinedFolders.forEach((folder) => {
-      saveFolderToCloud(folder);
-    });
-
-    // Handle deleted folders
-    if (lastSyncedFoldersRef.current) {
-      const prevNames = lastSyncedFoldersRef.current.split("|").map(item => item.split(":")[0]).filter(Boolean);
-      const currentNames = new Set(userDefinedFolders.map(f => f.name));
-      prevNames.forEach((name) => {
-        if (!currentNames.has(name)) {
-          deleteFolderFromCloud(name);
-        }
-      });
-    }
-
-    lastSyncedFoldersRef.current = currentFingerprint;
-  }, [userDefinedFolders, currentUser]);
 
   const [selectedFolderFilter, setSelectedFolderFilter] = useState<string>("all");
   const [fileManagerSearchQuery, setFileManagerSearchQuery] = useState<string>("");
@@ -732,6 +624,7 @@ export default function App() {
   const [isBatchPanelMinimized, setIsBatchPanelMinimized] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const cancelBatchRef = useRef<boolean>(false);
+  const isEditingRawJsonRef = useRef<boolean>(false);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -841,7 +734,7 @@ export default function App() {
           }
 
           const rowsArray = Array.isArray(result.data.ردیف_ها) ? result.data.ردیف_ها : (Array.isArray(result.data.اقلام_تراکنش) ? result.data.اقلام_تراکنش : []);
-          const columnsArray = Array.isArray(result.data.ستون_ها) ? result.data.ستون_ها : [];
+          const columnsArray = deduplicateColumns(Array.isArray(result.data.ستون_ها) ? result.data.ستون_ها : []);
           
           const extractedItems: TransactionItem[] = rowsArray.map((rowItem: any, idx: number) => {
             const row: any = {
@@ -851,11 +744,17 @@ export default function App() {
 
             if (rowItem.فیلد_ها && Array.isArray(rowItem.فیلد_ها)) {
               rowItem.فیلد_ها.forEach((f: any) => {
-                if (f.کلید) row[f.کلید] = f.مقدار;
+                if (f.کلید) {
+                  const k = normalizeKey(f.کلید);
+                  row[k] = f.مقدار;
+                }
               });
             } else {
               Object.keys(rowItem).forEach(key => {
-                if (key !== 'ضریب_اطمینان') row[key] = rowItem[key];
+                if (key !== 'ضریب_اطمینان') {
+                  const k = normalizeKey(key);
+                  row[k] = rowItem[key];
+                }
               });
             }
             return row as TransactionItem;
@@ -1546,53 +1445,54 @@ export default function App() {
   };
 
   const handleExtract100PercentAllToJsonAndExcel = async () => {
-    const fullJsonInstruction = `🎯 دستور اکید، فوق‌دقیق و لایه‌به‌لایه استخراج ۱۰۰٪ داده‌ها (موتور ارشد Gemini - ویژه خروجی فول‌اکسل):
-تمامی اطلاعات مندرج در این سند مالی و اداری را بدون هیچ‌گونه استثنا، تلخیص، خلاصه، حذف یا نادیده گرفتن، ۱۰۰٪ کامل، با دقت مطلق و تفکیک لایه‌ای استخراج کن. خروجی باید کاملاً ساختاریافته در قالب آرایه JSON با کلیدهای یکدست و استاندارد فارسی تنظیم شود تا مستقیماً و بدون نیاز به ویرایش دستی وارد جدول و فایل اکسل (.xlsx) گردد.
+    const fullJsonInstruction = `🎯 دستورالعمل فوق‌حرفه‌ای، قطعی و الزام‌آور استخراج ۱۰۰٪ و بدون‌نقص داده‌ها (موتور تحلیلی-حسابداری ارشد - ویژه خروجی Full-Excel):
+شما در جایگاه یک حسابرس و تحلیل‌گر ارشد داده‌های مالی قرار دارید. وظیفه شما استخراج مو‌به‌مو، نقطه به نقطه و کاملاً جامعِ تک‌تک اطلاعات مندرج در این سند است. هیچ‌گونه تلخیص، خلاصه‌سازی، ادغام، حذف یا نادیده گرفتن جزئیات، تحت هیچ شرایطی پذیرفته نیست. خروجی شما مستقیماً وارد سیستم‌های حسابداری (ERP) و فایل اکسل (.xlsx) خواهد شد و کوچک‌ترین خطایی منجر به خسارت مالی می‌گردد.
 
-📋 ۱) هدر و اطلاعات عمومی (Header & Metadata):
-- نام کامل صادرکننده/فروشنده، شناسه ملی/کد ملی، کد اقتصادی، شماره ثبت، تلفن، آدرس، کدپستی، ایمیل، استان و شهر.
-- نام کامل خریدار/مشتری، شناسه ملی/کد ملی، کد اقتصادی، شماره ثبت، تلفن، آدرس، کدپستی، ایمیل.
-- شماره فاکتور / شماره سند / شماره صورتحساب / شماره رسید / شماره قبض / شماره پیگیری / شناسه صیاد / کد مالیاتی.
-- تاریخ شمسی دقیق (سال/ماه/روز)، تاریخ میلادی (در صورت وجود)، زمان/ساعت ثبت سند.
+تمامی داده‌ها باید در قالب یک «آرایه JSON استاندارد و مسطح (Flat)» با کلیدهای فارسیِ معنادار، یکدست و کاملاً ساختاریافته ارائه شوند. به ازای هر "ردیف" در جداول سند، باید یک Object مستقل در JSON ساخته شود که اطلاعات عمومی (هدر و فوتر) به عنوان اطلاعات پایه در تک‌تک آن Objectها تکرار شوند تا در دیتابیس رابطه‌ای و فیلترهای اکسل به درستی عمل کنند.
 
-📦 ۲) جدول تک‌تک اقلام و ردیف‌های کالا/خدمات (Line Items Breakdown):
-استخراج تک‌تک سطرهای جدول بدون حتی یک مورد جاماندگی یا خلاصه‌سازی شامل:
-- شماره ردیف (۱، ۲، ...)
-- کد کالا / کد خدمت / شناسه کالا / بارکد
-- شرح کامل، دقیق و بدون تلخیص کالا یا خدمات (به همراه تمامی جزئیات فنی، مدل، مشخصات و توضیحات)
-- تعداد / مقدار (به عدد دقیق)
-- واحد سنجش (عدد، کیلوگرم، متر، بسته، دستگاه، ساعت، ...)
-- قیمت واحد / فی (به عدد دقیق به ریال/تومان)
-- مبلغ کل ردیف (قبل از تخفیف)
-- مبلغ تخفیف ردیف و درصد تخفیف ردیف
-- نرخ مالیات بر ارزش افزوده ردیف (%) و مبلغ مالیات ردیف
+ساختار الزامی و چک‌لیست استخراج بی‌نقص (تمامی موارد زیر در صورت وجود در سند، باید کلمه به کلمه استخراج شوند):
+
+📋 ۱) ابرداده‌ها، هدر و اطلاعات هویتی (Header & Metadata) - [باید در تمامی ردیف‌ها تکرار شود]:
+- صادرکننده/فروشنده: نام کامل شرکت/شخص، شناسه ملی، کد ملی، شماره اقتصادی، شماره ثبت، تلفن، فکس، آدرس دقیق، کدپستی، ایمیل، استان و شهر.
+- خریدار/مشتری: نام کامل، شناسه ملی، کد ملی، شماره اقتصادی، شماره ثبت، تلفن، فکس، آدرس دقیق، کدپستی، ایمیل، استان و شهر.
+- مشخصات سند: شماره فاکتور/رسید/سند، شماره سریال چاپی، شناسه یکتای مالیاتی (۲۲ رقمی)، شماره پیگیری، تاریخ شمسی (دقیقاً به فرمت YYYY/MM/DD)، تاریخ میلادی، زمان/ساعت ثبت.
+
+📦 ۲) جدول اقلام و جزئیات ردیف‌ها (Line Items) - [هسته اصلی آرایه JSON]:
+استخراج تک‌تک سطرها بدون استثنا. اگر سندی دارای ۱۰۰ ردیف است، باید دقیقاً ۱۰۰ آیتم استخراج شود.
+- ردیف (شماره تسلسل)
+- کد کالا / شناسه خدمت / بارکد
+- شرح کالا/خدمات (کامل و بدون بریدگی، شامل تمامی مشخصات فنی، رنگ، مدل و سایز)
+- مقدار/تعداد (فقط عدد ریاضی)
+- واحد سنجش (عدد، کیلوگرم، متر، ...)
+- مبلغ واحد/فی (فقط عدد ریاضی)
+- مبلغ کل ردیف (تعداد ضربدر فی - قبل از کسورات/اضافات)
+- مبلغ و درصد تخفیف ردیف
+- مبلغ و نرخ مالیات بر ارزش افزوده ردیف
 - مبلغ عوارض ردیف
-- مبلغ نهایی و خالص هر ردیف
+- مبلغ خالص و نهایی ردیف پس از تمامی محاسبات
 
-💰 ۳) محاسبات مالی، عوارض و فوتر (Footer & Financial Totals):
-- جمع کل قبل از تخفیف
-- تخفیف کل سند
-- مبلغ مشمول مالیات
-- نرخ و جمع کل مالیات بر ارزش افزوده
-- نرخ و جمع کل عوارض قانونی
-- سایر کسورات (سپرده بیمه، مالیات تکلیفی، جریمه، ...)
-- سایر اضافات (هزینه حمل و نقل، بسته‌بندی، نصب، ...)
-- مبلغ قابل پرداخت نهایی (هم به عدد دقیق و هم به حروف فارسی)
-- وضعیت تسویه (نقدی، نسیه، چک، اقساط، متغیر) و مهلت/شرایط پرداخت
+💰 ۳) اطلاعات مالی کلان، کسورات و اضافات (Totals & Adjustments) - [باید در تمامی ردیف‌ها تکرار شود]:
+- جمع کل مبالغ قبل از تخفیف
+- جمع کل تخفیفات
+- جمع کل مالیات و عوارض
+- سایر اضافات (هزینه حمل، بسته‌بندی، نصب، عوارض خاص)
+- سایر کسورات (پیش‌پرداخت، مالیات تکلیفی، سپرده حسن انجام کار، سپرده بیمه)
+- مبلغ قابل پرداخت نهایی (هم به صورت عددی و هم حروف کامل فارسی)
+- روش تسویه (نقدی، نسیه، چک، حواله) و شرایط/مهلت پرداخت.
 
-💳 ۴) اطلاعات بانکی، واریز و تسویه (Banking & Settlement):
-- شماره حساب بانکی، شماره کارت، شماره شبا (IBAN)
-- نام بانک و نام صاحب حساب
-- شماره مرجع / شناسه واریز / شماره ارجاع پرداخت / کد پیگیری بانکی
+💳 ۴) اطلاعات بانکی و پرداخت (Banking & Settlement):
+- شماره شبا (IR...)، شماره حساب، شماره کارت، نام صاحب حساب، نام بانک و شعبه.
+- کد رهگیری، شماره مرجع، تاریخ واریز.
 
-📜 ۵) متون حقوقی، توضیحات و وضعیت رسمی (Legal Notes & Stamp):
-- کلیه شروط فاکتور، توضیحات دست‌نویس یا چاپی فوتر و هدر
-- وضعیت مهر، امضا، و تأییدیه هوشمند (مانند وضعیت سامانه مؤدیان یا کد یکتای مالیاتی)
+📜 ۵) توضیحات، متون حقوقی و وضعیت سند (Notes & Validations):
+- تمامی متون دست‌نویس، مهرها، امضاها، شرایط گارانتی، توضیحات پایین فاکتور و هرگونه نوشته حاشیه‌ای.
 
-⚠️ قواعد اکید ساختار خروجی JSON:
-۱. خروجی باید منحصراً ساختار آرایه‌ای از اشیا JSON با کلیدهای شفاف فارسی باشد.
-۲. مقادیر عددی (مانند مبالغ، تعداد، درصدها) به صورت اعداد خالص ریاضی (بدون جداکننده هزارگان متنی یا پسوند ریال/تومان در درون عدد) استخراج شوند تا فرمول‌نویسی در اکسل کاملاً فعال باشد.
-۳. هیچ اطلاعاتی از سند نباید حذف یا به صورت "سایر موارد" درج شود. ۱۰۰٪ اجزا بایستی پوشش داده شوند.`;
+⚠️ قواعد اکید و خطوط قرمز سیستم در ساختار JSON (تخطی از این موارد باعث کرش کردن سیستم می‌شود):
+۱. فقط و فقط خروجی JSON معتبر تولید کن. هیچ متن اضافه، توضیحات، سلام یا احوال‌پرسی قبل یا بعد از JSON مجاز نیست.
+۲. فرمت مقادیر پولی و عددی: تمامی مبالغ، تعداد و درصدها باید منحصراً به صورت اعداد خالص ریاضی (بدون جداکننده هزارگان کاما، بدون پسوند "ریال" یا "تومان" یا "٪") درج شوند. (مثلا 1500000 به جای 1,500,000 ریال).
+۳. کلیدهای JSON باید فارسی با زیرخط (اسنیک‌کیس) باشند. (مثلا: "شناسه_ملی_فروشنده"، "مبلغ_ارزش_افزوده").
+۴. یکپارچگی (Flatness): به هیچ وجه از آبجکت‌های تودرتو (Nested Objects) یا آرایه‌های داخلی برای اطلاعات هدر و فوتر استفاده نکن. اطلاعات هدر، فوتر و اطلاعات کلی فاکتور باید به عنوان فیلدهای هم‌سطح (Flat) در کنار فیلدهای هر ردیفِ کالا قرار گیرند تا هر Object در آرایه، به تنهایی نماینده یک سطر کامل از فایل اکسل با تمامی اطلاعات سند باشد.
+۵. تضمین ۱۰۰٪: حتی اگر داده‌ای کمرنگ یا ناخوانا است، تا حد امکان آن را استخراج کن. استخراج کامل اولویت مطلق دارد.`;
     
     setCustomPrompt(prev => {
       const trimmed = prev.trim();
@@ -1792,6 +1692,24 @@ export default function App() {
 
   useEffect(() => {
     logEvent("ورود به سامانه", "کاربر وارد صفحه اصلی سامانه شد و جلسه شروع شد.", "auth");
+
+    const handleUnhandledError = (event: ErrorEvent) => {
+      console.warn("Global caught error:", event.error || event.message);
+      event.preventDefault();
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.warn("Global caught promise rejection:", event.reason);
+      event.preventDefault();
+    };
+
+    window.addEventListener("error", handleUnhandledError);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener("error", handleUnhandledError);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
   }, []);
   const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
   const [editingRowData, setEditingRowData] = useState<TransactionItem | null>(null);
@@ -2103,173 +2021,15 @@ export default function App() {
   const [inspectingScanId, setInspectingScanId] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const userRef = doc(db, "users", firebaseUser.uid);
-          const foldersRef = collection(db, "users", firebaseUser.uid, "folders");
-          const scansRef = collection(db, "users", firebaseUser.uid, "scans");
-
-          const [docSnap, foldersSnap, scansSnap] = await Promise.all([
-            getDoc(userRef).catch(err => {
-               console.warn("User getDoc error:", err);
-               return null;
-            }),
-            getDocs(foldersRef).catch(err => {
-               console.warn("Folders getDocs error:", err);
-               return null;
-            }),
-            getDocs(scansRef).catch(err => {
-               console.warn("Scans getDocs error:", err);
-               return null;
-            })
-          ]);
-          
-          let dbUser: any;
-          if (docSnap && docSnap.exists()) {
-            dbUser = docSnap.data();
-          } else {
-            dbUser = {
-              id: firebaseUser.uid,
-              name: firebaseUser.displayName || firebaseUser.email || "کاربر ممیزی",
-              email: firebaseUser.email || "",
-              role: firebaseUser.email === "alizerehsaz2001@gmail.com" ? "admin" : "user",
-              status: "active",
-              apiUsage: 0,
-              extraStorage: 0,
-              isOnboarded: false,
-              geminiApiKey: ""
-            };
-            // Do not block initial render for user creation
-            setDoc(userRef, dbUser).catch(err => console.warn("Background user doc creation error", err));
-          }
-          
-          setUsers((prevUsers) => {
-            if (!prevUsers.some((u) => u.id === firebaseUser.uid)) {
-              return [...prevUsers, dbUser];
-            }
-            return prevUsers.map((u) => u.id === firebaseUser.uid ? { ...u, ...dbUser } : u);
-          });
-          
-          setCurrentUser(dbUser);
-          localStorage.setItem("is_demo_mode", "false");
-
-          let dbFolders: any[] = [];
-          if (foldersSnap) {
-             foldersSnap.forEach((dSnap: any) => {
-               dbFolders.push(dSnap.data());
-             });
-          }
-
-          let dbScans: PreviousScan[] = [];
-          if (scansSnap) {
-             scansSnap.forEach((dSnap: any) => {
-               dbScans.push(dSnap.data() as PreviousScan);
-             });
-          }
-
-          // Perform cloud-migration if Firestore is completely empty but local is populated
-          if (dbFolders.length === 0 && dbScans.length === 0) {
-            const localFoldersRaw = localStorage.getItem("user_defined_folders");
-            const localScansRaw = localStorage.getItem("previous_scans");
-            
-            let localFolders: any[] = [];
-            let localScans: PreviousScan[] = [];
-            
-            try {
-              if (localFoldersRaw) localFolders = JSON.parse(localFoldersRaw);
-              if (localScansRaw) localScans = JSON.parse(localScansRaw);
-            } catch (e) {
-              console.warn("Error parsing local state:", e);
-            }
-
-            if (localFolders.length > 0) {
-              for (const folder of localFolders) {
-                const folderName = typeof folder === "string" ? folder : (folder?.name || "پوشه جدید");
-                const folderId = getFolderId(folderName);
-                const folderDocRef = doc(db, "users", firebaseUser.uid, "folders", folderId);
-                const folderData = {
-                  name: folderName,
-                  color: (typeof folder === "object" && folder?.color) || "indigo",
-                  description: (typeof folder === "object" && folder?.description) || "",
-                  createdAt: (typeof folder === "object" && folder?.createdAt) || new Date().toISOString()
-                };
-                setDoc(folderDocRef, folderData).catch(err => console.warn("Background migration folder err", err));
-                dbFolders.push(folderData);
-              }
-            }
-
-            if (localScans.length > 0) {
-              for (const scan of localScans) {
-                const rawScanId = scan.id ? String(scan.id) : "scan_" + Date.now();
-                const scanId = rawScanId.replace(/[^a-zA-Z0-9_\-\.]/g, "_").substring(0, 128);
-                const scanDocRef = doc(db, "users", firebaseUser.uid, "scans", scanId);
-                const scanData = {
-                  id: rawScanId,
-                  timestamp: scan.timestamp || Date.now(),
-                  folder: scan.folder || "",
-                  isStarred: !!scan.isStarred,
-                  tags: scan.tags || [],
-                  file: {
-                    id: scan.file?.id || "file_" + Date.now(),
-                    name: scan.file?.name || "سند بی‌نام",
-                    size: scan.file?.size || 0,
-                    preview: scan.file?.preview || "",
-                    status: scan.file?.status || "success",
-                    error: scan.file?.error || null,
-                    documentType: scan.file?.documentType || null,
-                    mimeType: scan.file?.mimeType || null,
-                    documentAnalysis: scan.file?.documentAnalysis || null,
-                    tokensUsed: scan.file?.tokensUsed || null
-                  },
-                  transactions: scan.transactions || []
-                };
-                setDoc(scanDocRef, scanData).catch(err => console.warn("Background migration scan err", err));
-                dbScans.push(scanData);
-              }
-            }
-          }
-
-          dbScans.sort((a, b) => b.timestamp - a.timestamp);
-
-          // Update tracking refs to prevent re-upload of loaded items
-          lastSyncedFoldersRef.current = dbFolders.map(f => `${f.name}:${f.color}:${f.description || ""}`).join("|");
-          lastSyncedScansRef.current = dbScans.map(s => `${s.id}:${s.file?.status || ""}:${s.transactions?.length || 0}:${s.folder || ""}:${s.file?.name || ""}`).join("|");
-
-          setUserDefinedFolders(dbFolders);
-          setPreviousScans(dbScans);
-        } catch (err: any) {
-          console.warn("Firestore sync warning:", err);
-          const localUser = {
-            id: firebaseUser.uid,
-            name: firebaseUser.displayName || firebaseUser.email || "کاربر ممیزی",
-            email: firebaseUser.email || "",
-            role: firebaseUser.email === "alizerehsaz2001@gmail.com" ? "admin" : "user",
-            status: "active",
-            apiUsage: 0,
-            extraStorage: 0,
-            isOnboarded: false
-          };
-          setCurrentUser(localUser);
-        }
-      } else {
-        const isDemo = localStorage.getItem("is_demo_mode") === "true";
-        if (isDemo) {
-          const storedDemoUser = localStorage.getItem("demo_user_data");
-          if (storedDemoUser) {
-            try {
-              setCurrentUser(JSON.parse(storedDemoUser));
-            } catch (e) {
-              // fallback
-            }
-          }
-        } else {
-          setCurrentUser(null);
-        }
+    setIsAuthLoading(false);
+    const storedUser = localStorage.getItem("current_user") || localStorage.getItem("demo_user_data");
+    if (storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.warn("Error parsing stored user:", e);
       }
-      setIsAuthLoading(false);
-    });
-    return () => unsubscribe();
+    }
   }, []);
 
   const handleEnterDemo = (customName?: string, customEmail?: string) => {
@@ -2295,16 +2055,14 @@ export default function App() {
       status: "active", 
       apiUsage: isDemoMode ? 45000 : 0, 
       extraStorage: 0,
-      isOnboarded: isDemoMode,
+      isOnboarded: true,
       geminiApiKey: ""
     };
     localStorage.setItem("is_demo_mode", isDemoMode ? "true" : "false");
+    localStorage.setItem("current_user", JSON.stringify(demoUser));
     localStorage.setItem("demo_user_data", JSON.stringify(demoUser));
     setCurrentUser(demoUser);
-
-    // Save user to Firestore immediately so that the Admin can see and manage them!
-    const userRef = doc(db, "users", demoUser.id);
-    setDoc(userRef, demoUser).catch(err => console.warn("Failed to auto-save user to Firestore:", err));
+    setUsers(prev => prev.some(u => u.id === demoUser.id) ? prev : [demoUser, ...prev]);
   };
 
   const [profileFirstName, setProfileFirstName] = useState("");
@@ -2370,15 +2128,11 @@ export default function App() {
         isOnboarded: true
       };
 
-      if (currentUser.id) {
-        const userRef = doc(db, "users", String(currentUser.id));
-        await setDoc(userRef, updatedUser, { merge: true });
-      }
-
       setCurrentUser(updatedUser);
+      localStorage.setItem("current_user", JSON.stringify(updatedUser));
       setUsers(prev => prev.map(u => String(u.id) === String(currentUser.id) ? updatedUser : u));
-      showNotification("مشخصات حساب کاربری شما با موفقیت بروزرسانی شد و با پنل ارشد همگام گردید.", "success");
-      logEvent("بروزرسانی شناسنامه کاربر", `کاربر مشخصات حساب کاربری خود (${updatedUser.name}) را ویرایش و همگام ساخت.`);
+      showNotification("مشخصات حساب کاربری شما با موفقیت بروزرسانی شد.", "success");
+      logEvent("بروزرسانی شناسنامه کاربر", `کاربر مشخصات حساب کاربری خود (${updatedUser.name}) را ویرایش ساخت.`);
     } catch (error) {
       console.error("Error updating profile:", error);
       showNotification("خطا در بروزرسانی مشخصات حساب کاربری.", "error");
@@ -2387,9 +2141,9 @@ export default function App() {
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
       localStorage.setItem("is_demo_mode", "false");
       localStorage.removeItem("current_user");
+      localStorage.removeItem("demo_user_data");
       setCurrentUser(null);
       showNotification("با موفقیت از حساب کاربری خارج شدید.", "success");
     } catch (error) {
@@ -2400,49 +2154,6 @@ export default function App() {
 
 
 
-
-  // Listen to current user changes in real-time
-  useEffect(() => {
-    if (currentUser?.id) {
-      const userRef = doc(db, "users", String(currentUser.id));
-      const unsubscribe = onSnapshot(userRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const userData = snapshot.data();
-          setCurrentUser(prev => prev ? { ...prev, ...userData } : userData);
-        }
-      }, (err) => {
-        console.warn("Error listening to current user:", err);
-      });
-      return () => unsubscribe();
-    }
-  }, [currentUser?.id]);
-
-  // Sync users from Firestore if admin
-  useEffect(() => {
-    if (currentUser && ['admin', 'manager', 'auditor'].includes(currentUser.role)) {
-      const usersRef = collection(db, "users");
-      const unsubscribe = onSnapshot(usersRef, (snapshot) => {
-        if (!snapshot.empty) {
-          const allUsers = snapshot.docs.map(doc => doc.data());
-          setUsers(prev => {
-            const merged = [...prev];
-            allUsers.forEach(u => {
-              const idx = merged.findIndex(mu => String(mu.id) === String(u.id));
-              if (idx >= 0) {
-                merged[idx] = { ...merged[idx], ...u };
-              } else {
-                merged.push(u);
-              }
-            });
-            return merged;
-          });
-        }
-      }, (err) => {
-        console.warn("Failed to listen to all users:", err);
-      });
-      return () => unsubscribe();
-    }
-  }, [currentUser?.role, currentUser?.id]);
 
   useEffect(() => {
     localStorage.setItem("system_users", JSON.stringify(users));
@@ -2560,28 +2271,83 @@ export default function App() {
 
   // Synchronize rawJsonText and converterInputJson from transactions when modified by validation, editing, or API extraction
   useEffect(() => {
-    if (activeFile && activeFile.status === "success") {
-      const activeColumns = (activeFile.columns && activeFile.columns.length > 0) ? activeFile.columns : DEFAULT_COLUMNS;
+    if (activeFile && activeFile.status === "success" && transactions.length > 0) {
+      // Find all unique keys across transactions to ensure 100% preservation of all fields & account codes
+      const allKeysInTransactions = new Set<string>();
+      transactions.forEach(t => {
+        Object.keys(t).forEach(k => {
+          if (k !== "id") {
+            allKeysInTransactions.add(normalizeKey(k));
+          }
+        });
+      });
+
+      const activeColumns = deduplicateColumns((activeFile.columns && activeFile.columns.length > 0) ? activeFile.columns : DEFAULT_COLUMNS);
+      const existingColKeys = activeColumns.map((col: any) => col.کلید);
+      
+      // Add any missing keys to columns list for complete sync
+      const missingKeys = Array.from(allKeysInTransactions).filter(k => !existingColKeys.includes(k) && k !== "ضریب_اطمینان");
+      let finalColumns = activeColumns;
+      if (missingKeys.length > 0) {
+        finalColumns = deduplicateColumns([
+          ...activeColumns,
+          ...missingKeys.map(k => ({ کلید: k, عنوان: k, نوع_داده: "string" }))
+        ]);
+        setActiveFile(prev => prev ? { ...prev, columns: finalColumns } : null);
+      }
+
       const cleanJSON = transactions.map((t) => {
         const obj: any = {};
-        activeColumns.forEach((col: any) => {
-          const key = col.عنوان || col.کلید;
-          const val = t[col.عنوان] !== undefined ? t[col.عنوان] : (t[col.کلید] !== undefined ? t[col.کلید] : null);
-          obj[key] = val;
+        // First include defined active columns in order
+        finalColumns.forEach((col: any) => {
+          const key = col.کلید;
+          // Prefer strict key, fallback to عنوان if somehow it's used
+          const val = t[col.کلید] !== undefined ? t[col.کلید] : t[col.عنوان];
+          if (val !== undefined) {
+            obj[key] = val;
+          }
+        });
+        // Then include all remaining keys from item t
+        Object.keys(t).forEach((k) => {
+          const normK = normalizeKey(k);
+          if (normK !== "id" && normK !== "ضریب_اطمینان" && !(normK in obj)) {
+            obj[normK] = t[k];
+          }
         });
         obj["ضریب_اطمینان"] = t.ضریب_اطمینان !== undefined && t.ضریب_اطمینان !== null ? Number(t.ضریب_اطمینان) : 100;
         return obj;
       });
+
       const enrichedJSON = enrichJSONWithWords(cleanJSON);
       const formattedJson = JSON.stringify(enrichedJSON, null, 2);
-      setRawJsonText(formattedJson);
+
+      if (!isEditingRawJsonRef.current) {
+        setRawJsonText(formattedJson);
+      }
+      setConverterInputJson(formattedJson);
+      setJsonError(null);
+    } else if (transactions.length > 0) {
+      const cleanJSON = transactions.map((t) => {
+        const obj: any = {};
+        Object.keys(t).forEach((k) => {
+          if (k !== "id") obj[k] = t[k];
+        });
+        return obj;
+      });
+      const enrichedJSON = enrichJSONWithWords(cleanJSON);
+      const formattedJson = JSON.stringify(enrichedJSON, null, 2);
+      if (!isEditingRawJsonRef.current) {
+        setRawJsonText(formattedJson);
+      }
       setConverterInputJson(formattedJson);
       setJsonError(null);
     } else {
-      setRawJsonText("");
+      if (!isEditingRawJsonRef.current) {
+        setRawJsonText("");
+      }
       setConverterInputJson("");
     }
-  }, [transactions, activeFile]);
+  }, [transactions, activeFile?.id, activeFile?.status]);
 
   // Flash notifications timer
   useEffect(() => {
@@ -2679,7 +2445,6 @@ export default function App() {
             file: { ...scan.file, extractionSettings: docSettings },
             extractionSettings: docSettings
           };
-          saveScanToCloud(updatedScan);
           return updatedScan;
         }
         return scan;
@@ -3051,7 +2816,7 @@ export default function App() {
 
       // Now result.data is an object containing نوع_سند, تحلیل_سند, ستون_ها, and ردیف_ها
       const rowsArray = Array.isArray(result.data.ردیف_ها) ? result.data.ردیف_ها : (Array.isArray(result.data.اقلام_تراکنش) ? result.data.اقلام_تراکنش : []);
-      const columnsArray = Array.isArray(result.data.ستون_ها) ? result.data.ستون_ها : [];
+      const columnsArray = deduplicateColumns(Array.isArray(result.data.ستون_ها) ? result.data.ستون_ها : []);
       
       const extractedItems: TransactionItem[] = rowsArray.map((item: any, idx: number) => {
         const row: any = {
@@ -3062,13 +2827,17 @@ export default function App() {
         // If it's the dynamic format:
         if (item.فیلد_ها && Array.isArray(item.فیلد_ها)) {
           item.فیلد_ها.forEach((f: any) => {
-             if (f.کلید) row[f.کلید] = f.مقدار;
+             if (f.کلید) {
+               const k = normalizeKey(f.کلید);
+               row[k] = f.مقدار;
+             }
           });
         } else {
           // Fallback to older static format keys
           Object.keys(item).forEach(key => {
             if (key !== 'ضریب_اطمینان') {
-              row[key] = item[key];
+              const k = normalizeKey(key);
+              row[k] = item[key];
             }
           });
         }
@@ -3182,28 +2951,49 @@ export default function App() {
   // Direct raw JSON Textarea update validator
   const handleJsonTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newVal = e.target.value;
+    isEditingRawJsonRef.current = true;
     setRawJsonText(newVal);
     setConverterInputJson(newVal);
     try {
       if (!newVal.trim()) {
         setTransactions([]);
         setJsonError(null);
+        isEditingRawJsonRef.current = false;
         return;
       }
       const arr = parseJsonToTableArray(newVal);
       if (arr && arr.length > 0) {
         const mapped: TransactionItem[] = arr.map((item: any, idx: number) => {
           const row: any = {
-            id: `edited-${Date.now()}-${idx}`
+            id: item.id || `edited-${Date.now()}-${idx}`
           };
           Object.keys(item).forEach((key) => {
             if (key !== "id") {
-              row[key] = item[key];
+              const k = normalizeKey(key);
+              row[k] = item[key];
             }
           });
           row.ضریب_اطمینان = item.ضریب_اطمینان !== undefined && item.ضریب_اطمینان !== null ? Number(item.ضریب_اطمینان) : 100;
           return row as TransactionItem;
         });
+
+        // Dynamically update columns list for activeFile if new keys exist
+        const allKeys = new Set<string>();
+        mapped.forEach(r => Object.keys(r).forEach(k => { if (k !== "id" && k !== "ضریب_اطمینان") allKeys.add(k); }));
+        if (activeFile && allKeys.size > 0) {
+          const existingColKeys = (activeFile.columns || []).map((c: any) => c.کلید);
+          const missing = Array.from(allKeys).filter(k => !existingColKeys.includes(k));
+          if (missing.length > 0) {
+            const updatedCols = deduplicateColumns([
+              ...(activeFile.columns || DEFAULT_COLUMNS),
+              ...missing.map(k => ({ کلید: k, عنوان: k, نوع_داده: "string" }))
+            ]);
+            setActiveFile({ ...activeFile, columns: updatedCols, results: mapped });
+          } else {
+            setActiveFile({ ...activeFile, results: mapped });
+          }
+        }
+
         setTransactions(mapped);
         setJsonError(null);
       } else {
@@ -3211,6 +3001,10 @@ export default function App() {
       }
     } catch (err: any) {
       setJsonError(`خطای گرامری ساختار: ${err.message}`);
+    } finally {
+      setTimeout(() => {
+        isEditingRawJsonRef.current = false;
+      }, 400);
     }
   };
 
@@ -3253,20 +3047,32 @@ export default function App() {
         return;
       }
 
+      // Filter out internal id field
+      const cleanExportData = dataToExport.map((row: any) => {
+        if (!row || typeof row !== "object") return row;
+        const clean: any = {};
+        Object.keys(row).forEach((k) => {
+          if (k !== "id") clean[k] = row[k];
+        });
+        return clean;
+      });
+
       setIsJsonVerified(true);
 
-      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+      const worksheet = XLSX.utils.json_to_sheet(cleanExportData);
+      worksheet['!views'] = [{ rightToLeft: true }];
       
       // Auto col width
-      if (dataToExport.length > 0) {
-         worksheet['!cols'] = Object.keys(dataToExport[0]).map(k => ({ wch: Math.max(k.length + 5, 15) }));
+      if (cleanExportData.length > 0) {
+         worksheet['!cols'] = Object.keys(cleanExportData[0] || {}).map(k => ({ wch: Math.max(k.length + 6, 16) }));
       }
+      
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "تراکنش‌های مالی");
       
       XLSX.writeFile(workbook, `Excel-Export-${activeFile?.name?.replace(/\.[^/.]+$/, "") || "Document"}.xlsx`);
 
-      showNotification("فایل اکسل کاملا مطابق با جیسون با موفقیت دانلود شد.", "success");
+      showNotification("فایل اکسل کاملا مطابق با سیستم و کد JSON با موفقیت دانلود شد.", "success");
       logEvent("تولید اکسل", "کاربر فایل اکسل را دانلود کرد.", "success");
     } catch (err: any) {
       showNotification(`خطا در ساخت فایل اکسل: ${err.message || "از صحت فرمت JSON مطمئن شوید."}`, "error");
@@ -8109,7 +7915,7 @@ export default function App() {
                                    <button
                                        onClick={() => {
                                           setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, apiUsage: 0} : usr));
-                                          setDoc(doc(db, "users", String(u.id)), { apiUsage: 0 }, { merge: true }).catch(err => console.warn("Failed to reset apiUsage in Firestore:", err));
+                                          
                                           logEvent("ریست توکن کاربر", `آمار مصرف توکن کاربر ${u.name} صفر شد.`);
                                           showNotification(`آمار مصرف توکن کاربر ${u.name} بازنشانی شد.`, 'success');
                                        }}

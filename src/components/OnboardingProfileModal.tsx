@@ -1,6 +1,4 @@
 import React, { useState } from "react";
-import { doc, updateDoc, setDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
 import { motion, AnimatePresence } from "motion/react";
 import { User, Building2, Briefcase, Phone, Mail, Sparkles, Loader2, ShieldCheck, CheckCircle2, FileText } from "lucide-react";
 
@@ -90,14 +88,7 @@ export default function OnboardingProfileModal({
         isOnboarded: true
       };
 
-      // Update in Firestore
-      const isDemo = localStorage.getItem("is_demo_mode") === "true";
-      if (!isDemo && currentUser.id) {
-        const userRef = doc(db, "users", String(currentUser.id));
-        await setDoc(userRef, updatedUser, { merge: true });
-      }
-
-      showNotification("اطلاعات حساب کاربری شما با موفقیت ثبت و با پنل ارشد همگام شد.", "success");
+      showNotification("اطلاعات حساب کاربری شما با موفقیت ثبت شد.", "success");
       onComplete(updatedUser);
     } catch (error: any) {
       console.error("Onboarding profile save error:", error);

@@ -8,8 +8,6 @@ import {
   ArrowUpRight, Zap, Mail, BarChart2, CheckCircle, Clock, Info
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { db } from "../lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -66,12 +64,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [userStatusFilter, setUserStatusFilter] = useState<string>("all");
 
   const updateUserInFirestore = async (userId: string, updates: any) => {
-    try {
-      const userRef = doc(db, "users", String(userId));
-      await setDoc(userRef, updates, { merge: true });
-    } catch (err: any) {
-      console.warn("Failed to update user in Firestore:", err?.message || err);
-    }
+    // Local storage persistence or local state update handled directly
   };
 
   // PIN change form
@@ -733,7 +726,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                                   onClick={() => {
                                     if (confirm(`آیا از صفر کردن توکن‌های مصرفی کاربر «${u.name}» اطمینان دارید؟`)) {
                                       setUsers(prev => prev.map(usr => usr.id === u.id ? {...usr, apiUsage: 0} : usr));
-                                      setDoc(doc(db, "users", String(u.id)), { apiUsage: 0 }, { merge: true });
                                       logEvent("ریست توکن کاربر", `آمار مصرف توکن کاربر ${u.name} صفر شد.`);
                                       showNotification(`توکن‌های کاربر ${u.name} بازنشانی گردید.`, 'success');
                                     }
@@ -2290,14 +2282,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     }
                   }
 
-                  // 3. Update Firestore users collection
-                  try {
-                    const userRef = doc(db, "users", String(editingUser.id || editingUser.email));
-                    await setDoc(userRef, updatedUser, { merge: true });
-                  } catch (err: any) {
-                    console.warn("Error updating user in Firestore:", err?.message || err);
-                  }
-
                   if (isRegistrationUnlocked) {
                     logEvent("ویرایش آگاهانه اطلاعات ثبت‌نام", `قفل اطلاعات اولیه کاربر «${updatedUser.name}» باز شده و مشخصات ثبت‌نامی اولیه وی تغییر یافت.`, "warning");
                   } else {
@@ -2488,13 +2472,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   };
 
                   setUsers(prev => [userObj, ...prev]);
-
-                  try {
-                    const userRef = doc(db, "users", newId);
-                    await setDoc(userRef, userObj, { merge: true });
-                  } catch (err: any) {
-                    console.warn("Failed to create new user in Firestore:", err);
-                  }
 
                   logEvent("تعریف کاربر جدید", `کاربر جدید «${userObj.name}» در سیستم تعریف گردید.`);
                   showNotification(`کاربر جدید «${userObj.name}» با موفقیت ایجاد گردید.`, "success");

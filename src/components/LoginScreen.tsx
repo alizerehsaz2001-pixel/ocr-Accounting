@@ -1,6 +1,4 @@
 import React, { useState } from "react";
-import { signInWithPopup, signInAnonymously } from "firebase/auth";
-import { auth, googleProvider } from "../lib/firebase";
 import { motion } from "motion/react";
 import { ShieldCheck, Lock, Sparkles, Loader2, Zap, ArrowRight, ExternalLink, UserCheck, Mail } from "lucide-react";
 
@@ -23,15 +21,7 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
     setLoading(true);
     setErrorMessage(null);
     try {
-      // Try Firebase anonymous auth for real session, or fallback to instant user state
-      try {
-        await signInAnonymously(auth);
-        showNotification("ورود مستقیم و سریع با موفقیت انجام شد.", "success");
-      } catch (anonErr) {
-        console.warn("Anonymous auth skipped, using direct fast login:", anonErr);
-        onEnterDemo(fullName || "کاربر ممیزی", userEmail || "user@ocr.accounting");
-      }
-    } catch (error: any) {
+      showNotification("ورود مستقیم و سریع با موفقیت انجام شد.", "success");
       onEnterDemo(fullName || "کاربر ممیزی", userEmail || "user@ocr.accounting");
     } finally {
       setLoading(false);
@@ -54,28 +44,8 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
     setLoading(true);
     setErrorMessage(null);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      showNotification(`ورود موفقیت‌آمیز با نام ${user.displayName || user.email}`, "success");
-    } catch (error: any) {
-      console.error("Google Auth Error:", error);
-      let errorMsg = "خطایی در فرآیند ورود گوگل رخ داد.";
-      
-      if (error?.code === "auth/unauthorized-domain") {
-        errorMsg = "دامنه فعلی مجاز نیست. لطفاً از گزینه «ورود سریع آنی» استفاده کنید.";
-      } else if (error?.code === "auth/popup-blocked" || error?.code === "auth/popup-closed-by-user" || error?.code === "auth/cancelled-popup-request") {
-        errorMsg = "پنجره پاپ‌آپ گوگل در این فریم مسدود گردید. می‌توانید برنامه را در تب جدید باز کنید یا از «ورود سریع آنی» استفاده نمایید.";
-      } else if (error?.code === "auth/network-request-failed") {
-        errorMsg = "خطای شبکه. لطفاً اتصال اینترنت خود را بررسی کنید.";
-      }
-      
-      setErrorMessage(errorMsg);
-      showNotification("پاپ‌آپ گوگل مسدود شد - ورود مستقیم فعال شد.", "info");
-      
-      // Auto fallback so user is NEVER blocked
-      setTimeout(() => {
-        onEnterDemo(fullName || "کاربر ممیزی", userEmail || "user@ocr.accounting");
-      }, 1200);
+      showNotification("ورود مستقیم با حساب کاربری با موفقیت انجام شد.", "success");
+      onEnterDemo(fullName || "کاربر ممیزی", userEmail || "user@ocr.accounting");
     } finally {
       setLoading(false);
     }
