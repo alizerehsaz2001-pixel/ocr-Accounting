@@ -115,6 +115,9 @@ import { motion, AnimatePresence } from "motion/react";
 import Markdown from "react-markdown";
 import DynamicTable from "./components/DynamicTable";
 import SmartAuditDashboard from "./components/SmartAuditDashboard";
+import { auth, db, testConnection } from "./lib/firebase";
+import { doc, getDoc, getDocs, setDoc, deleteDoc, collection } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 
 // Shadow global fetch locally in this module to inject custom Gemini API Key automatically if present
 const customFetch = async function (input: RequestInfo | URL, init?: RequestInit) {
@@ -2031,17 +2034,205 @@ export default function App() {
   const [isFileManagerOpen, setIsFileManagerOpen] = useState(false);
   const [inspectingScanId, setInspectingScanId] = useState<string | null>(null);
 
+  const isInitialLoadFromFirestoreRef = useRef(false);
+
   useEffect(() => {
-    setIsAuthLoading(false);
-    const storedUser = localStorage.getItem("current_user") || localStorage.getItem("demo_user_data");
-    if (storedUser) {
-      try {
-        setCurrentUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.warn("Error parsing stored user:", e);
+    // 1. Run Firestore connection test
+    testConnection();
+
+    // 2. Set up onAuthStateChanged
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const userDocRef = doc(db, "users", user.uid);
+          const userSnap = await getDoc(userDocRef);
+          
+          if (userSnap.exists()) {
+            const userData = userSnap.data();
+            setCurrentUser({
+              id: user.uid,
+              name: userData.name || user.displayName || "",
+              firstName: userData.firstName || "",
+              lastName: userData.lastName || "",
+              companyName: userData.companyName || "",
+              phone: userData.phone || "",
+              jobTitle: userData.jobTitle || "",
+              nationalCode: userData.nationalCode || "",
+              email: userData.email || user.email || "",
+              role: userData.role || "user",
+              status: userData.status || "active",
+              apiUsage: userData.apiUsage || 0,
+              extraStorage: userData.extraStorage || 0,
+              isOnboarded: userData.isOnboarded || true
+            });
+          } else {
+            setCurrentUser(null);
+          }
+        } catch (err) {
+          console.error("Error restoring user session from Firestore:", err);
+          setCurrentUser(null);
+        }
+      } else {
+        const isDemo = localStorage.getItem("is_demo_mode") === "true";
+        const storedUser = localStorage.getItem("current_user");
+        if (isDemo && storedUser) {
+          try {
+            setCurrentUser(JSON.parse(storedUser));
+          } catch (e) {
+            console.error("Error parsing stored demo user:", e);
+          }
+        } else {
+          setCurrentUser(null);
+        }
       }
-    }
+      setIsAuthLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
+
+  // Sync state from Firestore when user is loaded
+  useEffect(() => {
+    if (!currentUser) {
+      isInitialLoadFromFirestoreRef.current = false;
+      return;
+    }
+    
+    const userId = auth.currentUser?.uid;
+    if (!userId) {
+      isInitialLoadFromFirestoreRef.current = true;
+      return;
+    }
+
+    const loadData = async () => {
+      try {
+        const foldersCollectionRef = collection(db, "users", userId, "folders");
+        const scansCollectionRef = collection(db, "users", userId, "scans");
+        
+        const foldersSnap = await getDocs(foldersCollectionRef);
+        const scansSnap = await getDocs(scansCollectionRef);
+        
+        const firestoreFolders = foldersSnap.docs.map(docSnap => ({
+          ...docSnap.data(),
+          name: docSnap.id
+        })) as any[];
+        
+        const firestoreScans = scansSnap.docs.map(docSnap => ({
+          ...docSnap.data(),
+          id: docSnap.id
+        })) as any[];
+
+        const sortedScans = firestoreScans.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+        if (firestoreFolders.length > 0) {
+          setUserDefinedFolders(firestoreFolders);
+        }
+        if (firestoreScans.length > 0) {
+          setPreviousScans(sortedScans);
+        }
+        
+        isInitialLoadFromFirestoreRef.current = true;
+      } catch (err) {
+        console.error("Error loading data from Firestore:", err);
+        isInitialLoadFromFirestoreRef.current = true;
+      }
+    };
+    
+    loadData();
+  }, [currentUser]);
+
+  // Sync folders to Firestore
+  useEffect(() => {
+    if (!currentUser || !isInitialLoadFromFirestoreRef.current) return;
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+
+    const syncFolders = async () => {
+      try {
+        const foldersCollectionRef = collection(db, "users", userId, "folders");
+        const foldersSnap = await getDocs(foldersCollectionRef);
+        const firestoreFolderIds = foldersSnap.docs.map(docSnap => docSnap.id);
+        
+        const localFolderNames = userDefinedFolders.map(f => f.name);
+        
+        // Delete folder if removed locally
+        for (const fId of firestoreFolderIds) {
+          if (!localFolderNames.includes(fId)) {
+            const folderDocRef = doc(db, "users", userId, "folders", fId);
+            await deleteDoc(folderDocRef);
+          }
+        }
+
+        // Save folders
+        for (const folder of userDefinedFolders) {
+          if (!folder.name) continue;
+          const folderDocRef = doc(db, "users", userId, "folders", folder.name);
+          await setDoc(folderDocRef, {
+            name: folder.name,
+            color: folder.color || "indigo",
+            description: folder.description || "",
+            createdAt: folder.createdAt || new Date().toISOString()
+          });
+        }
+      } catch (err) {
+        console.error("Error syncing folders to Firestore:", err);
+      }
+    };
+    syncFolders();
+  }, [userDefinedFolders, currentUser]);
+
+  // Sync scans to Firestore
+  useEffect(() => {
+    if (!currentUser || !isInitialLoadFromFirestoreRef.current) return;
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+
+    const syncScans = async () => {
+      try {
+        const scansCollectionRef = collection(db, "users", userId, "scans");
+        const scansSnap = await getDocs(scansCollectionRef);
+        const firestoreScanIds = scansSnap.docs.map(docSnap => docSnap.id);
+        
+        const localScanIds = previousScans.map(s => s.id);
+        
+        // Delete scan if removed locally
+        for (const fId of firestoreScanIds) {
+          if (!localScanIds.includes(fId)) {
+            const scanDocRef = doc(db, "users", userId, "scans", fId);
+            await deleteDoc(scanDocRef);
+          }
+        }
+
+        // Save scans
+        for (const scan of previousScans) {
+          if (!scan.id) continue;
+          const scanDocRef = doc(db, "users", userId, "scans", scan.id);
+          
+          await setDoc(scanDocRef, {
+            id: scan.id,
+            timestamp: scan.timestamp || Date.now(),
+            folder: scan.folder || "",
+            file: {
+              id: scan.file?.id || "",
+              name: scan.file?.name || "",
+              size: scan.file?.size || 0,
+              preview: scan.file?.preview || "",
+              status: scan.file?.status || "",
+              error: scan.file?.error || "",
+              documentType: scan.file?.documentType || "",
+              mimeType: scan.file?.mimeType || "",
+              documentAnalysis: scan.file?.documentAnalysis || "",
+              tokensUsed: scan.file?.tokensUsed || 0
+            },
+            transactions: scan.transactions || []
+          });
+        }
+      } catch (err) {
+        console.error("Error syncing scans to Firestore:", err);
+      }
+    };
+    syncScans();
+  }, [previousScans, currentUser]);
 
   const handleEnterDemo = (
     customName?: string, 
@@ -2160,6 +2351,8 @@ export default function App() {
 
   const handleSignOut = async () => {
     try {
+      const { signOut } = await import("firebase/auth");
+      await signOut(auth);
       localStorage.setItem("is_demo_mode", "false");
       localStorage.removeItem("current_user");
       localStorage.removeItem("demo_user_data");
