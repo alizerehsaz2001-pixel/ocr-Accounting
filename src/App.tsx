@@ -90,7 +90,7 @@ import {
   Maximize,
   Minimize,
   Printer,
-  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench, Star, Brain, FileSpreadsheet, Building, Phone, Edit2, Ban, KeyRound, Terminal, UserPlus, EyeOff
+  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench, Star, Brain, FileSpreadsheet, Building, Phone, Edit2, Ban, KeyRound, Terminal, UserPlus, EyeOff, Binary
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan, DocumentExtractionSettings } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -4889,66 +4889,77 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* Enhanced 100% Extraction Hero Card */}
-                        <div className={`relative overflow-hidden p-5 rounded-2xl border transition-all group ${
+                        {/* Enhanced Audit-Grade 100% Extraction Hero Card */}
+                        <div className={`relative overflow-hidden p-6 lg:p-8 rounded-2xl border transition-all duration-500 group ${
                           isDarkMode 
-                            ? "bg-gradient-to-br from-amber-950/70 via-slate-900 to-indigo-950/50 border-amber-500/30 shadow-[0_4px_25px_rgba(245,158,11,0.12)] hover:border-amber-500/50" 
-                            : "bg-gradient-to-br from-amber-50 via-white to-amber-100/40 border-amber-300 shadow-sm hover:shadow-md hover:border-amber-400"
+                            ? "bg-slate-900 border-amber-500/30 shadow-[0_8px_30px_rgba(245,158,11,0.15)] hover:border-amber-500/60 hover:shadow-[0_8px_40px_rgba(245,158,11,0.25)]" 
+                            : "bg-gradient-to-br from-amber-50 via-white to-orange-50/50 border-amber-300 shadow-[0_8px_30px_rgba(245,158,11,0.1)] hover:shadow-[0_12px_40px_rgba(245,158,11,0.15)] hover:border-amber-400"
                         }`}>
-                          <div className="absolute top-0 right-0 w-36 h-36 bg-amber-500/15 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                          {/* Animated background glows */}
+                          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-[60px] -mr-20 -mt-20 pointer-events-none group-hover:bg-amber-500/20 transition-colors duration-700"></div>
+                          <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-[50px] -ml-20 -mb-20 pointer-events-none group-hover:bg-indigo-500/20 transition-colors duration-700"></div>
+                          <div className={`absolute inset-0 opacity-10 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:20px_20px] pointer-events-none ${isDarkMode ? "opacity-[0.03]" : "opacity-[0.05]"}`}></div>
                           
-                          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4">
-                            <div className="flex flex-col gap-2 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-600"}`}>
-                                  <Zap className="w-4 h-4 animate-pulse" />
+                          <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+                            <div className="flex flex-col gap-4 flex-1 w-full">
+                              <div className="flex flex-wrap items-center gap-4">
+                                <div className={`relative flex items-center justify-center w-12 h-12 rounded-xl shadow-inner shrink-0 ${
+                                  isDarkMode ? "bg-gradient-to-br from-amber-900 to-amber-950 border border-amber-500/30 text-amber-400" : "bg-gradient-to-br from-amber-100 to-amber-200 border border-amber-300 text-amber-600 shadow-amber-500/20"
+                                }`}>
+                                  <ShieldCheck className="w-6 h-6 animate-pulse" />
+                                  <div className="absolute inset-0 rounded-xl bg-amber-400/20 animate-ping opacity-20"></div>
                                 </div>
-                                <h3 className={`text-[13px] font-black tracking-tight ${isDarkMode ? "text-amber-300" : "text-amber-900"}`}>
-                                  دستور ویژه فول‌اکسل (موتور ممیزی حسابرسی - نسل ۷ آلترا)
-                                </h3>
-                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30">
-                                  🛡️ اسکن ممیزی + ۴۵ کلید مسطح Audit-Grade
-                                </span>
+                                <div className="flex flex-col">
+                                  <h3 className={`text-lg sm:text-xl font-black tracking-tight ${isDarkMode ? "text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500" : "text-transparent bg-clip-text bg-gradient-to-r from-amber-700 to-orange-600"}`}>
+                                    دستور ویژه ممیزی (نسل ۷ آلترا)
+                                  </h3>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`text-[11px] font-bold tracking-widest uppercase ${isDarkMode ? "text-amber-500/80" : "text-amber-700/70"}`}>
+                                      Audit-Grade Document Extraction
+                                    </span>
+                                    <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  </div>
+                                </div>
                               </div>
-                              <p className={`text-[10px] leading-relaxed max-w-xl ${isDarkMode ? "text-amber-200/80" : "text-amber-900/80"}`}>
-                                موتور ممیزی حسابرسی بینایی ماشین با <strong>استراتژی عدم-حدس (Strict Null)</strong>، تفکیک واحد ارزی و حفظ متن خام، تمام اطلاعات هدر، طرفین، اقلام، مبالغ، حساب‌های بانکی و حواشی را همراه با <strong>۵ کنترل متقابل ریاضی</strong> به خروجی استاندارد <strong>JSON مسطح ۴۵ کلیدی</strong> تبدیل می‌کند.
+                              
+                              <p className={`text-[12px] sm:text-[13px] leading-relaxed max-w-3xl font-medium ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                                قدرتمندترین موتور پردازش اسناد مالی با <strong>استراتژی عدم-حدس (Strict Null)</strong>. استخراج ایمن، تفکیک دقیق واحدهای ارزی و حفظ متن خام، همراه با <span className={isDarkMode ? "text-amber-400" : "text-amber-600 font-bold"}>۵ لایه کنترل متقابل ریاضی</span> جهت تضمین ورود مستقیم و بدون خطای داده‌ها به سیستم‌های <strong>ERP</strong> و جداول <strong>Excel</strong>.
                               </p>
                               
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              <div className="flex flex-wrap gap-2 sm:gap-3 mt-1">
                                 {[
-                                  "🛡️ استراتژی عدم حدس (Strict Null)",
-                                  "🔢 اعداد ASCII خالص (0-9)",
-                                  "🔤 تفکیک واحد ارزی + متن خام",
-                                  "📋 ۴۵ کلید مسطح استاندارد",
-                                  "🔍 شاخص اطمینان OCR",
-                                  "📦 تک‌تک سطرهای اقلام",
-                                  "💳 شماره شبا و حساب بانکی",
-                                  "⚖️ ۵ کنترل متقابل و حسابرسی ریاضی"
-                                ].map((tag, i) => (
-                                  <span key={i} className={`px-2 py-0.5 rounded-md text-[9px] font-bold ${
+                                  { icon: <ShieldAlert className="w-4 h-4" />, text: "استراتژی عدم حدس (Strict Null)" },
+                                  { icon: <Binary className="w-4 h-4" />, text: "تفکیک ارزی + متن خام" },
+                                  { icon: <CheckSquare className="w-4 h-4" />, text: "خروجی JSON ۴۵ کلیدی" },
+                                  { icon: <Calculator className="w-4 h-4" />, text: "۵ لایه کنترل ریاضی" }
+                                ].map((feature, i) => (
+                                  <div key={i} className={`flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] font-bold transition-all ${
                                     isDarkMode 
-                                      ? "bg-slate-900/80 text-amber-200/90 border border-amber-500/20" 
-                                      : "bg-white/90 text-amber-800 border border-amber-200 shadow-2xs"
+                                      ? "bg-slate-800/80 text-amber-100 border border-slate-700 hover:border-amber-500/40 hover:bg-slate-800 hover:shadow-[0_4px_12px_rgba(245,158,11,0.1)]" 
+                                      : "bg-white/80 text-amber-900 border border-amber-200/60 shadow-sm hover:border-amber-300 hover:shadow-md hover:-translate-y-0.5"
                                   }`}>
-                                    {tag}
-                                  </span>
+                                    <span className={isDarkMode ? "text-amber-500" : "text-amber-600"}>{feature.icon}</span>
+                                    {feature.text}
+                                  </div>
                                 ))}
                               </div>
                             </div>
                             
-                            <div className="flex flex-col sm:flex-row md:flex-col items-center gap-2 shrink-0 w-full md:w-auto">
-                              <button
-                                type="button"
-                                onClick={handleExtract100PercentAllToJsonAndExcel}
-                                className={`w-full md:w-auto px-5 py-3 rounded-xl text-[11px] font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95 ${
-                                  isDarkMode 
-                                    ? "bg-amber-500 text-amber-950 hover:bg-amber-400 shadow-amber-500/20 hover:shadow-amber-500/40" 
-                                    : "bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-400 hover:to-orange-400 shadow-amber-500/30"
-                                }`}
-                              >
-                                <Code className="w-4 h-4" />
-                                <span>اجرای استخراج کامل (فول‌اکسل)</span>
-                              </button>
+                            <div className="flex w-full lg:w-auto relative group shrink-0 self-stretch lg:self-center">
+                               {/* Glowing button background */}
+                               <div className={`absolute inset-0 rounded-2xl blur-xl opacity-40 group-hover:opacity-75 transition-opacity duration-300 ${isDarkMode ? 'bg-amber-500' : 'bg-orange-500'}`}></div>
+                               <button
+                                  type="button"
+                                  onClick={handleExtract100PercentAllToJsonAndExcel}
+                                  className={`relative w-full px-6 sm:px-8 py-4 sm:py-5 rounded-2xl text-[13px] sm:text-[14px] font-black flex items-center justify-center gap-3 transition-all cursor-pointer shadow-xl active:scale-95 border-2 ${
+                                    isDarkMode 
+                                      ? "bg-gradient-to-br from-amber-500 to-orange-600 text-amber-950 border-amber-400 hover:from-amber-400 hover:to-orange-500 shadow-amber-900/50" 
+                                      : "bg-gradient-to-br from-amber-500 to-orange-600 text-white border-amber-400 hover:from-amber-400 hover:to-orange-500 shadow-orange-500/30"
+                                  }`}
+                                >
+                                  <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6" />
+                                  <span className="tracking-wide">اجرای استخراج (ممیزی)</span>
+                                </button>
                             </div>
                           </div>
                         </div>
