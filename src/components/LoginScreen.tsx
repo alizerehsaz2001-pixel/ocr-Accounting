@@ -84,11 +84,11 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
 
       // Check if user already exists in Firestore
       const userDocRef = doc(db, "users", user.uid);
-      let userSnap;
+      let userSnap = null;
       try {
         userSnap = await getDoc(userDocRef);
       } catch (err) {
-        handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+        console.warn("Firestore user lookup offline or error:", err);
       }
 
       if (userSnap && userSnap.exists()) {
@@ -102,9 +102,18 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
           userData.nationalCode || "", 
           userData.jobTitle || ""
         );
+      } else if (user.displayName || user.email) {
+        const userName = user.displayName || user.email?.split("@")[0] || "کاربر گوگل";
+        showNotification(`خوش آمدید، ${userName}!`, "success");
+        onEnterDemo(
+          userName,
+          user.email || "",
+          "",
+          "سازمان (ورود با گوگل)",
+          "",
+          "کاربر سیستم"
+        );
       } else {
-        // If not registered yet, we keep their google credentials and switch to a pre-filled register form
-        // But let's allow them to just fill the form now
         setFullName(user.displayName || "");
         setUserEmail(user.email || "");
         setActiveTab("register");

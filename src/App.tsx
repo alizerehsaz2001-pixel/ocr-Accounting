@@ -1458,54 +1458,85 @@ export default function App() {
   };
 
   const handleExtract100PercentAllToJsonAndExcel = async () => {
-    const fullJsonInstruction = `🎯 دستورالعمل فوق‌حرفه‌ای، قطعی و الزام‌آور استخراج ۱۰۰٪ و بدون‌نقص داده‌ها (موتور تحلیلی-حسابداری ارشد - ویژه خروجی Full-Excel):
-شما در جایگاه یک حسابرس و تحلیل‌گر ارشد داده‌های مالی قرار دارید. وظیفه شما استخراج مو‌به‌مو، نقطه به نقطه و کاملاً جامعِ تک‌تک اطلاعات مندرج در این سند است. هیچ‌گونه تلخیص، خلاصه‌سازی، ادغام، حذف یا نادیده گرفتن جزئیات، تحت هیچ شرایطی پذیرفته نیست. خروجی شما مستقیماً وارد سیستم‌های حسابداری (ERP) و فایل اکسل (.xlsx) خواهد شد و کوچک‌ترین خطایی منجر به خسارت مالی می‌گردد.
+    const fullJsonInstruction = `⚡ دستورالعمل فوق‌حرفه‌ای، صفر-اغماض و آلترا-پیشرفته استخراج ۱۰۰٪ داده‌ها (موتور ارشد پردازش سند، بینایی ماشین و حسابرسی جنایی - نسل ۵ آلترا ویژه خروجی کاملاً هوشمند Full-Excel):
 
-تمامی داده‌ها باید در قالب یک «آرایه JSON استاندارد و مسطح (Flat)» با کلیدهای فارسیِ معنادار، یکدست و کاملاً ساختاریافته ارائه شوند. به ازای هر "ردیف" در جداول سند، باید یک Object مستقل در JSON ساخته شود که اطلاعات عمومی (هدر و فوتر) به عنوان اطلاعات پایه در تک‌تک آن Objectها تکرار شوند تا در دیتابیس رابطه‌ای و فیلترهای اکسل به درستی عمل کنند.
+شما در جایگاه یک حسابرس رسمی ارشد، مهندس فوق‌تخصص OCR و بینایی ماشین، و تحلیل‌گر داده‌های مالی و تجاری قرار دارید. موظفید تمامی داده‌های مندرج در این تصویر/سند را بدون هیچ‌گونه استثنا، بریدگی، خلاصه‌سازی، ادغام یا نادیده گرفتن، با دقت مطلق ۱۰۰٪ استخراج کرده و به یک «آرایه JSON مسطح و استاندارد (Flat JSON Array)» با کلیدهای فارسی تبدیل کنید تا مستقیماً و بدون نیاز به هیچ‌گونه فرآوری یا ویرایش دستی، وارد جداول اکسل (.xlsx)، سیستم‌های مالی ERP، سامانه مؤدیان و دیتابیس‌های رابطه‌ای گردند.
 
-ساختار الزامی و چک‌لیست استخراج بی‌نقص (تمامی موارد زیر در صورت وجود در سند، باید کلمه به کلمه استخراج شوند):
+🔴 قوانین بنیادین و خطوط قرمز صفر-اغماض (Zero-Omission Directives):
+۱. اسکن ۷ زون عمیق سند (7-Zone Deep Scanning): تمام مناطق سند شامل ۱) هدر و بالای سند، ۲) مشخصات صادرکننده، ۳) مشخصات خریدار، ۴) تمامی سطرها و ستون‌های جدول اقلام، ۵) جمع‌های مالی و مالیات فوتر، ۶) اطلاعات بانکی و واریز، ۷) متون حاشیه‌ای، شروط، مهرها، امضاها، متون دست‌نویس و کادرهای فرعی را کلمه به کلمه اسکن و استخراج کنید. هیچ داده‌ای نباید جا بماند!
+۲. تبدیل عددی استاندارد (Pure Math ASCII Digits): تمامی ارقام (تعداد، قیمت واحد، مبالغ، درصدهای مالیات، کدهای ملی/اقتصادی/پستی، شماره شبا، تاریخ‌ها و کدهای شناسایی) را منحصراً به «اعداد انگلیسی استاندارد ASCII (0-9)» تبدیل کنید. تمام پسوندها و پیشوندها نظیر "ریال"، "تومان"، "$"، "٪"، "عدد"، "دستگاه" و تمامی جداکننده‌های هزارگان (کاما/ویرگول) را از مقادیر عددی پاکسازی کنید تا مستقیماً در فرمول‌های ریاضی و توابع اکسل (SUM, VLOOKUP, INDEX-MATCH) قابل پردازش باشند.
+۳. ساختار مسطح کامل جهت اکسل (Flat JSON Matrix): هر سطر از جداول یا اقلام کالا/خدمات باید به عنوان یک Object مستقل در آرایه اصلی قرار گیرد. کلیه اطلاعات عمومی (هدر، مشخصات صادرکننده، خریدار، جمع‌های کلان، اطلاعات بانکی و حواشی) باید در تمام تک‌تک Objectها تکرار شوند تا هر سطر در فایل اکسل مستقل، کامل و قابل فیلتر/گزارش‌گیری باشد. (در صورت عدم وجود جدول اقلام، آرایه حاوی ۱ Object کامل خواهد بود).
+۴. حفظ کامل و بدون بریدگی متون (Full Text Preservation): از هرگونه خلاصه‌سازی شرح کالا/خدمات یا حذف کدها جداً خودداری کنید. تمام کلمات، مشخصات فنی، مدل، سایز، رنگ، برند، شماره سریال، کد تعرفه گمرکی و پلاک باید دقیقاً ثبت گردند.
+۵. عدم تولید هیچ‌گونه متن اضافه: خروجی باید منحصراً و فقط یک کد استاندارد JSON باشد (بدون هیچ‌گونه توضیحات، مقدمه، مؤخره یا متن متنی اضافه در خارج از JSON).
 
-📋 ۱) ابرداده‌ها، هدر و اطلاعات هویتی (Header & Metadata) - [باید در تمامی ردیف‌ها تکرار شود]:
-- صادرکننده/فروشنده: نام کامل شرکت/شخص، شناسه ملی، کد ملی، شماره اقتصادی، شماره ثبت، تلفن، فکس، آدرس دقیق، کدپستی، ایمیل، استان و شهر.
-- خریدار/مشتری: نام کامل، شناسه ملی، کد ملی، شماره اقتصادی، شماره ثبت، تلفن، فکس، آدرس دقیق، کدپستی، ایمیل، استان و شهر.
-- مشخصات سند: شماره فاکتور/رسید/سند، شماره سریال چاپی، شناسه یکتای مالیاتی (۲۲ رقمی)، شماره پیگیری، تاریخ شمسی (دقیقاً به فرمت YYYY/MM/DD)، تاریخ میلادی، زمان/ساعت ثبت.
+📋 چک‌لیست ۳۵‌گانه جامع و کامل استخراج بی‌نقص (با کلیدهای استاندارد فارسی):
 
-📦 ۲) جدول اقلام و جزئیات ردیف‌ها (Line Items) - [هسته اصلی آرایه JSON]:
-استخراج تک‌تک سطرها بدون استثنا. اگر سندی دارای ۱۰۰ ردیف است، باید دقیقاً ۱۰۰ آیتم استخراج شود.
-- ردیف (شماره تسلسل)
-- کد کالا / شناسه خدمت / بارکد
-- شرح کالا/خدمات (کامل و بدون بریدگی، شامل تمامی مشخصات فنی، رنگ، مدل و سایز)
-- مقدار/تعداد (فقط عدد ریاضی)
-- واحد سنجش (عدد، کیلوگرم، متر، ...)
-- مبلغ واحد/فی (فقط عدد ریاضی)
-- مبلغ کل ردیف (تعداد ضربدر فی - قبل از کسورات/اضافات)
-- مبلغ و درصد تخفیف ردیف
-- مبلغ و نرخ مالیات بر ارزش افزوده ردیف
-- مبلغ عوارض ردیف
-- مبلغ خالص و نهایی ردیف پس از تمامی محاسبات
+۱) شناسنامه سند و هدر (Header Metadata):
+- "نوع_سند": (مثلاً فاکتور فروش، صورتحساب الکترونیکی، قبض، فیش واریزی، رسید انبار، حواله، صورتجلسه، پیش‌فاکتور، بارنامه، صورت‌وضعیت)
+- "شماره_فاکتور": شماره اصلی فاکتور / سند / رسید / قبض
+- "شماره_سریال_چاپی": شماره مسلسل چاپی یا قرمز رنگ بالای سند
+- "شناسه_یکتای_مالیاتی": شناسه ۲۲ رقمی سامانه مودیان (در صورت وجود)
+- "شماره_پیگیری": شماره پیگیری / مرجع / ارجاع / شناسه صیادی / شماره حواله
+- "شماره_سفارش_خرید_PO": شماره سفارش خرید یا درخواست وجه (در صورت وجود)
+- "تاریخ_شمسی": تاریخ صدور شمسی دقیق به فرمت YYYY/MM/DD (مثلا 1403/05/22)
+- "تاریخ_میلادی": تاریخ میلادی در صورت وجود
+- "زمان_ثبت": ساعت و زمان دقیق ثبت (مثلا 14:35)
+- "روش_تسویه": (نقدی، نسیه، چک، اقساطی، پایا/ساتنا، کارتخوان)
 
-💰 ۳) اطلاعات مالی کلان، کسورات و اضافات (Totals & Adjustments) - [باید در تمامی ردیف‌ها تکرار شود]:
-- جمع کل مبالغ قبل از تخفیف
-- جمع کل تخفیفات
-- جمع کل مالیات و عوارض
-- سایر اضافات (هزینه حمل، بسته‌بندی، نصب، عوارض خاص)
-- سایر کسورات (پیش‌پرداخت، مالیات تکلیفی، سپرده حسن انجام کار، سپرده بیمه)
-- مبلغ قابل پرداخت نهایی (هم به صورت عددی و هم حروف کامل فارسی)
-- روش تسویه (نقدی، نسیه، چک، حواله) و شرایط/مهلت پرداخت.
+۲) اطلاعات هویتی فروشنده / صادرکننده (Seller/Issuer):
+- "نام_فروشنده": نام کامل شرکت، فروشگاه، سازمان یا شخص حقیقی صادرکننده
+- "شناسه_ملی_فروشنده": کد ملی ۱۰ رقمی یا شناسه ملی ۱۱ رقمی فروشنده
+- "کد_اقتصادی_فروشنده": شماره اقتصادی ۱۲ رقمی فروشنده
+- "شماره_ثبت_فروشنده": شماره ثبت شرکت یا جواز کسب
+- "استان_شهر_فروشنده": استان و شهر محل فعالیت فروشنده
+- "کدپستی_فروشنده": کدپستی ۱۰ رقمی فروشنده
+- "تلفن_فروشنده": شماره تلفن ثابت، همراه یا فکس فروشنده
+- "آدرس_فروشنده": آدرس کامل پستی محل کار یا فروشگاه
 
-💳 ۴) اطلاعات بانکی و پرداخت (Banking & Settlement):
-- شماره شبا (IR...)، شماره حساب، شماره کارت، نام صاحب حساب، نام بانک و شعبه.
-- کد رهگیری، شماره مرجع، تاریخ واریز.
+۳) اطلاعات هویتی خریدار / مشتری (Buyer/Customer):
+- "نام_خریدار": نام کامل شرکت، سازمان یا شخص حقیقی خریدار
+- "شناسه_ملی_خریدار": کد ملی یا شناسه ملی خریدار
+- "کد_اقتصادی_خریدار": شماره اقتصادی خریدار
+- "شماره_ثبت_خریدار": شماره ثبت خریدار
+- "تلفن_خریدار": شماره تماس خریدار
+- "آدرس_خریدار": آدرس کامل پستی خریدار و محل تحویل
 
-📜 ۵) توضیحات، متون حقوقی و وضعیت سند (Notes & Validations):
-- تمامی متون دست‌نویس، مهرها، امضاها، شرایط گارانتی، توضیحات پایین فاکتور و هرگونه نوشته حاشیه‌ای.
+۴) جزئیات جدول اقلام و خدمات (Line Items Details):
+- "ردیف": شماره سطر (1, 2, 3...)
+- "کد_کالا": کد کالا، شناسه عمومی/اختصاصی کالا یا خدمات، بارکد، کد IRC
+- "شرح_کالا": شرح کامل و دقیق کالا یا خدمات شامل تمامی جزئیات فنی، مدل، سایز، رنگ و برند بدون اختصار
+- "تعداد": مقدار یا تعداد عددی خالص
+- "واحد_سنجش": واحد اندازه‌گیری (عدد، کیلوگرم، متر، بسته، دستگاه، ساعت، کارتنش، تن...)
+- "قیمت_واحد": قیمت واحد / فی (عدد خالص به ریال یا ارز پایه)
+- "مبلغ_کل_ردیف": (تعداد × قیمت واحد) قبل از تخفیف
+- "تخفیف_ردیف": مبلغ تخفیف اختصاص داده شده به این سطر
+- "درصد_تخفیف_ردیف": درصد تخفیف سطر
+- "نرخ_مالیات_بر_ارزش_افزوده_ردیف": درصد مالیات بر ارزش افزوده این سطر (مثلاً 10)
+- "مالیات_ارزش_افزوده_ردیف": مبلغ مالیات بر ارزش افزوده و عوارض این سطر
+- "مبلغ_نهایی_ردیف": مبلغ خالص و نهایی پرداختی این سطر پس از تخفیف و مالیات
 
-⚠️ قواعد اکید و خطوط قرمز سیستم در ساختار JSON (تخطی از این موارد باعث کرش کردن سیستم می‌شود):
-۱. فقط و فقط خروجی JSON معتبر تولید کن. هیچ متن اضافه، توضیحات، سلام یا احوال‌پرسی قبل یا بعد از JSON مجاز نیست.
-۲. فرمت مقادیر پولی و عددی: تمامی مبالغ، تعداد و درصدها باید منحصراً به صورت اعداد خالص ریاضی (بدون جداکننده هزارگان کاما، بدون پسوند "ریال" یا "تومان" یا "٪") درج شوند. (مثلا 1500000 به جای 1,500,000 ریال).
-۳. کلیدهای JSON باید فارسی با زیرخط (اسنیک‌کیس) باشند. (مثلا: "شناسه_ملی_فروشنده"، "مبلغ_ارزش_افزوده").
-۴. یکپارچگی (Flatness): به هیچ وجه از آبجکت‌های تودرتو (Nested Objects) یا آرایه‌های داخلی برای اطلاعات هدر و فوتر استفاده نکن. اطلاعات هدر، فوتر و اطلاعات کلی فاکتور باید به عنوان فیلدهای هم‌سطح (Flat) در کنار فیلدهای هر ردیفِ کالا قرار گیرند تا هر Object در آرایه، به تنهایی نماینده یک سطر کامل از فایل اکسل با تمامی اطلاعات سند باشد.
-۵. تضمین ۱۰۰٪: حتی اگر داده‌ای کمرنگ یا ناخوانا است، تا حد امکان آن را استخراج کن. استخراج کامل اولویت مطلق دارد.`;
+۵) خلاصه مالی کلان، اضافات و کسورات (Financial Totals & Adjustments):
+- "جمع_کل_قبل_تخفیف": مجموع مبالغ تمام اقلام قبل از تخفیف
+- "جمع_تخفیفات": مجموع کل تخفیفات فاکتور
+- "مبلغ_مشمول_مالیات": مبلغ خالص مشمول مالیات
+- "جمع_مالیات_و_عوارض": مجموع کل مالیات بر ارزش افزوده و عوارض قانونی
+- "سایر_اضافات": هزینه‌های اضافی مانند حمل و نقل، بسته‌بندی، انبارداری یا نصب
+- "سایر_کسورات": سپرده بیمه، مالیات تکلیفی، پیش‌پرداخت، سپرده حسن انجام کار یا کسورات قانونی
+- "مبلغ_قابل_پرداخت": مبلغ نهایی پرداختی به عدد خالص
+- "مبلغ_قابل_پرداخت_حروفی": مبلغ قابل پرداخت دقیقاً به حروف فارسی کامل
+
+۶) اطلاعات بانکی، واریز و تسویه (Banking & Settlement):
+- "نام_بانک": نام بانک صادرکننده یا حساب مقصد
+- "شماره_حساب": شماره حساب بانکی
+- "شماره_کارت": شماره کارت ۱۶ رقمی
+- "شماره_شبا": شماره شبای بانکی (به فرمت IR...)
+- "صاحب_حساب": نام کامل صاحب حساب/سپرده
+
+۷) حواشی، متون قانونی، ممیزی و داده‌های آزاد (Tail, Audit & Edge Cases):
+- "توضیحات_سند": متن کامل توضیحات، شروط فاکتور، گارانتی، مهلت تسویه و یادداشت‌های پایین سند
+- "وضعیت_مهر_امضا": (دارای مهر و امضا / فقط امضا / فقط مهر / فاقد مهر و امضا)
+- "سایر_اطلاعات_و_حواشی_سند": هرگونه متون دست‌نویس، شماره بارنامه، پلاک خودرو، وزن باسکول، کد انبار، نام انباردار یا اطلاعات تکمیلی فرعی که در ۳۴ کلید فوق نگنجیده است
+- "مغایرت_محاسباتی": در صورت وجود هرگونه خطا در ضرب (تعداد × فی) یا جمع مبالغ فاکتور توسط صادرکننده، شرح دقیق مغایرت ریاضی را بنویسید؛ در غیر این صورت null قرار دهید.`;
     
     setCustomPrompt(prev => {
       const trimmed = prev.trim();
@@ -1518,13 +1549,13 @@ export default function App() {
       { role: "user", text: fullJsonInstruction },
       { 
         role: "assistant", 
-        text: "✅ تایید شد! دستور استخراج ۱۰۰٪ کامل تمامی اطلاعات داخل سند (شامل تک‌تک اعداد، متون، اقلام، کدهای اقتصادی، شناسه مودیان، مالیات، عوارض، عناوین، شرح‌ها و کلیه جزئیات بدون کوچک‌ترین حذف) ثبت شد. تمام داده‌ها مستقیماً به فرمت آرایه ساختاریافته JSON تبدیل شده و جهت تولید جدول و خروجی مستقیم فایل اکسل منتقل می‌گردند." 
+        text: "✅ تایید شد! دستور نسل ۵ آلترا فول‌اکسل (استخراج ۱۰۰٪ صفر-اغماض) ثبت گردید. اسکن ۷ زون عمیق سند با ۳۵ کلید مسطح فارسی، تبدیل اعداد به ASCII خالص (0-9) و حسابرسی خودکار موازنه ریاضی اجرا می‌شود." 
       }
     ]);
 
     setIsAiUnderstandingConfirmed(true);
     logEvent("استخراج ۱۰۰٪ کلیه اطلاعات به JSON", "کاربر دستور استخراج ۱۰۰٪ کلیه اطلاعات سند (اعداد و متون) به JSON برای اکسل را صادر کرد.");
-    showNotification("دستور استخراج ۱۰۰٪ تمام اطلاعات ثبت گردید. در حال استخراج و تبدیل مستقیم به جدول اکسل...", "success");
+    showNotification("دستور ویژه فول‌اکسل ثبت گردید. در حال استخراج ۱۰۰٪ داده‌ها و تولید خروجی اکسل...", "success");
 
     if (pendingFiles.length > 0) {
       setTimeout(() => {
@@ -2037,7 +2068,7 @@ export default function App() {
   const isInitialLoadFromFirestoreRef = useRef(false);
 
   useEffect(() => {
-    // 1. Run Firestore connection test
+    // 1. Run Firestore connection test safely
     testConnection();
 
     // 2. Set up onAuthStateChanged
@@ -2047,7 +2078,7 @@ export default function App() {
           const userDocRef = doc(db, "users", user.uid);
           const userSnap = await getDoc(userDocRef);
           
-          if (userSnap.exists()) {
+          if (userSnap && userSnap.exists()) {
             const userData = userSnap.data();
             setCurrentUser({
               id: user.uid,
@@ -2059,18 +2090,60 @@ export default function App() {
               jobTitle: userData.jobTitle || "",
               nationalCode: userData.nationalCode || "",
               email: userData.email || user.email || "",
-              role: userData.role || "user",
+              role: userData.role || (user.email === "alizerehsaz2001@gmail.com" ? "admin" : "user"),
               status: userData.status || "active",
               apiUsage: userData.apiUsage || 0,
               extraStorage: userData.extraStorage || 0,
               isOnboarded: userData.isOnboarded || true
             });
           } else {
-            setCurrentUser(null);
+            // Fallback user state from Auth object or localStorage
+            const storedUser = localStorage.getItem("current_user");
+            if (storedUser) {
+              try {
+                setCurrentUser(JSON.parse(storedUser));
+              } catch {
+                setCurrentUser({
+                  id: user.uid,
+                  name: user.displayName || user.email?.split("@")[0] || "کاربر",
+                  email: user.email || "",
+                  role: user.email === "alizerehsaz2001@gmail.com" ? "admin" : "user",
+                  status: "active",
+                  apiUsage: 0,
+                  extraStorage: 0,
+                  isOnboarded: true
+                });
+              }
+            } else {
+              setCurrentUser({
+                id: user.uid,
+                name: user.displayName || user.email?.split("@")[0] || "کاربر",
+                email: user.email || "",
+                role: user.email === "alizerehsaz2001@gmail.com" ? "admin" : "user",
+                status: "active",
+                apiUsage: 0,
+                extraStorage: 0,
+                isOnboarded: true
+              });
+            }
           }
         } catch (err) {
-          console.error("Error restoring user session from Firestore:", err);
-          setCurrentUser(null);
+          console.warn("Restoring user session from Firestore encountered network/offline issue, using local profile:", err);
+          const storedUser = localStorage.getItem("current_user");
+          if (storedUser) {
+            try { setCurrentUser(JSON.parse(storedUser)); } catch { }
+          } else {
+            setCurrentUser({
+              id: user.uid,
+              name: user.displayName || user.email?.split("@")[0] || "کاربر",
+              email: user.email || "",
+              role: user.email === "alizerehsaz2001@gmail.com" ? "admin" : "user",
+              status: "active",
+              apiUsage: 0,
+              extraStorage: 0,
+              isOnboarded: true
+            });
+          }
         }
       } else {
         const isDemo = localStorage.getItem("is_demo_mode") === "true";
@@ -4807,38 +4880,63 @@ export default function App() {
                         {/* Enhanced 100% Extraction Hero Card */}
                         <div className={`relative overflow-hidden p-5 rounded-2xl border transition-all group ${
                           isDarkMode 
-                            ? "bg-gradient-to-br from-amber-950/60 via-slate-900 to-indigo-950/40 border-amber-500/20 shadow-[0_4px_20px_rgba(245,158,11,0.07)] hover:border-amber-500/40" 
-                            : "bg-gradient-to-br from-amber-50/80 via-white to-indigo-50/50 border-amber-200 shadow-sm hover:shadow-md hover:border-amber-300"
+                            ? "bg-gradient-to-br from-amber-950/70 via-slate-900 to-indigo-950/50 border-amber-500/30 shadow-[0_4px_25px_rgba(245,158,11,0.12)] hover:border-amber-500/50" 
+                            : "bg-gradient-to-br from-amber-50 via-white to-amber-100/40 border-amber-300 shadow-sm hover:shadow-md hover:border-amber-400"
                         }`}>
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                          <div className="absolute top-0 right-0 w-36 h-36 bg-amber-500/15 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
                           
                           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4">
                             <div className="flex flex-col gap-2 flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <div className={`p-1.5 rounded-lg ${isDarkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-600"}`}>
                                   <Zap className="w-4 h-4 animate-pulse" />
                                 </div>
-                                <h3 className={`text-[13px] font-black tracking-tight ${isDarkMode ? "text-amber-300" : "text-amber-800"}`}>
-                                  دستور ویژه فول‌اکسل (استخراج ۱۰۰٪ داده‌ها)
+                                <h3 className={`text-[13px] font-black tracking-tight ${isDarkMode ? "text-amber-300" : "text-amber-900"}`}>
+                                  دستور ویژه فول‌اکسل (استخراج ۱۰۰٪ صفر-اغماض - نسل ۵ آلترا)
                                 </h3>
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30">
+                                  🚀 اسکن ۷ زون عمیق + ۳۵ کلید مسطح
+                                </span>
                               </div>
-                              <p className={`text-[10px] leading-relaxed max-w-xl ${isDarkMode ? "text-amber-200/70" : "text-amber-900/70"}`}>
-                                موتور ارشد هوش مصنوعی تمامی مشخصات، تک‌تک اقلام، اعداد و یادداشت‌ها را بدون حذف مستقیماً به فرمت استاندارد <strong>JSON</strong> برای ورود به <strong>اکسل</strong> استخراج می‌کند.
+                              <p className={`text-[10px] leading-relaxed max-w-xl ${isDarkMode ? "text-amber-200/80" : "text-amber-900/80"}`}>
+                                موتور بینایی ماشین و حسابرسی جنایی تمامی مشخصات هدر، صادرکننده، خریدار، تک‌تک اقلام، مالیات، عوارض، حساب‌های بانکی، حواشی و موازنه ریاضی را <strong>بدون هیچ‌گونه حذف، بریدگی یا اغماض</strong> مستقیماً به اعداد خالص انگلیسی (0-9) و فرمت ساختاریافته <strong>JSON مسطح</strong> تبدیل می‌کند.
                               </p>
+                              
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                {[
+                                  "🔍 اسکن ۷ زون عمیق سند",
+                                  "🔢 تبدیل اعداد به ASCII خالص (0-9)",
+                                  "📋 ۳۵ کلید مسطح استاندارد",
+                                  "🏢 اطلاعات کامل طرفین",
+                                  "📦 تک‌تک سطرهای اقلام",
+                                  "💳 شماره شبا و حساب بانکی",
+                                  "⚖️ موازنه و حسابرسی ریاضی خودکار"
+                                ].map((tag, i) => (
+                                  <span key={i} className={`px-2 py-0.5 rounded-md text-[9px] font-bold ${
+                                    isDarkMode 
+                                      ? "bg-slate-900/80 text-amber-200/90 border border-amber-500/20" 
+                                      : "bg-white/90 text-amber-800 border border-amber-200 shadow-2xs"
+                                  }`}>
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                             
-                            <button
-                              type="button"
-                              onClick={handleExtract100PercentAllToJsonAndExcel}
-                              className={`px-5 py-3 rounded-xl text-[11px] font-black flex items-center justify-center gap-2 shrink-0 transition-all cursor-pointer shadow-lg active:scale-95 ${
-                                isDarkMode 
-                                  ? "bg-amber-500 text-amber-950 hover:bg-amber-400 shadow-amber-500/20 hover:shadow-amber-500/40" 
-                                  : "bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-400 hover:to-orange-400 shadow-amber-500/30"
-                              }`}
-                            >
-                              <Code className="w-4 h-4" />
-                              <span>اجرای استخراج کامل</span>
-                            </button>
+                            <div className="flex flex-col sm:flex-row md:flex-col items-center gap-2 shrink-0 w-full md:w-auto">
+                              <button
+                                type="button"
+                                onClick={handleExtract100PercentAllToJsonAndExcel}
+                                className={`w-full md:w-auto px-5 py-3 rounded-xl text-[11px] font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg active:scale-95 ${
+                                  isDarkMode 
+                                    ? "bg-amber-500 text-amber-950 hover:bg-amber-400 shadow-amber-500/20 hover:shadow-amber-500/40" 
+                                    : "bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-400 hover:to-orange-400 shadow-amber-500/30"
+                                }`}
+                              >
+                                <Code className="w-4 h-4" />
+                                <span>اجرای استخراج کامل (فول‌اکسل)</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
                         

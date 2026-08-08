@@ -55,14 +55,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// CRITICAL CONSTRAINT: When the application initially boots, call getFromServer to test connection
+// CRITICAL CONSTRAINT: When the application initially boots, test connection safely
 export async function testConnection() {
   try {
     await getDocFromServer(doc(db, "test", "connection"));
     console.log("Firebase connection established successfully.");
   } catch (error) {
-    if (error instanceof Error && error.message.includes("the client is offline")) {
-      console.error("Please check your Firebase configuration. Client is offline.");
-    }
+    const msg = error instanceof Error ? error.message : String(error);
+    console.warn("Firebase operating in offline or cache-first mode:", msg);
   }
 }
