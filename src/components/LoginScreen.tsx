@@ -123,9 +123,11 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
       console.error("Google login error:", err);
       let farsiError = "خطا در برقراری ارتباط امن با سرورهای گوگل. لطفاً اتصال اینترنت خود را بررسی کنید.";
       if (err.code === "auth/popup-blocked") {
-        farsiError = "نمایش پنجره پاپ‌آپ گوگل توسط مرورگر مسدود شده است. لطفاً آن را مجاز کنید یا دکمه تب جدید بالای صفحه را بزنید.";
+        farsiError = "نمایش پنجره پاپ‌آپ گوگل توسط مرورگر مسدود شده است. لطفاً آن را مجاز کنید یا دکمه «تب جدید» بالای صفحه را بزنید.";
       } else if (err.code === "auth/cancelled-popup-request") {
         farsiError = "عملیات ورود توسط کاربر لغو گردید.";
+      } else if (err.code === "auth/network-request-failed" || (err.message && err.message.includes("network-request-failed"))) {
+        farsiError = "به دلیل محدودیت‌های امنیتی پیش‌نمایش iframe مرورگر، ورود با گوگل مسدود گردیده است. لطفاً دکمه «باز کردن در تب جدید» را بزنید یا از تب «ورود دستی / ثبت‌نام» استفاده فرمایید.";
       } else if (err.message) {
         farsiError = `خطای سامانه: ${err.message}`;
       }
@@ -396,12 +398,12 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
           </div>
 
           {/* Navigation Tabs */}
-          <div className={`flex p-1 rounded-xl mb-8 ${isDarkMode ? "bg-white/5" : "bg-slate-100/80"}`}>
+          <div className={`flex p-1.5 rounded-2xl mb-6 relative ${isDarkMode ? "bg-slate-900/80 border border-slate-800" : "bg-slate-100/90 border border-slate-200/80"}`}>
             <button
               onClick={() => { setActiveTab("google"); setErrorMessage(null); }}
-              className={`flex-1 text-center py-2.5 text-[11px] font-bold rounded-lg transition-all ${
+              className={`flex-1 text-center py-2.5 text-[11px] font-bold rounded-xl transition-all duration-300 relative z-10 cursor-pointer ${
                 activeTab === "google" 
-                  ? isDarkMode ? "bg-[#222225] text-white shadow-sm" : "bg-white text-slate-900 shadow-sm" 
+                  ? isDarkMode ? "bg-gradient-to-r from-slate-800 to-slate-800/90 text-white shadow-md border border-slate-700" : "bg-white text-slate-900 shadow-md border border-slate-200" 
                   : isDarkMode ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-800"
               }`}
             >
@@ -409,23 +411,52 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
             </button>
             <button
               onClick={() => { setActiveTab("register"); setErrorMessage(null); }}
-              className={`flex-1 text-center py-2.5 text-[11px] font-bold rounded-lg transition-all ${
+              className={`flex-1 text-center py-2.5 text-[11px] font-bold rounded-xl transition-all duration-300 relative z-10 cursor-pointer ${
                 activeTab === "register" 
-                  ? isDarkMode ? "bg-[#222225] text-white shadow-sm" : "bg-white text-slate-900 shadow-sm" 
+                  ? isDarkMode ? "bg-gradient-to-r from-slate-800 to-slate-800/90 text-white shadow-md border border-slate-700" : "bg-white text-slate-900 shadow-md border border-slate-200" 
                   : isDarkMode ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              ثبت‌نام
+              ثبت‌نام جدید
             </button>
             <button
               onClick={() => { setActiveTab("login"); setErrorMessage(null); }}
-              className={`flex-1 text-center py-2.5 text-[11px] font-bold rounded-lg transition-all ${
+              className={`flex-1 text-center py-2.5 text-[11px] font-bold rounded-xl transition-all duration-300 relative z-10 cursor-pointer ${
                 activeTab === "login" 
-                  ? isDarkMode ? "bg-[#222225] text-white shadow-sm" : "bg-white text-slate-900 shadow-sm" 
+                  ? isDarkMode ? "bg-gradient-to-r from-slate-800 to-slate-800/90 text-white shadow-md border border-slate-700" : "bg-white text-slate-900 shadow-md border border-slate-200" 
                   : isDarkMode ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-800"
               }`}
             >
               ورود دستی
+            </button>
+          </div>
+
+          {/* Quick Demo Bypass Option for Seamless UX */}
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                onEnterDemo(
+                  "علی زره‌ساز", 
+                  "alizerehsaz2001@gmail.com", 
+                  "09121112233", 
+                  "موسسه حسابرسی زره‌اسکن", 
+                  "0012345678", 
+                  "حسابرس ارشد"
+                );
+                showNotification("خوش آمدید! شما با موفقیت به عنوان کاربر مهمان وارد شدید.", "success");
+              }}
+              className={`w-full py-3 px-4 rounded-xl text-[11px] font-black flex items-center justify-center gap-2.5 transition-all duration-300 cursor-pointer group border ${
+                isDarkMode 
+                  ? "bg-gradient-to-r from-indigo-950/60 via-slate-900 to-blue-950/60 border-indigo-500/30 text-indigo-200 hover:border-indigo-400 hover:shadow-[0_0_20px_rgba(99,102,241,0.2)]" 
+                  : "bg-gradient-to-r from-indigo-50 via-white to-blue-50 border-indigo-200 text-indigo-800 hover:border-indigo-300 hover:shadow-md"
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-indigo-500 animate-spin-slow group-hover:scale-110 transition-transform" />
+              <span>ورود فوری به محیط آزمایشی (دپوی کامل حسابرسی)</span>
+              <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
+                1-Click Demo
+              </span>
             </button>
           </div>
 
@@ -434,10 +465,29 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-5 p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs leading-relaxed text-right flex items-center gap-2"
+              className="mb-5 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs leading-relaxed text-right flex flex-col gap-3"
             >
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
-              <span>{errorMessage}</span>
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+                <span>{errorMessage}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-rose-500/15">
+                <button
+                  type="button"
+                  onClick={openInNewTab}
+                  className="px-3 py-1.5 bg-rose-500 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 hover:bg-rose-600 transition-colors shadow-sm cursor-pointer"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>باز کردن در تب جدید</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab("login"); setErrorMessage(null); }}
+                  className="px-3 py-1.5 bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 rounded-lg text-[10px] font-bold hover:opacity-90 transition-opacity cursor-pointer"
+                >
+                  <span>انتقال به ورود دستی</span>
+                </button>
+              </div>
             </motion.div>
           )}
 
@@ -478,6 +528,22 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                   </>
                 )}
               </motion.button>
+
+              <div className={`p-3.5 rounded-xl text-[10px] leading-relaxed flex items-center justify-between gap-2 border ${
+                isDarkMode 
+                  ? "bg-amber-500/10 border-amber-500/20 text-amber-300" 
+                  : "bg-amber-50 border-amber-200 text-amber-800"
+              }`}>
+                <span>💡 اگر با خطای شبکه (Network Error) در پیش‌نمایش مواجه شدید، دکمه زیر را بزنید:</span>
+                <button
+                  type="button"
+                  onClick={openInNewTab}
+                  className="shrink-0 px-2.5 py-1 bg-amber-500 text-slate-950 font-bold rounded-lg text-[9.5px] hover:bg-amber-400 transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>تب جدید</span>
+                </button>
+              </div>
             </div>
           )}
 
