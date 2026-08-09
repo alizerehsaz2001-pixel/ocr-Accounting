@@ -5,7 +5,7 @@ import {
   List, FileSpreadsheet, Database, Plus, FileText, Settings, KeyRound,
   Lock, Unlock, Eye, EyeOff, AlertCircle, Terminal, Coins, AlertTriangle, RefreshCw,
   Search, Filter, Check, Copy, Sparkles, ShieldAlert, Server,
-  ArrowUpRight, Zap, Mail, BarChart2, CheckCircle, Clock, Info
+  ArrowUpRight, Zap, Mail, BarChart2, CheckCircle, Clock, Info, CreditCard, XCircle
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -17,6 +17,8 @@ interface AdminPanelModalProps {
   setCurrentUser?: React.Dispatch<React.SetStateAction<any>>;
   users: any[];
   setUsers: React.Dispatch<React.SetStateAction<any[]>>;
+  storageRequests?: any[];
+  setStorageRequests?: React.Dispatch<React.SetStateAction<any[]>>;
   adminMasterPin: string;
   setAdminMasterPin: (pin: string) => void;
   transactions: any[];
@@ -42,6 +44,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   setCurrentUser,
   users,
   setUsers,
+  storageRequests = [],
+  setStorageRequests,
   adminMasterPin,
   setAdminMasterPin,
   transactions,
@@ -58,10 +62,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   setRawJsonText,
   setActiveFile
 }) => {
-  const [adminPanelTab, setAdminPanelTab] = useState<"users" | "security" | "system" | "data" | "danger">("users");
+  const [adminPanelTab, setAdminPanelTab] = useState<"users" | "storage" | "security" | "system" | "data" | "danger">("users");
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [userRoleFilter, setUserRoleFilter] = useState<string>("all");
   const [userStatusFilter, setUserStatusFilter] = useState<string>("all");
+
+  // Storage requests filter
+  const [storageFilterTab, setStorageFilterTab] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  const [storageSearchTerm, setStorageSearchTerm] = useState("");
+
 
   const updateUserInFirestore = async (userId: string, updates: any) => {
     // Local storage persistence or local state update handled directly
@@ -249,6 +258,31 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             </button>
 
             <button 
+              onClick={() => setAdminPanelTab("storage")}
+              className={`flex-1 md:flex-none flex items-center gap-3 px-3.5 py-3 rounded-2xl text-[12px] font-bold transition-all duration-200 group relative ${
+                adminPanelTab === "storage" 
+                  ? (isDarkMode ? "bg-sky-500/15 text-sky-300 border border-sky-500/30 shadow-sm" : "bg-sky-50 text-sky-900 border border-sky-200/80 shadow-sm") 
+                  : (isDarkMode ? "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900")
+              }`}
+            >
+              <div className={`p-1.5 rounded-xl transition-all ${
+                adminPanelTab === "storage" ? "bg-sky-500 text-white" : "bg-slate-500/10 opacity-70 group-hover:opacity-100"
+              }`}>
+                <HardDrive className="w-4 h-4" />
+              </div>
+              <span className="truncate">درخواست‌های فضای ابری</span>
+              {storageRequests.filter(r => r.status === "pending").length > 0 ? (
+                <span className="mr-auto px-2 py-0.5 rounded-lg text-[10px] font-mono font-black bg-amber-500 text-slate-950 animate-pulse shadow-sm">
+                  {storageRequests.filter(r => r.status === "pending").length} جدید
+                </span>
+              ) : (
+                <span className="mr-auto px-2 py-0.5 rounded-lg text-[10px] font-mono font-black bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                  {storageRequests.length}
+                </span>
+              )}
+            </button>
+
+            <button 
               onClick={() => setAdminPanelTab("security")}
               className={`flex-1 md:flex-none flex items-center gap-3 px-3.5 py-3 rounded-2xl text-[12px] font-bold transition-all duration-200 group relative ${
                 adminPanelTab === "security" 
@@ -336,6 +370,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-widest font-mono">
                 {adminPanelTab === "users" && "User & Access Management"}
+                {adminPanelTab === "storage" && "Cloud Storage Requests & Approvals"}
                 {adminPanelTab === "security" && "Security & Master PIN"}
                 {adminPanelTab === "system" && "Live Monitoring & Health"}
                 {adminPanelTab === "data" && "Data Management & Backup"}
@@ -1122,6 +1157,274 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     </div>
                   </div>
                 )}
+
+              </div>
+            )}
+
+            {/* CLOUD STORAGE REQUESTS TAB */}
+            {adminPanelTab === "storage" && (
+              <div className="space-y-6 animate-in fade-in duration-300 max-w-5xl mx-auto pb-8">
+                
+                {/* Header Banner */}
+                <div className={`p-6 rounded-3xl border relative overflow-hidden bg-gradient-to-r ${
+                  isDarkMode ? "from-sky-950/60 via-slate-900 to-indigo-950/60 border-sky-500/20" : "from-sky-50 via-white to-indigo-50 border-sky-200"
+                }`}>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3.5 rounded-2xl bg-sky-500 text-white shadow-lg shadow-sky-500/30">
+                        <HardDrive className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                          مدیریت درخواست‌های ارتقای فضای ابری
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-sky-500/10 text-sky-500 border border-sky-500/20">
+                            Cloud Storage Queue
+                          </span>
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          بررسی، تأیید فیش‌های واریزی و تخصیص مستقیم ظرفیت اختصاصی ابری برای کاربران
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className={`px-4 py-2 rounded-2xl border text-center ${
+                        isDarkMode ? "bg-slate-900/80 border-slate-800" : "bg-white border-slate-200"
+                      }`}>
+                        <span className="text-[10px] font-bold text-slate-400 block">در انتظار بررسی</span>
+                        <span className="text-base font-black font-mono text-amber-500">
+                          {storageRequests.filter(r => r.status === "pending").length} درخواست
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter and Search controls */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className={`flex p-1 rounded-2xl border ${isDarkMode ? "bg-slate-900/80 border-slate-800" : "bg-slate-100 border-slate-200"}`}>
+                    <button
+                      type="button"
+                      onClick={() => setStorageFilterTab("all")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        storageFilterTab === "all"
+                          ? (isDarkMode ? "bg-slate-800 text-white shadow-sm" : "bg-white text-slate-900 shadow-sm")
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      همه ({storageRequests.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStorageFilterTab("pending")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        storageFilterTab === "pending"
+                          ? (isDarkMode ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm" : "bg-amber-100 text-amber-800 shadow-sm")
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      <Clock className="w-3.5 h-3.5 text-amber-500" />
+                      در انتظار ({storageRequests.filter(r => r.status === "pending").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStorageFilterTab("approved")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        storageFilterTab === "approved"
+                          ? (isDarkMode ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm" : "bg-emerald-100 text-emerald-800 shadow-sm")
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      تأییدشده ({storageRequests.filter(r => r.status === "approved").length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStorageFilterTab("rejected")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        storageFilterTab === "rejected"
+                          ? (isDarkMode ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 shadow-sm" : "bg-rose-100 text-rose-800 shadow-sm")
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                      ردشده ({storageRequests.filter(r => r.status === "rejected").length})
+                    </button>
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative w-full sm:w-64">
+                    <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="جستجو نام، ایمیل، کد پیگیری..."
+                      value={storageSearchTerm}
+                      onChange={(e) => setStorageSearchTerm(e.target.value)}
+                      className={`w-full pr-9 pl-3 py-2 rounded-xl text-xs border outline-none ${
+                        isDarkMode ? "bg-slate-900 border-slate-800 text-white focus:border-sky-500" : "bg-white border-slate-200 text-slate-900 focus:border-sky-500"
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Storage Requests Table */}
+                <div className={`rounded-2xl border overflow-hidden ${isDarkMode ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200 shadow-sm"}`}>
+                  {storageRequests.filter(r => {
+                    const matchesTab = storageFilterTab === "all" || r.status === storageFilterTab;
+                    const matchesSearch = 
+                      r.userName?.toLowerCase().includes(storageSearchTerm.toLowerCase()) ||
+                      r.userEmail?.toLowerCase().includes(storageSearchTerm.toLowerCase()) ||
+                      r.trackingCode?.toLowerCase().includes(storageSearchTerm.toLowerCase());
+                    return matchesTab && matchesSearch;
+                  }).length === 0 ? (
+                    <div className="p-12 text-center text-slate-400">
+                      <HardDrive className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                      <p className="text-xs font-bold">هیچ درخواستی با این مشخصات یافت نشد.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-right text-xs">
+                        <thead>
+                          <tr className={`border-b font-black ${isDarkMode ? "bg-slate-950/50 border-slate-800 text-slate-400" : "bg-slate-50 border-slate-200 text-slate-600"}`}>
+                            <th className="p-3.5">شناسنامه کاربر</th>
+                            <th className="p-3.5">حجم درخواستی</th>
+                            <th className="p-3.5">اطلاعات واریز / کد پیگیری</th>
+                            <th className="p-3.5">تاریخ ثبت</th>
+                            <th className="p-3.5">وضعیت</th>
+                            <th className="p-3.5 text-center">عملیات مدیریت</th>
+                          </tr>
+                        </thead>
+                        <tbody className={`divide-y ${isDarkMode ? "divide-slate-800/80 text-slate-200" : "divide-slate-100 text-slate-700"}`}>
+                          {storageRequests.filter(r => {
+                            const matchesTab = storageFilterTab === "all" || r.status === storageFilterTab;
+                            const matchesSearch = 
+                              r.userName?.toLowerCase().includes(storageSearchTerm.toLowerCase()) ||
+                              r.userEmail?.toLowerCase().includes(storageSearchTerm.toLowerCase()) ||
+                              r.trackingCode?.toLowerCase().includes(storageSearchTerm.toLowerCase());
+                            return matchesTab && matchesSearch;
+                          }).map((req) => (
+                            <tr key={req.id} className={`hover:bg-sky-500/5 transition-colors ${req.status === "pending" ? (isDarkMode ? "bg-amber-500/5" : "bg-amber-50/50") : ""}`}>
+                              <td className="p-3.5">
+                                <div className="font-bold text-slate-900 dark:text-white">{req.userName}</div>
+                                <div className="text-[10px] text-slate-400 dir-ltr text-right">{req.userEmail}</div>
+                                {req.userCompany && (
+                                  <span className="inline-block mt-0.5 text-[9px] px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-400 font-bold">
+                                    {req.userCompany}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3.5">
+                                <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300 font-extrabold border border-sky-500/20">
+                                  <HardDrive className="w-3.5 h-3.5" />
+                                  <span>+{req.requestedGB} GB</span>
+                                </div>
+                              </td>
+                              <td className="p-3.5">
+                                <div className="font-mono font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                  <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
+                                  <span>کد: {req.trackingCode}</span>
+                                </div>
+                                <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                  {(req.planPriceToman || 0).toLocaleString("fa-IR")} تومان
+                                </div>
+                                {req.receiptNote && (
+                                  <div className="text-[10px] text-slate-400 mt-1 max-w-xs truncate" title={req.receiptNote}>
+                                    📝 {req.receiptNote}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3.5 dir-ltr text-right text-[10px] font-mono opacity-80">
+                                {new Date(req.createdAt).toLocaleDateString("fa-IR")} {new Date(req.createdAt).toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td className="p-3.5">
+                                {req.status === "pending" && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-black bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                    <Clock className="w-3 h-3 animate-spin-slow" />
+                                    در انتظار بررسی و پرداخت
+                                  </span>
+                                )}
+                                {req.status === "approved" && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    تأیید و فعال‌شده
+                                  </span>
+                                )}
+                                {req.status === "rejected" && (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-black bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                                    <XCircle className="w-3 h-3" />
+                                    رد شده
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3.5 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  {req.status === "pending" && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (setStorageRequests) {
+                                            setStorageRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: "approved", updatedAt: new Date().toISOString() } : r));
+                                          }
+                                          setUsers(prev => prev.map(u => {
+                                            if (String(u.id) === String(req.userId) || u.email === req.userEmail) {
+                                              return { ...u, extraStorage: (u.extraStorage || 0) + req.requestedGB };
+                                            }
+                                            return u;
+                                          }));
+                                          if (currentUser && (String(currentUser.id) === String(req.userId) || currentUser.email === req.userEmail)) {
+                                            if (setCurrentUser) {
+                                              setCurrentUser(prev => prev ? { ...prev, extraStorage: (prev.extraStorage || 0) + req.requestedGB } : prev);
+                                            }
+                                          }
+                                          showNotification(`درخواست ${req.requestedGB}GB برای کاربر «${req.userName}» با موفقیت تأیید و ظرفیت افزوده شد.`, "success");
+                                          logEvent("تأیید ارتقای فضای ابری", `ادمین فیش واریزی کد ${req.trackingCode} کاربر ${req.userName} را تأیید کرد و ${req.requestedGB}GB تخصیص داد.`);
+                                        }}
+                                        className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                        تأیید و تخصیص فضا
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (setStorageRequests) {
+                                            setStorageRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: "rejected", updatedAt: new Date().toISOString() } : r));
+                                          }
+                                          showNotification(`درخواست فضای ابری کاربر «${req.userName}» رد شد.`, "warning");
+                                          logEvent("رد درخواست فضای ابری", `درخواست ${req.requestedGB}GB کاربر ${req.userName} رد شد.`);
+                                        }}
+                                        className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[11px] font-black transition-all border border-rose-500/20 flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <XCircle className="w-3.5 h-3.5" />
+                                        رد درخواست
+                                      </button>
+                                    </>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (setStorageRequests) {
+                                        setStorageRequests(prev => prev.filter(r => r.id !== req.id));
+                                      }
+                                      showNotification("درخواست از لیست حذف شد.", "info");
+                                    }}
+                                    className="p-1.5 rounded-lg hover:bg-slate-500/10 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                                    title="حذف از رکوردها"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
 
               </div>
             )}

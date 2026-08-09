@@ -91,3 +91,20 @@ export interface PreviousScan {
   tags?: string[];
   extractionSettings?: DocumentExtractionSettings;
 }
+
+export interface StorageRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userCompany?: string;
+  requestedGB: number;
+  planPriceToman: number;
+  trackingCode: string;
+  receiptNote?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  updatedAt?: string;
+  adminNote?: string;
+}
+

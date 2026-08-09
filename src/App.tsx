@@ -445,6 +445,45 @@ export default function App() {
   });
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
+  // Cloud Storage Requests state
+  const [storageRequests, setStorageRequests] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem("zerehscan_storage_requests");
+      if (stored) return JSON.parse(stored);
+      return [
+        {
+          id: "SR-849102",
+          userId: "2",
+          userName: "محمد کریمی",
+          userEmail: "m.karimi@example.com",
+          userCompany: "پارس الوان",
+          requestedGB: 10,
+          planPriceToman: 450000,
+          trackingCode: "TRK-9842105",
+          receiptNote: "پرداخت آنلاین شماره مرجع کارت به کارت 841209",
+          status: "pending",
+          createdAt: new Date(Date.now() - 3600000 * 5).toISOString()
+        }
+      ];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("zerehscan_storage_requests", JSON.stringify(storageRequests));
+    } catch (e) {
+      console.error("Error saving storage requests to localStorage", e);
+    }
+  }, [storageRequests]);
+
+  // Storage Upgrade Request Modal state
+  const [isStorageUpgradeModalOpen, setIsStorageUpgradeModalOpen] = useState(false);
+  const [selectedStorageGb, setSelectedStorageGb] = useState<number>(5);
+  const [storageTrackingCode, setStorageTrackingCode] = useState("");
+  const [storageReceiptNote, setStorageReceiptNote] = useState("");
+
   // Main data states
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const savedTheme = localStorage.getItem("theme");
@@ -7157,27 +7196,54 @@ export default function App() {
                               <div>
                                 <span className="text-xs font-black block">ظرفیت اختصاصی فضای ابری</span>
                                 <span className="text-[11px] opacity-75">
-                                  {5 + (currentUser?.extraStorage || 0)} گیگابایت (۵GB اصلی + {currentUser?.extraStorage || 0}GB اختصاصی هدیه)
+                                  {5 + (currentUser?.extraStorage || 0)} گیگابایت (۵GB اصلی + {currentUser?.extraStorage || 0}GB اختصاصی فعال)
                                 </span>
                               </div>
                             </div>
 
                             <button
-                              onClick={() => {
-                                if (currentUser) {
-                                  const updatedExtra = (currentUser.extraStorage || 0) + 5;
-                                  setCurrentUser({ ...currentUser, extraStorage: updatedExtra });
-                                  setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, extraStorage: updatedExtra } : u));
-                                  showNotification("۵ گیگابایت فضای ابری هدیه به حساب شما افزوده شد ☁️", "success");
-                                  logEvent("ارتقای فضای ابری", "کاربر ۵ گیگابایت فضای ابری هدیه دریافت کرد.");
-                                }
-                              }}
-                              className="px-4 py-2.5 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                              type="button"
+                              onClick={() => setIsStorageUpgradeModalOpen(true)}
+                              className="px-4 py-2.5 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-md flex items-center gap-2 cursor-pointer active:scale-95"
                             >
                               <Plus className="w-4 h-4" />
-                              درخواست ۵GB فضای ابری هدیه
+                              ثبت درخواست واریزی ارتقای ابری
                             </button>
                           </div>
+
+                          {/* Show User's Pending or Recent Storage Requests */}
+                          {storageRequests.filter(r => String(r.userId) === String(currentUser?.id) || r.userEmail === currentUser?.email).length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-indigo-500/20 space-y-2">
+                              <span className="text-[10px] font-black uppercase text-slate-400 block">آخرین درخواست‌های ارتقای ثبت‌شده شما:</span>
+                              <div className="space-y-1.5">
+                                {storageRequests.filter(r => String(r.userId) === String(currentUser?.id) || r.userEmail === currentUser?.email).map(req => (
+                                  <div key={req.id} className="flex items-center justify-between text-xs p-2 rounded-xl bg-slate-900/40 border border-slate-800">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-extrabold text-indigo-400">+{req.requestedGB}GB</span>
+                                      <span className="text-[10px] opacity-70 font-mono">کد: {req.trackingCode}</span>
+                                    </div>
+                                    <div>
+                                      {req.status === "pending" && (
+                                        <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                          ⏳ در انتظار بررسی و واریز ادمین
+                                        </span>
+                                      )}
+                                      {req.status === "approved" && (
+                                        <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                          ✅ تأیید و به حجم شما اضافه شد
+                                        </span>
+                                      )}
+                                      {req.status === "rejected" && (
+                                        <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                          ❌ رد شده
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         <div className={`grid grid-cols-2 gap-4 p-5 rounded-2xl mt-6 ${isDarkMode ? "bg-slate-900/50" : "bg-slate-50"}`}>
@@ -7513,6 +7579,8 @@ export default function App() {
         setCurrentUser={setCurrentUser}
         users={users}
         setUsers={setUsers}
+        storageRequests={storageRequests}
+        setStorageRequests={setStorageRequests}
         adminMasterPin={adminMasterPin}
         setAdminMasterPin={setAdminMasterPin}
         transactions={transactions}
@@ -8651,17 +8719,10 @@ export default function App() {
                           <div className="w-full flex items-center justify-between mt-1">
                             <span className="text-[8px] opacity-60 font-mono">{percentUsed.toFixed(1)}% از {(5 + (currentUser?.extraStorage || 0))}GB</span>
                             <button
-                              onClick={() => {
-                                if (currentUser) {
-                                  const updatedExtra = (currentUser.extraStorage || 0) + 5;
-                                  setCurrentUser({ ...currentUser, extraStorage: updatedExtra });
-                                  setUsers(prev => prev.map(u => u.id === currentUser.id ? { ...u, extraStorage: updatedExtra } : u));
-                                  showNotification("۵ گیگابایت فضای ابری اضافی دریافت شد ☁️", "success");
-                                  logEvent("ارتقای فضای ابری", "۵ گیگابایت به فضای ابری اضافه شد.");
-                                }
-                              }}
+                              type="button"
+                              onClick={() => setIsStorageUpgradeModalOpen(true)}
                               className="text-[9px] font-black text-indigo-500 hover:underline flex items-center gap-0.5 cursor-pointer"
-                              title="افزایش ۵ گیگابایت فضای ابری هدیه"
+                              title="ثبت درخواست واریز و ارتقای فضای ابری"
                             >
                               <Plus className="w-2.5 h-2.5" />
                               ارتقای ابر
@@ -10369,6 +10430,194 @@ export default function App() {
             </>
           )}
         </motion.button>
+        {/* Storage Upgrade Request Modal */}
+        {isStorageUpgradeModalOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+            <div 
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity"
+              onClick={() => setIsStorageUpgradeModalOpen(false)}
+            />
+            <div className={`relative w-full max-w-xl rounded-3xl p-6 sm:p-8 shadow-2xl border transition-all animate-in fade-in zoom-in-95 duration-200 z-10 ${
+              isDarkMode ? "bg-[#0b1120] border-slate-800 text-white" : "bg-white border-slate-200 text-slate-900"
+            }`} dir="rtl">
+              
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-4 mb-3 border-b dark:border-slate-800 border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-2xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                    <HardDrive className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base flex items-center gap-2">
+                      درخواست ارتقای فضای ابری اختصاصی
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      ارسال فیش واریز و ثبت درخواست به پنل ارشد مدیریت برای فعال‌سازی
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsStorageUpgradeModalOpen(false)}
+                  className="p-2 rounded-full hover:bg-slate-800/20 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Free 5GB Notice */}
+              <div className={`p-3.5 rounded-2xl mb-4 border text-xs flex items-center gap-2.5 ${
+                isDarkMode ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" : "bg-emerald-50 border-emerald-200 text-emerald-900"
+              }`}>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span><strong>۵ گیگابایت فضای ابری پایه</strong> برای تمامی کاربران کاملاً <strong>رایگان</strong> است. بسته‌های زیر جهت افزودن ظرفیت اضافی مازاد بر ۵ گیگابایت اصلی می‌باشند.</span>
+              </div>
+
+              {/* Select Storage Plan */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-extrabold mb-2 text-slate-300">
+                    ۱. انتخاب بسته ظرفیت درخواستی:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {[
+                      { gb: 5, price: 250000, label: "بسته اقتصادی ۵GB" },
+                      { gb: 10, price: 450000, label: "بسته استاندارد ۱۰GB", badge: "محبوب‌ترین" },
+                      { gb: 25, price: 950000, label: "بسته حرفه‌ای ۲۵GB" },
+                      { gb: 50, price: 1750000, label: "بسته سازمانی ۵۰GB" },
+                    ].map((plan) => (
+                      <button
+                        key={plan.gb}
+                        type="button"
+                        onClick={() => setSelectedStorageGb(plan.gb)}
+                        className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer relative ${
+                          selectedStorageGb === plan.gb
+                            ? (isDarkMode ? "bg-indigo-600/20 border-indigo-500 ring-2 ring-indigo-500/30 text-white" : "bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-900")
+                            : (isDarkMode ? "bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-300" : "bg-slate-50 border-slate-200 hover:border-slate-300 text-slate-800")
+                        }`}
+                      >
+                        {plan.badge && (
+                          <span className="absolute left-2 top-2 px-1.5 py-0.5 rounded text-[8px] font-black bg-amber-500 text-slate-950">
+                            {plan.badge}
+                          </span>
+                        )}
+                        <div className="font-extrabold text-xs">{plan.label}</div>
+                        <div className="text-[11px] font-mono font-bold text-indigo-400 mt-1">
+                          {plan.price.toLocaleString("fa-IR")} تومان / ماهانه
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Payment Account Details Box */}
+                <div className={`p-4 rounded-2xl border text-xs space-y-2 ${
+                  isDarkMode ? "bg-slate-950/60 border-indigo-500/20 text-slate-300" : "bg-indigo-50/60 border-indigo-100 text-slate-800"
+                }`}>
+                  <div className="font-bold text-indigo-400 flex items-center gap-1.5">
+                    <CreditCard className="w-4 h-4" />
+                    <span>اطلاعات کارت جهت واریز وجه:</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono dir-ltr text-right">
+                    <div className="p-2 rounded-xl bg-slate-900/40 border border-slate-800">
+                      <span className="text-slate-400 block text-[9px] font-sans">شماره کارت بانک ملی:</span>
+                      <span className="font-bold text-amber-300">6037-9918-8420-1102</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-slate-900/40 border border-slate-800">
+                      <span className="text-slate-400 block text-[9px] font-sans">به نام:</span>
+                      <span className="font-bold text-slate-200 font-sans">شرکت حسابلند / مدیریت سیستم</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form Input: Tracking code and receipt note */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold mb-1 text-slate-300">
+                      ۲. کد پیگیری / شماره فیش واریزی <span className="text-rose-400">*</span>:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="مثال: 84920104 یا شماره ارجاع واریز..."
+                      value={storageTrackingCode}
+                      onChange={(e) => setStorageTrackingCode(e.target.value)}
+                      className={`w-full p-3 rounded-xl border outline-none font-mono text-xs ${
+                        isDarkMode ? "bg-slate-900 border-slate-800 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-500"
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold mb-1 text-slate-300">
+                      توضیحات تکمیلی (اختیاری):
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="نام واریزکننده، شماره کارت مبدا یا نکته خاص..."
+                      value={storageReceiptNote}
+                      onChange={(e) => setStorageReceiptNote(e.target.value)}
+                      className={`w-full p-2.5 rounded-xl border outline-none text-xs ${
+                        isDarkMode ? "bg-slate-900 border-slate-800 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-500"
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-3 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!storageTrackingCode.trim()) {
+                        showNotification("لطفاً شماره پیگیری یا شماره فیش واریز را وارد نمایید.", "error");
+                        return;
+                      }
+                      const prices: Record<number, number> = { 5: 250000, 10: 450000, 25: 950000, 50: 1750000 };
+                      const newReq = {
+                        id: "SR-" + Math.floor(100000 + Math.random() * 900000),
+                        userId: String(currentUser?.id || "user"),
+                        userName: currentUser?.name || "کاربر ناشناس",
+                        userEmail: currentUser?.email || "user@example.com",
+                        userCompany: currentUser?.companyName || "موسسه مالی",
+                        requestedGB: selectedStorageGb,
+                        planPriceToman: prices[selectedStorageGb] || 250000,
+                        trackingCode: storageTrackingCode.trim(),
+                        receiptNote: storageReceiptNote.trim(),
+                        status: "pending" as const,
+                        createdAt: new Date().toISOString()
+                      };
+
+                      setStorageRequests(prev => [newReq, ...prev]);
+                      setIsStorageUpgradeModalOpen(false);
+                      setStorageTrackingCode("");
+                      setStorageReceiptNote("");
+
+                      showNotification(`درخواست ارتقای ${selectedStorageGb} گیگابایت فضای ابری با کد پیگیری ${newReq.trackingCode} با موفقیت ثبت شد و برای تأیید ادمین ارسال گردید. ⏳`, "success");
+                      logEvent("ثبت درخواست فضای ابری", `کاربر ${newReq.userName} درخواست ${selectedStorageGb}GB فضای ابری با کد پیگیری ${newReq.trackingCode} ثبت کرد.`);
+                    }}
+                    className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    ثبت درخواست و ارسال به مدیریت
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsStorageUpgradeModalOpen(false)}
+                    className={`px-4 py-3 rounded-xl font-bold text-xs border ${
+                      isDarkMode ? "border-slate-800 text-slate-400 hover:text-white" : "border-slate-200 text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    انصراف
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
