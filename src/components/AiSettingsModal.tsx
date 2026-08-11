@@ -12,7 +12,10 @@ import {
   FileText, 
   CheckCircle,
   AlertCircle,
-  Code
+  Code,
+  Send,
+  Mail,
+  Headphones
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -450,6 +453,40 @@ export default function AiSettingsModal({
                       + {preset.label}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Direct Support & API / Storage Purchase Contact */}
+              <div className={`mt-5 p-4 rounded-2xl border text-xs space-y-2 ${
+                isDarkMode ? "bg-sky-950/40 border-sky-500/30 text-slate-200" : "bg-sky-50/80 border-sky-200 text-slate-800"
+              }`}>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 font-black text-[11.5px] text-sky-400">
+                    <Headphones className="w-4 h-4 text-sky-400 shrink-0" />
+                    <span>خرید مستقیم کلید API، ارتقای فضای ابری و پلن‌های اختصاصی:</span>
+                  </div>
+                  <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-bold">بدون نیاز به ثبت فرم</span>
+                </div>
+                <p className="text-[10.5px] leading-relaxed text-slate-300 opacity-90">
+                  نیازی به طی کردن مراحل خرید از طریق برنامه نیست؛ برای دریافت توکن و کلید API اختصاصی، افزایش سقف پردازش سند، یا ارتقای فوری فضای ابری می‌توانید مستقیماً در تلگرام یا ایمیل پیام دهید:
+                </p>
+                <div className="flex flex-wrap items-center gap-2.5 pt-1 text-[11px] font-mono dir-ltr font-bold">
+                  <a
+                    href="https://t.me/Alizhz"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>تلگرام: @Alizhz</span>
+                  </a>
+                  <a
+                    href="mailto:alizerehsaz2001@gmail.com"
+                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    <span>ایمیل: alizerehsaz2001@gmail.com</span>
+                  </a>
                 </div>
               </div>
 

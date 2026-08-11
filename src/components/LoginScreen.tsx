@@ -17,7 +17,8 @@ import {
   ExternalLink,
   KeyRound,
   Eye,
-  EyeOff
+  EyeOff,
+  Send
 } from "lucide-react";
 import { 
   auth, 
@@ -907,13 +908,38 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
             </motion.div>
           )}
 
-          {/* Footer Info */}
-          <div className={`mt-6 pt-5 border-t flex flex-col gap-2.5 text-center ${isDarkMode ? "border-slate-800/80" : "border-slate-100"}`}>
+          {/* Footer Info & Support Channels */}
+          <div className={`mt-6 pt-5 border-t flex flex-col gap-3 text-center ${isDarkMode ? "border-slate-800/80" : "border-slate-100"}`}>
             <div className="flex items-center gap-1.5 justify-center">
               <Lock className="w-3.5 h-3.5 text-emerald-500" />
               <span className={`text-[9.5px] font-bold ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
                 اتصال دارای استاندارد پیشرفته محافظت از داده و رمزنگاری هوشمند SSL می‌باشد.
               </span>
+            </div>
+
+            <div className={`p-3 rounded-2xl border text-xs flex flex-wrap items-center justify-between gap-2 ${
+              isDarkMode ? "bg-slate-900/60 border-slate-800/80 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-700"
+            }`}>
+              <span className="text-[10px] font-extrabold text-slate-400">ارتباط و پشتیبانی خرید:</span>
+              <div className="flex items-center gap-3 text-[11px] font-mono dir-ltr">
+                <a 
+                  href="https://t.me/Alizhz" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 transition-colors"
+                >
+                  <Send className="w-3 h-3" />
+                  <span>@Alizhz</span>
+                </a>
+                <span className="opacity-30">|</span>
+                <a 
+                  href="mailto:alizerehsaz2001@gmail.com" 
+                  className="text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 transition-colors"
+                >
+                  <Mail className="w-3 h-3" />
+                  <span>alizerehsaz2001@gmail.com</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>

@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from "react";
+const fs = require('fs');
+
+const code = `import React, { useState, useMemo } from "react";
 import { 
   Activity, X, Search, Trash2, Download, Filter, Calendar, Info, 
   CheckCircle, AlertTriangle, XCircle, Shield, User, Table, 
@@ -136,19 +138,19 @@ export default function AuditLogsModal({
       log.id,
       new Date(log.timestamp).toLocaleString("fa-IR"),
       log.type || "info",
-      `"${log.action.replace(/"/g, '""')}"`,
-      `"${(log.user?.name || "سیستم").replace(/"/g, '""')}"`,
-      `"${(log.user?.role || "system").replace(/"/g, '""')}"`,
-      `"${log.details.replace(/"/g, '""')}"`,
-      `"${log.metadata ? JSON.stringify(log.metadata).replace(/"/g, '""') : ""}"`
+      \`"\${log.action.replace(/"/g, '""')}"\`,
+      \`"\${(log.user?.name || "سیستم").replace(/"/g, '""')}"\`,
+      \`"\${(log.user?.role || "system").replace(/"/g, '""')}"\`,
+      \`"\${log.details.replace(/"/g, '""')}"\`,
+      \`"\${log.metadata ? JSON.stringify(log.metadata).replace(/"/g, '""') : ""}"\`
     ]);
     
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const csvContent = "\\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `audit_logs_${new Date().toLocaleDateString("fa-IR")}.csv`);
+    link.setAttribute("download", \`audit_logs_\${new Date().toLocaleDateString("fa-IR")}.csv\`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -161,7 +163,7 @@ export default function AuditLogsModal({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `audit_logs_${new Date().toLocaleDateString("fa-IR")}.json`);
+    link.setAttribute("download", \`audit_logs_\${new Date().toLocaleDateString("fa-IR")}.json\`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -234,31 +236,31 @@ export default function AuditLogsModal({
         initial={{ opacity: 0, y: 20, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
-        className={`relative w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden ${
+        className={\`relative w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden \${
           isDarkMode ? "bg-slate-900 border border-slate-800 text-slate-200" : "bg-white border border-slate-200 text-slate-800"
-        }`} 
+        }\`} 
         dir="rtl"
       >
         {/* Header & Tabs */}
-        <div className={`shrink-0 ${isDarkMode ? "bg-slate-800/80 border-slate-700" : "bg-slate-50/80 border-slate-200"} border-b`}>
+        <div className={\`shrink-0 \${isDarkMode ? "bg-slate-800/80 border-slate-700" : "bg-slate-50/80 border-slate-200"} border-b\`}>
           <div className="p-5 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl ${isDarkMode ? "bg-indigo-900/50 text-indigo-400" : "bg-indigo-100 text-indigo-600"}`}>
+                <div className={\`p-2.5 rounded-xl \${isDarkMode ? "bg-indigo-900/50 text-indigo-400" : "bg-indigo-100 text-indigo-600"}\`}>
                   <Activity className="h-5 w-5" />
                 </div>
                 <div>
                   <h3 className="font-bold text-base">سیاهه رویدادها (Audit Logs)</h3>
-                  <p className={`text-xs mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>گزارش جامع، جستجو، فیلتر و تحلیل اقدامات سامانه</p>
+                  <p className={\`text-xs mt-0.5 \${isDarkMode ? "text-slate-400" : "text-slate-500"}\`}>گزارش جامع، جستجو، فیلتر و تحلیل اقدامات سامانه</p>
                 </div>
               </div>
               
               <div className="flex items-center gap-2">
                 <div className="flex gap-1 border p-1 rounded-lg dark:border-slate-700 border-slate-200">
-                  <button onClick={handleExportCSV} title="دانلود CSV" disabled={filteredLogs.length === 0} className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1.5 ${isDarkMode ? "hover:bg-slate-800 text-slate-300 disabled:opacity-50" : "hover:bg-slate-100 text-slate-600 disabled:opacity-50"}`}>
+                  <button onClick={handleExportCSV} title="دانلود CSV" disabled={filteredLogs.length === 0} className={\`px-3 py-1.5 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1.5 \${isDarkMode ? "hover:bg-slate-800 text-slate-300 disabled:opacity-50" : "hover:bg-slate-100 text-slate-600 disabled:opacity-50"}\`}>
                     <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">CSV</span>
                   </button>
-                  <button onClick={handleExportJSON} title="دانلود JSON" disabled={filteredLogs.length === 0} className={`px-3 py-1.5 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1.5 ${isDarkMode ? "hover:bg-slate-800 text-slate-300 disabled:opacity-50" : "hover:bg-slate-100 text-slate-600 disabled:opacity-50"}`}>
+                  <button onClick={handleExportJSON} title="دانلود JSON" disabled={filteredLogs.length === 0} className={\`px-3 py-1.5 rounded-md text-[10px] font-bold transition-colors flex items-center gap-1.5 \${isDarkMode ? "hover:bg-slate-800 text-slate-300 disabled:opacity-50" : "hover:bg-slate-100 text-slate-600 disabled:opacity-50"}\`}>
                     <FileJson className="h-3.5 w-3.5" /> <span className="hidden sm:inline">JSON</span>
                   </button>
                 </div>
@@ -267,13 +269,13 @@ export default function AuditLogsModal({
                   <button 
                     onClick={() => window.confirm("آیا از پاک کردن تمامی تاریخچه اطمینان دارید؟") && onClearLogs()}
                     title="پاکسازی تاریخچه" disabled={auditLogs.length === 0}
-                    className={`p-2 rounded-lg transition-colors border ${isDarkMode ? "border-slate-700 hover:bg-red-900/30 hover:text-red-400 hover:border-red-900/50 text-slate-400 disabled:opacity-50" : "border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-500 disabled:opacity-50"}`}
+                    className={\`p-2 rounded-lg transition-colors border \${isDarkMode ? "border-slate-700 hover:bg-red-900/30 hover:text-red-400 hover:border-red-900/50 text-slate-400 disabled:opacity-50" : "border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-500 disabled:opacity-50"}\`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 )}
-                <div className={`w-px h-6 mx-1 ${isDarkMode ? "bg-slate-700" : "bg-slate-300"}`} />
-                <button onClick={onClose} className={`p-2 rounded-lg transition-colors ${isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-200 text-slate-500 hover:text-slate-900"}`}>
+                <div className={\`w-px h-6 mx-1 \${isDarkMode ? "bg-slate-700" : "bg-slate-300"}\`} />
+                <button onClick={onClose} className={\`p-2 rounded-lg transition-colors \${isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-200 text-slate-500 hover:text-slate-900"}\`}>
                   <X className="h-5 w-5" />
                 </button>
               </div>
@@ -283,18 +285,18 @@ export default function AuditLogsModal({
             <div className="flex flex-col xl:flex-row gap-3">
               <div className="flex flex-1 flex-col sm:flex-row gap-3">
                 <div className="relative flex-1">
-                  <Search className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
+                  <Search className={\`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 \${isDarkMode ? "text-slate-500" : "text-slate-400"}\`} />
                   <input type="text" placeholder="جستجو در متن، عملیات، کاربر..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                    className={`w-full text-xs py-2 pr-9 pl-4 rounded-lg border outline-none transition-all ${isDarkMode ? "bg-slate-900 border-slate-700 focus:border-indigo-500" : "bg-white border-slate-300 focus:border-indigo-500"}`}
+                    className={\`w-full text-xs py-2 pr-9 pl-4 rounded-lg border outline-none transition-all \${isDarkMode ? "bg-slate-900 border-slate-700 focus:border-indigo-500" : "bg-white border-slate-300 focus:border-indigo-500"}\`}
                   />
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                   <input type="date" value={dateRange.start} onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                    className={`text-xs py-2 px-3 rounded-lg border outline-none transition-all w-1/2 sm:w-36 ${isDarkMode ? "bg-slate-900 border-slate-700 focus:border-indigo-500 [color-scheme:dark]" : "bg-white border-slate-300 focus:border-indigo-500"}`}
+                    className={\`text-xs py-2 px-3 rounded-lg border outline-none transition-all w-1/2 sm:w-36 \${isDarkMode ? "bg-slate-900 border-slate-700 focus:border-indigo-500 [color-scheme:dark]" : "bg-white border-slate-300 focus:border-indigo-500"}\`}
                     title="از تاریخ"
                   />
                   <input type="date" value={dateRange.end} onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                    className={`text-xs py-2 px-3 rounded-lg border outline-none transition-all w-1/2 sm:w-36 ${isDarkMode ? "bg-slate-900 border-slate-700 focus:border-indigo-500 [color-scheme:dark]" : "bg-white border-slate-300 focus:border-indigo-500"}`}
+                    className={\`text-xs py-2 px-3 rounded-lg border outline-none transition-all w-1/2 sm:w-36 \${isDarkMode ? "bg-slate-900 border-slate-700 focus:border-indigo-500 [color-scheme:dark]" : "bg-white border-slate-300 focus:border-indigo-500"}\`}
                     title="تا تاریخ"
                   />
                 </div>
@@ -303,7 +305,7 @@ export default function AuditLogsModal({
               <div className="flex gap-3 flex-wrap xl:flex-nowrap">
                 <div className="relative flex-1 xl:w-40 min-w-[120px]">
                   <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
-                    className={`w-full text-xs py-2 px-3 rounded-lg border outline-none appearance-none transition-all ${isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-300"}`}
+                    className={\`w-full text-xs py-2 px-3 rounded-lg border outline-none appearance-none transition-all \${isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-300"}\`}
                   >
                     <option value="all">همه انواع</option>
                     <option value="info">اطلاعات</option>
@@ -315,14 +317,14 @@ export default function AuditLogsModal({
                 </div>
                 <div className="relative flex-1 xl:w-48 min-w-[140px]">
                   <select value={filterAction} onChange={(e) => setFilterAction(e.target.value)}
-                    className={`w-full text-xs py-2 px-3 rounded-lg border outline-none appearance-none transition-all ${isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-300"}`}
+                    className={\`w-full text-xs py-2 px-3 rounded-lg border outline-none appearance-none transition-all \${isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-300"}\`}
                   >
                     <option value="all">همه عملیات‌ها</option>
                     {uniqueActions.map(action => <option key={action} value={action}>{action}</option>)}
                   </select>
                 </div>
                 <button onClick={() => setSortOrder(prev => prev === "desc" ? "asc" : "desc")}
-                  className={`px-3 py-2 rounded-lg border flex items-center justify-center gap-1.5 text-xs font-bold transition-colors w-full sm:w-auto ${isDarkMode ? "bg-slate-900 border-slate-700 hover:bg-slate-800" : "bg-white border-slate-300 hover:bg-slate-100"}`}
+                  className={\`px-3 py-2 rounded-lg border flex items-center justify-center gap-1.5 text-xs font-bold transition-colors w-full sm:w-auto \${isDarkMode ? "bg-slate-900 border-slate-700 hover:bg-slate-800" : "bg-white border-slate-300 hover:bg-slate-100"}\`}
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   <span>{sortOrder === "desc" ? "جدیدترین‌ها" : "قدیمی‌ترین‌ها"}</span>
@@ -333,20 +335,20 @@ export default function AuditLogsModal({
           
           {/* Tab Navigation */}
           <div className="px-5 flex gap-1">
-            <button onClick={() => setActiveTab("timeline")} className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 ${activeTab === "timeline" ? (isDarkMode ? "bg-slate-900/50 text-indigo-400 border-indigo-500" : "bg-white text-indigo-600 border-indigo-600") : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"}`}>
+            <button onClick={() => setActiveTab("timeline")} className={\`px-4 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 \${activeTab === "timeline" ? (isDarkMode ? "bg-slate-900/50 text-indigo-400 border-indigo-500" : "bg-white text-indigo-600 border-indigo-600") : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"}\`}>
               <Clock className="w-4 h-4" /> خط زمانی
             </button>
-            <button onClick={() => setActiveTab("table")} className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 ${activeTab === "table" ? (isDarkMode ? "bg-slate-900/50 text-indigo-400 border-indigo-500" : "bg-white text-indigo-600 border-indigo-600") : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"}`}>
+            <button onClick={() => setActiveTab("table")} className={\`px-4 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 \${activeTab === "table" ? (isDarkMode ? "bg-slate-900/50 text-indigo-400 border-indigo-500" : "bg-white text-indigo-600 border-indigo-600") : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"}\`}>
               <Table className="w-4 h-4" /> نمای جدول
             </button>
-            <button onClick={() => setActiveTab("analytics")} className={`px-4 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 ${activeTab === "analytics" ? (isDarkMode ? "bg-slate-900/50 text-indigo-400 border-indigo-500" : "bg-white text-indigo-600 border-indigo-600") : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"}`}>
+            <button onClick={() => setActiveTab("analytics")} className={\`px-4 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-2 border-b-2 \${activeTab === "analytics" ? (isDarkMode ? "bg-slate-900/50 text-indigo-400 border-indigo-500" : "bg-white text-indigo-600 border-indigo-600") : "border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"}\`}>
               <BarChart3 className="w-4 h-4" /> تحلیل و آمار
             </button>
           </div>
         </div>
 
         {/* Content Area */}
-        <div className={`flex-1 overflow-y-auto ${isDarkMode ? "bg-slate-900" : "bg-slate-50"}`}>
+        <div className={\`flex-1 overflow-y-auto \${isDarkMode ? "bg-slate-900" : "bg-slate-50"}\`}>
           {auditLogs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full opacity-50 py-20">
               <Activity className="h-12 w-12 mb-4" />
@@ -378,38 +380,38 @@ export default function AuditLogsModal({
                           exit={{ opacity: 0, scale: 0.95 }}
                           className="relative flex flex-col md:flex-row items-start md:items-center justify-start md:justify-center group w-full"
                         >
-                          <div className={`hidden md:block w-[calc(50%-2rem)] md:group-odd:pr-8 md:group-even:pl-8 md:group-odd:text-right md:group-even:text-left`}>
+                          <div className={\`hidden md:block w-[calc(50%-2rem)] \${md:group-odd:pr-8 md:group-even:pl-8} \${md:group-odd:text-right md:group-even:text-left}\`}>
                             {/* Empty space on opposite side for desktop layout */}
                           </div>
 
-                          <div className={`flex items-center justify-center w-8 h-8 rounded-full border-4 shrink-0 shadow-sm z-10 mx-4 ${isDarkMode ? styles.dark : styles.light} absolute left-1 md:left-auto md:relative top-2 md:top-auto`}>
+                          <div className={\`flex items-center justify-center w-8 h-8 rounded-full border-4 shrink-0 shadow-sm z-10 mx-4 \${isDarkMode ? styles.dark : styles.light} absolute left-1 md:left-auto md:relative top-2 md:top-auto\`}>
                             {styles.icon}
                           </div>
                           
-                          <div className={`w-[calc(100%-3.5rem)] ml-14 md:ml-0 md:w-[calc(50%-2rem)] p-4 rounded-xl border shadow-sm transition-all hover:shadow-md ${
+                          <div className={\`w-[calc(100%-3.5rem)] ml-14 md:ml-0 md:w-[calc(50%-2rem)] p-4 rounded-xl border shadow-sm transition-all hover:shadow-md \${
                             isDarkMode ? "border-slate-800 bg-slate-800/60 hover:bg-slate-800" : "border-slate-200 bg-white hover:border-indigo-100"
-                          }`}>
+                          }\`}>
                             <div className="flex flex-wrap items-start justify-between gap-2 mb-2 border-b pb-2 border-slate-200/50 dark:border-slate-700/50">
-                              <h4 className={`font-bold text-sm ${isDarkMode ? styles.titleDark : styles.titleLight}`}>{log.action}</h4>
+                              <h4 className={\`font-bold text-sm \${isDarkMode ? styles.titleDark : styles.titleLight}\`}>{log.action}</h4>
                               <div className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 shrink-0">
                                 <Calendar className="w-3 h-3" />
                                 <time dir="ltr">{dateStr} {timeStr}</time>
                               </div>
                             </div>
                             
-                            <p className={`text-xs leading-loose mb-3 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>{log.details}</p>
+                            <p className={\`text-xs leading-loose mb-3 \${isDarkMode ? "text-slate-300" : "text-slate-600"}\`}>{log.details}</p>
                             
                             {log.metadata && (
                               <div className="mb-3">
                                 <button 
                                   onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                                  className={`text-[10px] font-bold flex items-center gap-1 hover:underline ${isDarkMode ? "text-indigo-400" : "text-indigo-600"}`}
+                                  className={\`text-[10px] font-bold flex items-center gap-1 hover:underline \${isDarkMode ? "text-indigo-400" : "text-indigo-600"}\`}
                                 >
                                   {isExpanded ? "پنهان کردن جزئیات" : "مشاهده جزئیات سیستمی (Metadata)"}
                                 </button>
                                 {isExpanded && (
                                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-2">
-                                    <pre className={`text-[10px] p-2 rounded-lg overflow-x-auto ${isDarkMode ? "bg-slate-950 text-slate-300" : "bg-slate-100 text-slate-700"}`} dir="ltr">
+                                    <pre className={\`text-[10px] p-2 rounded-lg overflow-x-auto \${isDarkMode ? "bg-slate-950 text-slate-300" : "bg-slate-100 text-slate-700"}\`} dir="ltr">
                                       {JSON.stringify(log.metadata, null, 2)}
                                     </pre>
                                   </motion.div>
@@ -417,15 +419,15 @@ export default function AuditLogsModal({
                               </div>
                             )}
 
-                            <div className={`flex items-center justify-between pt-2 border-t text-[10px] ${isDarkMode ? "border-slate-700/50" : "border-slate-100"}`}>
-                              <div className={`flex items-center gap-1.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            <div className={\`flex items-center justify-between pt-2 border-t text-[10px] \${isDarkMode ? "border-slate-700/50" : "border-slate-100"}\`}>
+                              <div className={\`flex items-center gap-1.5 \${isDarkMode ? "text-slate-400" : "text-slate-500"}\`}>
                                 <User className="w-3 h-3" />
                                 <span>{log.user?.name || 'سیستم'}</span>
-                                <span className={`px-1.5 py-0.5 rounded opacity-80 ${isDarkMode ? "bg-slate-700" : "bg-slate-200"}`}>
+                                <span className={\`px-1.5 py-0.5 rounded opacity-80 \${isDarkMode ? "bg-slate-700" : "bg-slate-200"}\`}>
                                   {log.user?.role === 'admin' ? 'مدیر' : log.user?.role === 'user' ? 'کاربر' : 'سیستم'}
                                 </span>
                               </div>
-                              <span className={`font-mono text-[9px] uppercase tracking-wider ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>ID: {log.id}</span>
+                              <span className={\`font-mono text-[9px] uppercase tracking-wider \${isDarkMode ? "text-slate-600" : "text-slate-400"}\`}>ID: {log.id}</span>
                             </div>
                           </div>
                         </motion.div>
@@ -438,9 +440,9 @@ export default function AuditLogsModal({
               {/* TAB: TABLE */}
               {activeTab === "table" && (
                 <div className="p-4 sm:p-5">
-                  <div className={`rounded-xl border overflow-x-auto ${isDarkMode ? "border-slate-800 bg-slate-900/50" : "border-slate-200 bg-white"}`}>
+                  <div className={\`rounded-xl border overflow-x-auto \${isDarkMode ? "border-slate-800 bg-slate-900/50" : "border-slate-200 bg-white"}\`}>
                     <table className="w-full text-xs text-right">
-                      <thead className={`text-slate-500 dark:text-slate-400 ${isDarkMode ? "bg-slate-800/80" : "bg-slate-50"}`}>
+                      <thead className={\`text-slate-500 dark:text-slate-400 \${isDarkMode ? "bg-slate-800/80" : "bg-slate-50"}\`}>
                         <tr>
                           <th className="p-3 font-bold">زمان</th>
                           <th className="p-3 font-bold">نوع</th>
@@ -454,18 +456,18 @@ export default function AuditLogsModal({
                           const d = new Date(log.timestamp);
                           const styles = getTypeStyles(log.type);
                           return (
-                            <tr key={log.id} className={`transition-colors ${isDarkMode ? "hover:bg-slate-800/40" : "hover:bg-slate-50"}`}>
+                            <tr key={log.id} className={\`transition-colors \${isDarkMode ? "hover:bg-slate-800/40" : "hover:bg-slate-50"}\`}>
                               <td className="p-3 whitespace-nowrap text-slate-500 dark:text-slate-400" dir="ltr">
                                 {d.toLocaleDateString("fa-IR")} - {d.toLocaleTimeString("fa-IR", { hour: '2-digit', minute: '2-digit' })}
                               </td>
                               <td className="p-3">
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${styles.badge}`}>
+                                <span className={\`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold \${styles.badge}\`}>
                                   {styles.icon}
                                   {log.type === 'success' ? 'موفق' : log.type === 'error' ? 'خطا' : log.type === 'warning' ? 'هشدار' : log.type === 'auth' ? 'امنیتی' : 'اطلاعات'}
                                 </span>
                               </td>
-                              <td className={`p-3 font-bold whitespace-nowrap ${isDarkMode ? styles.titleDark : styles.titleLight}`}>{log.action}</td>
-                              <td className={`p-3 min-w-[200px] ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>{log.details}</td>
+                              <td className={\`p-3 font-bold whitespace-nowrap \${isDarkMode ? styles.titleDark : styles.titleLight}\`}>{log.action}</td>
+                              <td className={\`p-3 min-w-[200px] \${isDarkMode ? "text-slate-300" : "text-slate-700"}\`}>{log.details}</td>
                               <td className="p-3 whitespace-nowrap">
                                 <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
                                   <User className="w-3.5 h-3.5" />
@@ -485,26 +487,26 @@ export default function AuditLogsModal({
               {activeTab === "analytics" && (
                 <div className="p-4 sm:p-5 space-y-5">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className={`p-4 rounded-xl border ${isDarkMode ? "border-slate-800 bg-slate-800/40" : "border-slate-200 bg-white"}`}>
+                    <div className={\`p-4 rounded-xl border \${isDarkMode ? "border-slate-800 bg-slate-800/40" : "border-slate-200 bg-white"}\`}>
                       <span className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">مجموع رویدادهای فیلتر شده</span>
                       <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{stats.filteredTotal.toLocaleString("fa-IR")}</span>
                     </div>
-                    <div className={`p-4 rounded-xl border ${isDarkMode ? "border-slate-800 bg-slate-800/40" : "border-slate-200 bg-white"}`}>
+                    <div className={\`p-4 rounded-xl border \${isDarkMode ? "border-slate-800 bg-slate-800/40" : "border-slate-200 bg-white"}\`}>
                       <span className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">موفق / اطلاعاتی</span>
                       <span className="text-2xl font-black text-emerald-500">{(stats.success + (stats.filteredTotal - stats.errors - stats.warnings - stats.auth - stats.success)).toLocaleString("fa-IR")}</span>
                     </div>
-                    <div className={`p-4 rounded-xl border ${isDarkMode ? "border-slate-800 bg-slate-800/40" : "border-slate-200 bg-white"}`}>
+                    <div className={\`p-4 rounded-xl border \${isDarkMode ? "border-slate-800 bg-slate-800/40" : "border-slate-200 bg-white"}\`}>
                       <span className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">هشدارها</span>
                       <span className="text-2xl font-black text-amber-500">{stats.warnings.toLocaleString("fa-IR")}</span>
                     </div>
-                    <div className={`p-4 rounded-xl border ${isDarkMode ? "border-slate-800 bg-slate-800/40" : "border-slate-200 bg-white"}`}>
+                    <div className={\`p-4 rounded-xl border \${isDarkMode ? "border-slate-800 bg-slate-800/40" : "border-slate-200 bg-white"}\`}>
                       <span className="text-xs text-slate-500 dark:text-slate-400 mb-1 block">خطاها</span>
                       <span className="text-2xl font-black text-rose-500">{stats.errors.toLocaleString("fa-IR")}</span>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    <div className={`p-5 rounded-xl border md:col-span-1 ${isDarkMode ? "border-slate-800 bg-slate-800/30" : "border-slate-200 bg-white"}`}>
+                    <div className={\`p-5 rounded-xl border md:col-span-1 \${isDarkMode ? "border-slate-800 bg-slate-800/30" : "border-slate-200 bg-white"}\`}>
                       <h4 className="text-sm font-bold mb-4 flex items-center gap-2 text-slate-700 dark:text-slate-200">
                         <PieChart className="w-4 h-4" /> توزیع رویدادها
                       </h4>
@@ -512,7 +514,7 @@ export default function AuditLogsModal({
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie data={chartData.pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5}>
-                              {chartData.pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                              {chartData.pieData.map((entry, index) => <Cell key={\`cell-\${index}\`} fill={entry.color} />)}
                             </Pie>
                             <RechartsTooltip 
                               contentStyle={{ 
@@ -537,7 +539,7 @@ export default function AuditLogsModal({
                       </div>
                     </div>
 
-                    <div className={`p-5 rounded-xl border md:col-span-2 ${isDarkMode ? "border-slate-800 bg-slate-800/30" : "border-slate-200 bg-white"}`}>
+                    <div className={\`p-5 rounded-xl border md:col-span-2 \${isDarkMode ? "border-slate-800 bg-slate-800/30" : "border-slate-200 bg-white"}\`}>
                       <h4 className="text-sm font-bold mb-4 flex items-center gap-2 text-slate-700 dark:text-slate-200">
                         <Activity className="w-4 h-4" /> فعالیت طی زمان (روزهای اخیر)
                       </h4>
@@ -578,7 +580,7 @@ export default function AuditLogsModal({
         
         {/* Pagination Footer (Only for Timeline & Table) */}
         {activeTab !== "analytics" && filteredLogs.length > 0 && (
-          <div className={`p-4 border-t flex items-center justify-between shrink-0 ${isDarkMode ? "bg-slate-800/80 border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+          <div className={\`p-4 border-t flex items-center justify-between shrink-0 \${isDarkMode ? "bg-slate-800/80 border-slate-700" : "bg-slate-50 border-slate-200"}\`}>
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
               نمایش <span className="font-bold text-slate-700 dark:text-slate-200">{((currentPage - 1) * itemsPerPage + 1).toLocaleString("fa-IR")}</span> تا <span className="font-bold text-slate-700 dark:text-slate-200">{Math.min(currentPage * itemsPerPage, filteredLogs.length).toLocaleString("fa-IR")}</span> از <span className="font-bold text-slate-700 dark:text-slate-200">{filteredLogs.length.toLocaleString("fa-IR")}</span> رویداد
             </div>
@@ -587,7 +589,7 @@ export default function AuditLogsModal({
               <button 
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className={`p-1.5 rounded-lg border transition-colors ${isDarkMode ? "border-slate-700 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:hover:bg-transparent" : "border-slate-300 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent"}`}
+                className={\`p-1.5 rounded-lg border transition-colors \${isDarkMode ? "border-slate-700 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:hover:bg-transparent" : "border-slate-300 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent"}\`}
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -599,7 +601,7 @@ export default function AuditLogsModal({
               <button 
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className={`p-1.5 rounded-lg border transition-colors ${isDarkMode ? "border-slate-700 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:hover:bg-transparent" : "border-slate-300 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent"}`}
+                className={\`p-1.5 rounded-lg border transition-colors \${isDarkMode ? "border-slate-700 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:hover:bg-transparent" : "border-slate-300 hover:bg-slate-200 text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent"}\`}
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -610,3 +612,6 @@ export default function AuditLogsModal({
     </div>
   );
 }
+`
+
+fs.writeFileSync('src/components/AuditLogsModal.tsx', code);

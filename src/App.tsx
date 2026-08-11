@@ -90,7 +90,7 @@ import {
   Maximize,
   Minimize,
   Printer,
-  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench, Star, Brain, FileSpreadsheet, Building, Phone, Edit2, Ban, KeyRound, Terminal, UserPlus, EyeOff, Binary
+  Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench, Star, Brain, FileSpreadsheet, Building, Phone, Edit2, Ban, KeyRound, Terminal, UserPlus, EyeOff, Binary, Mail
 } from "lucide-react";
 import { TransactionItem, UploadedFile, PreviousScan, DocumentExtractionSettings } from "./types";
 import CameraCapture from "./components/CameraCapture";
@@ -105,6 +105,7 @@ import OnboardingProfileModal from "./components/OnboardingProfileModal";
 import AuditLogsModal from "./components/AuditLogsModal";
 import AdminPinModal from "./components/AdminPinModal";
 import AdminPanelModal from "./components/AdminPanelModal";
+import MehrayinSupportWidget from "./components/MehrayinSupportWidget";
 import LoginScreen from "./components/LoginScreen";
 import PdfThumbnail from "./components/PdfThumbnail";
 import PdfViewer from "./components/PdfViewer";
@@ -675,6 +676,10 @@ export default function App() {
   const [isBatchPanelOpen, setIsBatchPanelOpen] = useState<boolean>(false);
   const [isBatchPanelMinimized, setIsBatchPanelMinimized] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [batchConcurrencyLimit, setBatchConcurrencyLimit] = useState<number>(3);
+  const batchConcurrencyLimitRef = useRef<number>(3);
+  const [isBatchPaused, setIsBatchPaused] = useState<boolean>(false);
+  const isBatchPausedRef = useRef<boolean>(false);
   const cancelBatchRef = useRef<boolean>(false);
   const isEditingRawJsonRef = useRef<boolean>(false);
 
@@ -687,6 +692,19 @@ export default function App() {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, []);
+
+  const handleTogglePauseBatch = () => {
+    const nextState = !isBatchPaused;
+    setIsBatchPaused(nextState);
+    isBatchPausedRef.current = nextState;
+    showNotification(nextState ? "پردازش موازی اسناد متوقف شد." : "ادامه پردازش صف اسناد...", "info");
+  };
+
+  const handleUpdateConcurrencyLimit = (limit: number) => {
+    setBatchConcurrencyLimit(limit);
+    batchConcurrencyLimitRef.current = limit;
+    showNotification(`تعداد کارگران پردازش همزمان به ${limit} سند تغییر یافت.`, "info");
+  };
 
   const processSingleFileWithAutoRetry = async (
     item: {
@@ -732,20 +750,43 @@ export default function App() {
         return { success: false, transactionsCount: 0, error: "لغو شده" };
       }
 
+      // Check pause status
+      while (isBatchPausedRef.current && !cancelBatchRef.current) {
+        await new Promise(res => setTimeout(res, 400));
+      }
+      if (cancelBatchRef.current) {
+        updateProgress({
+          status: "error",
+          statusMessage: "عملیات پردازش توسط کاربر لغو شد.",
+          errorMessage: "لغو شده"
+        });
+        return { success: false, transactionsCount: 0, error: "لغو شده" };
+      }
+
       try {
         const isPdf = item.mimeType === "application/pdf" || item.name.toLowerCase().endsWith(".pdf");
+        
+        // Auto fallback model selection on retries
+        let modelToUse = selectedModel;
+        if (attempt >= 2) {
+          if (selectedModel === "gemini-2.5-flash") modelToUse = "gemini-2.5-pro";
+          else if (selectedModel === "gemini-2.5-pro") modelToUse = "gemini-2.5-flash";
+        }
+
         if (attempt > 1) {
           updateProgress({
             status: "retrying",
             stage: "extracting_fields",
             attempt,
-            statusMessage: `تلاش شماره ${attempt} - ارسال مجدد درخواست استخراج به Gemini...`
+            modelUsed: modelToUse,
+            statusMessage: `تلاش شماره ${attempt} - ارسال مجدد به ${modelToUse}...`
           });
         } else {
           updateProgress({
             status: "processing",
             stage: "extracting_fields",
             attempt: 1,
+            modelUsed: modelToUse,
             statusMessage: isPdf && pdfExtractionStrategy === "pdf_to_markdown_to_json"
               ? "در حال تبدیل PDF به متن ساختاریافته Markdown و استخراج JSON..."
               : "در حال استخراج هوشمند لایه‌ها و جدول اقلام..."
@@ -758,7 +799,7 @@ export default function App() {
           body: JSON.stringify({
             image: item.base64,
             mimeType: item.mimeType,
-            model: selectedModel,
+            model: modelToUse,
             tokenSettings,
             userPrompt: finalPrompt,
             chatFiles,
@@ -771,11 +812,11 @@ export default function App() {
         if (response.ok && result.success) {
           const realTokensUsed = result.tokensUsed || 0;
           setModelQuotas(prev => {
-            const quota = prev[selectedModel];
+            const quota = prev[modelToUse];
             if (quota) {
               return {
                 ...prev,
-                [selectedModel]: { ...quota, used: Math.min(quota.limit, quota.used + 1) }
+                [modelToUse]: { ...quota, used: Math.min(quota.limit, quota.used + 1) }
               };
             }
             return prev;
@@ -788,6 +829,7 @@ export default function App() {
           const rowsArray = Array.isArray(result.data.ردیف_ها) ? result.data.ردیف_ها : (Array.isArray(result.data.اقلام_تراکنش) ? result.data.اقلام_تراکنش : []);
           const columnsArray = deduplicateColumns(Array.isArray(result.data.ستون_ها) ? result.data.ستون_ها : []);
           
+          let fileTotalAmount = 0;
           const extractedItems: TransactionItem[] = rowsArray.map((rowItem: any, idx: number) => {
             const row: any = {
               id: `extracted-${Date.now()}-${idx}-${Math.random().toString(36).substring(2,6)}`,
@@ -809,6 +851,16 @@ export default function App() {
                 }
               });
             }
+
+            const rawVal = row.مبلغ_کل || row.مبلغ || row.قیمت_کل || row.جمع_کل || row.مبلغ_فاكتور || 0;
+            if (typeof rawVal === "number") {
+              fileTotalAmount += rawVal;
+            } else if (typeof rawVal === "string") {
+              const cleaned = rawVal.replace(/[^0-9.-]/g, "");
+              const parsed = parseFloat(cleaned);
+              if (!isNaN(parsed)) fileTotalAmount += parsed;
+            }
+
             return row as TransactionItem;
           });
 
@@ -816,7 +868,7 @@ export default function App() {
           const documentAnalysis = result.data.تحلیل_سند || "";
 
           const currentDocExtractionSettings: DocumentExtractionSettings = {
-            selectedModel,
+            selectedModel: modelToUse,
             erpDestinationModule,
             strictnessMode,
             customPrompt,
@@ -871,8 +923,11 @@ export default function App() {
             extractedCount: extractedItems.length,
             confidenceScore: avgConfidence,
             documentType,
+            modelUsed: modelToUse,
             tokensUsed: realTokensUsed,
             processingTimeMs,
+            totalAmountExtracted: fileTotalAmount,
+            extractedRowsPreview: extractedItems.slice(0, 5),
             endTime
           });
 
@@ -910,6 +965,84 @@ export default function App() {
     return { success: false, transactionsCount: 0, error: "تلاش‌ها به پایان رسید" };
   };
 
+  const runBatchWorkerPool = async (userPrompt: string = "") => {
+    cancelBatchRef.current = false;
+    setIsBatchProcessing(true);
+
+    const worker = async (workerId: number) => {
+      while (!cancelBatchRef.current) {
+        while (isBatchPausedRef.current && !cancelBatchRef.current) {
+          await new Promise(res => setTimeout(res, 400));
+        }
+        if (cancelBatchRef.current) break;
+
+        let targetItem: BatchOCRProgressItem | null = null;
+        setBatchOCRItems(prev => {
+          const queuedIndex = prev.findIndex(item => item.status === "queued");
+          if (queuedIndex !== -1) {
+            targetItem = { ...prev[queuedIndex] };
+            const updated = [...prev];
+            updated[queuedIndex] = {
+              ...updated[queuedIndex],
+              status: "processing",
+              statusMessage: `در حال استخراج توسط کارگر شماره ${workerId + 1}...`
+            };
+            return updated;
+          }
+          return prev;
+        });
+
+        if (!targetItem) {
+          break;
+        }
+
+        await processSingleFileWithAutoRetry(targetItem, userPrompt);
+      }
+    };
+
+    const numWorkers = Math.max(1, Math.min(10, batchConcurrencyLimitRef.current));
+    const activeWorkers = Array.from({ length: numWorkers }).map((_, idx) => worker(idx));
+
+    await Promise.all(activeWorkers);
+
+    setIsBatchProcessing(false);
+  };
+
+  const handleRetryFailedBatchItems = () => {
+    setBatchOCRItems(prev => prev.map(item => {
+      if (item.status === "error") {
+        return {
+          ...item,
+          status: "queued" as const,
+          attempt: 0,
+          statusMessage: "در صف انتظار جهت تلاش مجدد..."
+        };
+      }
+      return item;
+    }));
+    runBatchWorkerPool();
+  };
+
+  const handleRetrySingleBatchItem = (itemId: string) => {
+    setBatchOCRItems(prev => prev.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          status: "queued" as const,
+          attempt: 0,
+          statusMessage: "در صف انتظار جهت تلاش مجدد..."
+        };
+      }
+      return item;
+    }));
+    runBatchWorkerPool();
+  };
+
+  const handleRemoveBatchItem = (itemId: string) => {
+    setBatchOCRItems(prev => prev.filter(item => item.id !== itemId));
+    showNotification("سند از صف پردازش حذف گردید.", "info");
+  };
+
   const startBatchExtractionPipeline = async (
     fileList: Array<{
       id?: string;
@@ -925,6 +1058,8 @@ export default function App() {
     if (fileList.length === 0) return;
 
     cancelBatchRef.current = false;
+    isBatchPausedRef.current = false;
+    setIsBatchPaused(false);
     setIsBatchProcessing(true);
     setIsBatchPanelOpen(true);
     setIsBatchPanelMinimized(false);
@@ -940,21 +1075,18 @@ export default function App() {
       folder: f.folder,
       status: "queued",
       attempt: 0,
-      statusMessage: "در صف پردازش موازی...",
+      statusMessage: "در صف انتظار کارگران پردازش موازی...",
       startTime: Date.now()
     }));
 
     setBatchOCRItems(initialItems);
 
-    showNotification(`پردازش موازی برای ${fileList.length.toLocaleString("fa-IR")} سند با قابلیت تلاش مجدد خودکار آغاز شد.`, "info");
-    logEvent("شروع پردازش موازی اسناد", `تعداد ${fileList.length} سند به صورت همزمان جهت استخراج OCR پردازش می‌شوند.`);
+    showNotification(`پردازش موازی برای ${fileList.length.toLocaleString("fa-IR")} سند با ظرفیت ${batchConcurrencyLimitRef.current} کارگر همزمان آغاز شد.`, "info");
+    logEvent("شروع پردازش موازی اسناد", `تعداد ${fileList.length} سند با همزمانی ${batchConcurrencyLimitRef.current} جهت استخراج OCR پردازش می‌شوند.`);
 
-    const parallelPromises = initialItems.map(item => processSingleFileWithAutoRetry(item, userPrompt));
+    await runBatchWorkerPool(userPrompt);
 
-    await Promise.all(parallelPromises);
-
-    setIsBatchProcessing(false);
-    showNotification("عملیات پردازش موازی تمام اسناد با موفقیت به پایان رسید!", "success");
+    showNotification("عملیات پردازش موازی تمام اسناد به پایان رسید!", "success");
     logEvent("پایان پردازش موازی اسناد", "تمام اسناد در صف موازی پردازش شدند.");
   };
 
@@ -1351,13 +1483,14 @@ export default function App() {
     localStorage.setItem("document_audit_logs", JSON.stringify(auditLogs));
   }, [auditLogs]);
 
-  const logEvent = (action: string, details: string, type: 'info' | 'success' | 'warning' | 'error' | 'auth' = 'info') => {
+  const logEvent = (action: string, details: string, type: 'info' | 'success' | 'warning' | 'error' | 'auth' = 'info', metadata?: Record<string, any>) => {
     const newLog: import('./types').AuditLogEntry = {
       id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
       timestamp: new Date().toISOString(),
       action,
       details,
       type,
+      metadata,
       user: currentUser ? {
         name: currentUser.name || currentUser.firstName + ' ' + currentUser.lastName,
         role: currentUser.role
@@ -5162,6 +5295,13 @@ export default function App() {
                       items={batchOCRItems}
                       isDarkMode={isDarkMode}
                       onViewScan={handleViewScanFromBatch}
+                      concurrencyLimit={batchConcurrencyLimit}
+                      onChangeConcurrencyLimit={handleUpdateConcurrencyLimit}
+                      isPaused={isBatchPaused}
+                      onTogglePause={handleTogglePauseBatch}
+                      onRetryFailed={handleRetryFailedBatchItems}
+                      onRetryItem={handleRetrySingleBatchItem}
+                      onRemoveItem={handleRemoveBatchItem}
                     />
                   </div>
                 </motion.div>
@@ -8658,6 +8798,24 @@ export default function App() {
                   setSelectedScanIds([]);
                 };
 
+                const handleBulkTag = () => {
+                  const tag = prompt("نام برچسب جدید برای اسناد انتخاب‌شده را وارد کنید (مثال: پرداخت_شده یا فاکتور_تیر):");
+                  if (tag && tag.trim()) {
+                    const trimmed = tag.trim().replace(/^#/, "");
+                    setPreviousScans(prev => prev.map(s => {
+                      if (selectedScanIds.includes(s.id)) {
+                        const currentTags = s.tags || [];
+                        if (!currentTags.includes(trimmed)) {
+                          return { ...s, tags: [...currentTags, trimmed] };
+                        }
+                      }
+                      return s;
+                    }));
+                    showNotification(`برچسب «#${trimmed}» به ${selectedScanIds.length} سند افزوده شد.`, "success");
+                    setSelectedScanIds([]);
+                  }
+                };
+
                 const downloadBase64File = (scan: PreviousScan) => {
                   if (!scan.file?.preview) {
                     showNotification("پیش‌نمایش یا محتوای فایل معتبر نیست.", "error");
@@ -9215,6 +9373,19 @@ export default function App() {
                                   <Star className="w-3.5 h-3.5 text-slate-400" />
                                 </button>
                               </div>
+
+                               <button
+                                onClick={handleBulkTag}
+                                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1 border transition-colors cursor-pointer ${
+                                  isDarkMode 
+                                    ? "bg-[#0b1120] border-indigo-500/30 text-indigo-300 hover:bg-slate-800" 
+                                    : "bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                }`}
+                                title="افزودن برچسب گروهی"
+                              >
+                                <Tag className="w-3.5 h-3.5 text-indigo-400" />
+                                <span>برچسب‌گذاری</span>
+                              </button>
 
                               <button
                                 onClick={handleBulkDownload}
@@ -10167,249 +10338,16 @@ export default function App() {
       <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-4" dir="rtl">
         <AnimatePresence>
           {isChatOpen && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85, y: 30 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.85, y: 30 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className={`w-[380px] h-[520px] max-w-[calc(100vw-3rem)] max-h-[calc(100vh-8rem)] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
-                isDarkMode ? "bg-slate-900/95 border-slate-800 text-slate-100" : "bg-white/95 border-slate-200 text-slate-800 shadow-slate-300/40"
-              } backdrop-blur-md`}
-            >
-              {/* Header */}
-              <div className={`p-4 border-b flex items-center justify-between shrink-0 ${
-                isDarkMode ? "bg-slate-800/90 border-slate-750" : "bg-slate-50/90 border-slate-100"
-              }`}>
-                <div className="flex items-center gap-3 text-right">
-                  <div className="relative">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-md">
-                      <Bot className="w-5 h-5 animate-pulse" />
-                    </div>
-                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900"></span>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-xs text-right">مهرآیین - پشتیبان هوشمند ERP</h4>
-                    <div className="flex flex-col gap-0.5 mt-0.5 text-right">
-                      <p className={`text-[9.5px] ${isDarkMode ? "text-emerald-400" : "text-emerald-600"} flex items-center gap-1`}>
-                        <span>•</span> پاسخگوی آنلاین فعال
-                      </p>
-                      <a 
-                        href="mailto:alizerehsaz2001@gmail.com" 
-                        className={`text-[9px] hover:underline font-semibold block ${isDarkMode ? "text-indigo-400 hover:text-indigo-300" : "text-indigo-600 hover:text-indigo-700"}`}
-                        title="ارتباط مستقیم با علی زره‌ساز (توسعه‌دهنده سیستم)"
-                      >
-                        توسعه‌دهنده: alizerehsaz2001@gmail.com
-                      </a>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => {
-                      if (window.confirm("آیا مایل به شروع مجدد گفتگو و پاکسازی تاریخچه پیام‌ها هستید؟")) {
-                        setChatMessages([
-                          {
-                            id: "welcome",
-                            role: "assistant",
-                            text: "سلام! من مهرآیین، پشتیبان هوشمند شما هستم. چطور می‌توانم در کار با نرم‌افزار، استخراج اسناد فاکتور یا ماژول‌های حسابداری و مالی به شما کمک کنم؟ همچنین می‌توانید جهت هرگونه سوال یا راهنمایی فنی مستقیماً با توسعه‌دهنده سیستم (علی زره‌ساز) از طریق ایمیل alizerehsaz2001@gmail.com در ارتباط باشید.",
-                            timestamp: new Date(),
-                          }
-                        ]);
-                        showNotification("تاریخچه گفتگو بازنشانی شد.", "info");
-                      }
-                    }}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-200 text-slate-500 hover:text-slate-900"
-                    }`}
-                    title="شروع مجدد گفتگو"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setIsChatOpen(false)}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      isDarkMode ? "hover:bg-slate-800 text-slate-400 hover:text-white" : "hover:bg-slate-200 text-slate-500 hover:text-slate-900"
-                    }`}
-                    title="بستن گفتگو"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Message Thread */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col custom-scrollbar">
-                {chatMessages.map((msg) => {
-                  const isUser = msg.role === "user";
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex ${isUser ? "justify-start" : "justify-end"} max-w-[85%] ${isUser ? "mr-auto" : "ml-auto"}`}
-                    >
-                      <div className={`p-3 rounded-2xl text-xs leading-relaxed ${
-                        isUser
-                          ? "bg-gradient-to-l from-indigo-600 to-blue-600 text-white rounded-tr-none shadow-sm text-right animate-fade-in"
-                          : isDarkMode
-                            ? "bg-slate-800/90 border border-slate-700/50 text-slate-100 rounded-tl-none text-right animate-fade-in"
-                            : "bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200/50 text-right animate-fade-in"
-                      }`}>
-                        <div className="whitespace-pre-wrap">{msg.text}</div>
-                        <div className={`text-[8px] text-left mt-1.5 opacity-50 font-mono`}>
-                          {msg.timestamp.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" })}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Loading indicator */}
-                {isChatLoading && (
-                  <div className="flex justify-end max-w-[85%] ml-auto">
-                    <div className={`p-3 rounded-2xl rounded-tl-none flex items-center gap-1.5 ${
-                      isDarkMode ? "bg-slate-800/90" : "bg-slate-100"
-                    }`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "0ms" }}></span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "150ms" }}></span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "300ms" }}></span>
-                    </div>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-
-              {/* Suggestions Panel */}
-              <div className={`px-4 py-2 shrink-0 border-t flex flex-col gap-2.5 ${
-                isDarkMode ? "bg-slate-800/50 border-slate-750" : "bg-slate-50 border-slate-100"
-              }`}>
-                {/* Always-visible AI Suggestion Button */}
-                <button
-                  type="button"
-                  onClick={() => handleSendChatMessage("لطفا یک خلاصه کامل از وضعیت فعلی سند، مجموع مبالغ بدهکار و بستانکار، وضعیت موازنه (تراز) و تحلیل هرگونه مغایرت مالی در ردیف‌های تراکنش ارائه بده و راهکار پیشنهاد کن.")}
-                  className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold transition-all border shadow-sm cursor-pointer ${
-                    isDarkMode
-                      ? "bg-indigo-500/15 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/25"
-                      : "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>پیشنهاد پرامپت: تحلیل وضعیت سند و مغایرت‌ها</span>
-                </button>
-
-                {/* Quick Commands List */}
-                <div className="flex flex-col mt-0.5 relative">
-                   <div className="flex overflow-x-auto gap-1.5 pb-1 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                       <button
-                         type="button"
-                         onClick={() => setChatInput("لطفاً مقادیر مالیات بر ارزش افزوده (VAT) را با دقت بالا خط به خط بررسی و استخراج کن و در صورت پنهان بودن از جمع کل محاسبه کن.")}
-                         className={`shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all border shadow-sm cursor-pointer ${
-                           isDarkMode
-                             ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25"
-                             : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                         }`}
-                       >
-                         <span>🔍</span> استخراج دقیق مالیات (VAT)
-                       </button>
-                       <button
-                         type="button"
-                         onClick={() => setChatInput("لطفاً تمام تاریخ‌های شمسی موجود در سند را پیدا کرده و دقیقاً به معادل تاریخ میلادی (Gregorian Date) در قالب YYYY-MM-DD تبدیل کن.")}
-                         className={`shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all border shadow-sm cursor-pointer ${
-                           isDarkMode
-                             ? "bg-blue-500/15 border-blue-500/30 text-blue-400 hover:bg-blue-500/25"
-                             : "bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                         }`}
-                       >
-                         <span>📅</span> تاریخ میلادی
-                       </button>
-                       <button
-                         type="button"
-                         onClick={() => setChatInput("ردیف‌هایی که مجموع مبلغ آن‌ها با (تعداد × قیمت واحد) مغایرت دارد را پیدا کن و دلیل احتمالی را گزارش بده.")}
-                         className={`shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all border shadow-sm cursor-pointer ${
-                           isDarkMode
-                             ? "bg-amber-500/15 border-amber-500/30 text-amber-400 hover:bg-amber-500/25"
-                             : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
-                         }`}
-                       >
-                         <span>⚠️</span> مغایرت محاسباتی
-                       </button>
-                       <button
-                         type="button"
-                         onClick={() => setChatInput("فیلدهای مرتبط با مشخصات شرکت (شامل نام شرکت، شناسه ملی، کد اقتصادی و شماره ثبت) را با دقت بالا استخراج کن.")}
-                         className={`shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all border shadow-sm cursor-pointer ${
-                           isDarkMode
-                             ? "bg-rose-500/15 border-rose-500/30 text-rose-400 hover:bg-rose-500/25"
-                             : "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100"
-                         }`}
-                       >
-                         <span>🏢</span> مشخصات شرکت
-                       </button>
-                   </div>
-                </div>
-
-                {chatMessages.length <= 2 && (
-                  <div className="flex flex-col gap-1.5 mt-0.5">
-                    <span className={`text-[9px] font-bold text-right ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>سوالات راهنما:</span>
-                    <div className="flex flex-wrap gap-1.5 justify-start">
-                      {[
-                        { t: "🔍 بررسی مغایرت‌ها", q: "لطفا بررسی کن آیا این سند حسابداری از نظر مبلغ بدهکار و بستانکار کاملاً تراز است؟ اگر مغایرتی وجود دارد، دقیقاً در کدام ردیف‌هاست؟" },
-                        { t: "📊 طبقه‌بندی هزینه‌ها", q: "لطفاً تراکنش‌های فعلی را بر اساس نوع هزینه (مانند حقوق، تجهیزات، اداری و...) دسته‌بندی کن و جمع هر دسته را بگو." },
-                        { t: "⚠️ شناسایی موارد مشکوک", q: "آیا در بین ردیف‌های استخراج شده، موردی وجود دارد که ضریب اطمینان پایین یا مبلغ نامتعارفی داشته باشد؟" },
-                        { t: "💡 پیشنهاد کدینگ حساب", q: "با توجه به شرح تراکنش‌ها، پیشنهاد می‌کنی هر ردیف را در چه حساب معین یا تفصیلی ثبت کنم؟" },
-                        { t: "📑 خلاصه مدیریتی", q: "یک گزارش مدیریتی کوتاه از وضعیت این فاکتور/سند شامل جمع کل پرداختی‌ها و ماهیت اصلی هزینه‌ها ارائه بده." },
-                      ].map((chip, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleSendChatMessage(chip.q)}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] text-right transition-all border ${
-                            isDarkMode 
-                              ? "bg-slate-800/70 border-slate-700/60 text-slate-300 hover:bg-slate-750 hover:border-indigo-500/40 hover:text-indigo-300" 
-                              : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-indigo-500/30 hover:text-indigo-600 shadow-xs cursor-pointer"
-                          }`}
-                        >
-                          {chip.t}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Chat Input Footer */}
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSendChatMessage();
-                }}
-                className={`p-3 border-t shrink-0 flex items-center gap-2 ${
-                  isDarkMode ? "bg-slate-800/90 border-slate-750" : "bg-slate-50/90 border-slate-100"
-                }`}
-              >
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="سوال خود را بپرسید..."
-                  className={`flex-1 px-3.5 py-2 rounded-xl text-xs outline-none transition-all border text-right ${
-                    isDarkMode 
-                      ? "bg-slate-900 border-slate-850 text-slate-100 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30" 
-                      : "bg-white border-slate-200 text-slate-800 focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/20"
-                  }`}
-                  disabled={isChatLoading}
-                />
-                <button
-                  type="submit"
-                  disabled={isChatLoading || !chatInput.trim()}
-                  className={`p-2 rounded-xl transition-all ${
-                    chatInput.trim() && !isChatLoading
-                      ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/10 active:scale-95 cursor-pointer"
-                      : isDarkMode 
-                        ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
-                        : "bg-slate-200 text-slate-400 cursor-not-allowed"
-                  }`}
-                >
-                  <Send className="w-3.5 h-3.5 rotate-180" />
-                </button>
-              </form>
-            </motion.div>
+            <MehrayinSupportWidget
+              isOpen={isChatOpen}
+              onClose={() => setIsChatOpen(false)}
+              isDarkMode={isDarkMode}
+              chatMessages={chatMessages}
+              setChatMessages={setChatMessages}
+              isChatLoading={isChatLoading}
+              onSendChatMessage={handleSendChatMessage}
+              showNotification={showNotification}
+            />
           )}
         </AnimatePresence>
 
@@ -10418,18 +10356,19 @@ export default function App() {
           onClick={() => setIsChatOpen(!isChatOpen)}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          className={`relative w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 transition-all cursor-pointer border border-indigo-450/25`}
+          className="relative w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 transition-all cursor-pointer border border-indigo-400/30"
+          title="پشتیبان آنلاین مهرآیین"
         >
           {isChatOpen ? (
             <X className="w-6 h-6" />
           ) : (
             <>
               <MessageSquare className="w-6 h-6 animate-pulse" />
-              {/* Pulsing notification dot */}
               <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900 animate-pulse"></span>
             </>
           )}
         </motion.button>
+      </div>
         {/* Storage Upgrade Request Modal */}
         {isStorageUpgradeModalOpen && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-6 overflow-hidden">
@@ -10482,10 +10421,10 @@ export default function App() {
                   </label>
                   <div className="grid grid-cols-2 gap-2.5">
                     {[
-                      { gb: 5, price: 250000, label: "بسته اقتصادی ۵GB" },
-                      { gb: 10, price: 450000, label: "بسته استاندارد ۱۰GB", badge: "محبوب‌ترین" },
-                      { gb: 25, price: 950000, label: "بسته حرفه‌ای ۲۵GB" },
-                      { gb: 50, price: 1750000, label: "بسته سازمانی ۵۰GB" },
+                      { gb: 5, price: 0, label: "بسته اقتصادی ۵GB" },
+                      { gb: 10, price: 0, label: "بسته استاندارد ۱۰GB", badge: "محبوب‌ترین" },
+                      { gb: 25, price: 0, label: "بسته حرفه‌ای ۲۵GB" },
+                      { gb: 50, price: 0, label: "بسته سازمانی ۵۰GB" },
                     ].map((plan) => (
                       <button
                         key={plan.gb}
@@ -10504,7 +10443,7 @@ export default function App() {
                         )}
                         <div className="font-extrabold text-xs">{plan.label}</div>
                         <div className="text-[11px] font-mono font-bold text-indigo-400 mt-1">
-                          {plan.price.toLocaleString("fa-IR")} تومان / ماهانه
+                          {plan.price === 0 ? "۰ تومان (فعلاً رایگان)" : `${plan.price.toLocaleString("fa-IR")} تومان / ماهانه`}
                         </div>
                       </button>
                     ))}
@@ -10521,12 +10460,12 @@ export default function App() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono dir-ltr text-right">
                     <div className="p-2 rounded-xl bg-slate-900/40 border border-slate-800">
-                      <span className="text-slate-400 block text-[9px] font-sans">شماره کارت بانک ملی:</span>
-                      <span className="font-bold text-amber-300">6037-9918-8420-1102</span>
+                      <span className="text-slate-400 block text-[9px] font-sans">شماره کارت بانک خاورمیانه:</span>
+                      <span className="font-bold text-amber-300 tracking-wider">5859-4710-1079-8985</span>
                     </div>
                     <div className="p-2 rounded-xl bg-slate-900/40 border border-slate-800">
                       <span className="text-slate-400 block text-[9px] font-sans">به نام:</span>
-                      <span className="font-bold text-slate-200 font-sans">شرکت حسابلند / مدیریت سیستم</span>
+                      <span className="font-bold text-slate-200 font-sans">علی زره ساز</span>
                     </div>
                   </div>
                 </div>
@@ -10564,6 +10503,42 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Direct Support & Purchase Contact Channels */}
+                <div className={`p-4 rounded-2xl border text-xs space-y-2.5 ${
+                  isDarkMode ? "bg-sky-950/40 border-sky-500/30 text-slate-200" : "bg-sky-50/90 border-sky-200 text-slate-800"
+                }`}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Headphones className="w-4 h-4 text-sky-400 shrink-0" />
+                      <span className="font-extrabold text-[12px] text-sky-400 dark:text-sky-300">خرید مستقیم و آنی (بدون نیاز به ثبت فیش در سامانه):</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-bold">پاسخگویی سریع</span>
+                  </div>
+
+                  <p className="text-[11px] leading-relaxed text-slate-300 dark:text-slate-300 opacity-90">
+                    برای خرید فوری و فعال‌سازی آنلاین بسته‌های فضای ابری، کلید اختصاصی API هوش مصنوعی، یا بسته‌های سفارشی نیازی به ثبت فرم در برنامه نیست. می‌توانید مستقیماً به تلگرام یا ایمیل پیام دهید تا بلافاصله شارژ انجام شود:
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-2.5 pt-1 text-[11px] font-mono dir-ltr font-bold">
+                    <a
+                      href="https://t.me/Alizhz"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>ارتباط در تلگرام: @Alizhz</span>
+                    </a>
+                    <a
+                      href="mailto:alizerehsaz2001@gmail.com"
+                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>ارسال ایمیل: alizerehsaz2001@gmail.com</span>
+                    </a>
+                  </div>
+                </div>
+
                 {/* Action Buttons */}
                 <div className="flex items-center gap-3 pt-3">
                   <button
@@ -10573,7 +10548,7 @@ export default function App() {
                         showNotification("لطفاً شماره پیگیری یا شماره فیش واریز را وارد نمایید.", "error");
                         return;
                       }
-                      const prices: Record<number, number> = { 5: 250000, 10: 450000, 25: 950000, 50: 1750000 };
+                      const prices: Record<number, number> = { 5: 0, 10: 0, 25: 0, 50: 0 };
                       const newReq = {
                         id: "SR-" + Math.floor(100000 + Math.random() * 900000),
                         userId: String(currentUser?.id || "user"),
@@ -10581,7 +10556,7 @@ export default function App() {
                         userEmail: currentUser?.email || "user@example.com",
                         userCompany: currentUser?.companyName || "موسسه مالی",
                         requestedGB: selectedStorageGb,
-                        planPriceToman: prices[selectedStorageGb] || 250000,
+                        planPriceToman: prices[selectedStorageGb] || 0,
                         trackingCode: storageTrackingCode.trim(),
                         receiptNote: storageReceiptNote.trim(),
                         status: "pending" as const,
@@ -10618,7 +10593,6 @@ export default function App() {
           </div>
         )}
 
-      </div>
     </div>
   );
 }

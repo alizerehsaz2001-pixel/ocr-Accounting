@@ -77,6 +77,7 @@ export interface AuditLogEntry {
     name: string;
     role: string;
   };
+  metadata?: Record<string, any>;
 }
 
 export interface PreviousScan {
