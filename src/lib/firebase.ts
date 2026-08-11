@@ -1,10 +1,19 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, collection, getDocs, deleteDoc, onSnapshot } from "firebase/firestore";
+import { initializeFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, collection, getDocs, deleteDoc, onSnapshot } from "firebase/firestore";
 import firebaseConfig from "../../firebase-applet-config.json";
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
+
+// Initialize Firestore with experimentalForceLongPolling to avoid 10s WebSocket/gRPC timeouts in iframe/sandboxed environments
+export const db = initializeFirestore(
+  app,
+  {
+    experimentalForceLongPolling: true,
+  },
+  firebaseConfig.firestoreDatabaseId || "(default)"
+);
+
 export const auth = getAuth(app);
 export { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged };
 
@@ -58,7 +67,11 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // CRITICAL CONSTRAINT: When the application initially boots, test connection safely
 export async function testConnection() {
   try {
-    await getDocFromServer(doc(db, "test", "connection"));
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Connection check timeout")), 3000));
+    await Promise.race([
+      getDoc(doc(db, "test", "connection")),
+      timeoutPromise
+    ]);
     console.log("Firebase connection established successfully.");
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

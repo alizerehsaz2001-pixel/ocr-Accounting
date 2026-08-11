@@ -113,7 +113,6 @@ async function generateContentWithRetry(
   const candidateModels = [
     originalModel,
     "gemini-3.6-flash",
-    "gemini-3.6-flash",
     "gemini-flash-latest",
     "gemini-3.1-flash-lite"
   ];
@@ -454,7 +453,7 @@ ${JSON.stringify(transactions || [])}
   ]
 }`;
 
-        const response = await ai.models.generateContent({
+        const response = await generateContentWithRetry(ai, {
           model: "gemini-3.6-flash",
           contents: prompt,
           config: {
