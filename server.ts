@@ -520,8 +520,14 @@ app.post("/api/extract", async (req, res) => {
   try {
     const { image, mimeType, model, tokenSettings, userPrompt, chatFiles, pdfExtractionStrategy } = req.body;
 
-    if (!image) {
-       res.status(400).json({ error: "تصویر سند ارسال نشده است." });
+    let cleanImageBase64 = typeof image === "string" ? image : "";
+    if (cleanImageBase64.includes("base64,")) {
+      cleanImageBase64 = cleanImageBase64.split("base64,")[1];
+    }
+    cleanImageBase64 = cleanImageBase64.trim();
+
+    if (!cleanImageBase64) {
+       res.status(400).json({ error: "تصویر سند ارسال نشده است یا محتوای داده (Base64) خالی می‌باشد." });
        return;
     }
 
@@ -682,7 +688,7 @@ ${mlPromptAdditions}
     const imagePart = {
       inlineData: {
         mimeType: mimeType || "image/png",
-        data: image, // base64 string
+        data: cleanImageBase64,
       },
     };
 

@@ -44,7 +44,8 @@ export interface BatchOCRProgressItem {
   mimeType: string;
   base64: string;
   status: "queued" | "processing" | "retrying" | "success" | "error";
-  stage?: "queued" | "analyzing_layout" | "extracting_fields" | "verifying_math" | "saving" | "completed";
+  stage?: "queued" | "preprocessing" | "analyzing_layout" | "extracting_fields" | "verifying_math" | "saving" | "completed";
+  progressPercent?: number;
   attempt: number;
   statusMessage: string;
   extractedCount?: number;
@@ -138,7 +139,51 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
     ? Math.ceil((parseFloat(avgTimeSeconds) * remainingDocs) / adjustedWorkers)
     : null;
 
-  const progressPercent = totalCount > 0 ? Math.round(((successCount + errorCount) / totalCount) * 100) : 0;
+  const getItemPercent = (item: BatchOCRProgressItem): number => {
+    if (item.status === "success") return 100;
+    if (item.status === "queued") return 0;
+    if (item.progressPercent !== undefined) return item.progressPercent;
+    
+    switch (item.stage) {
+      case "preprocessing": return 15;
+      case "analyzing_layout": return 35;
+      case "extracting_fields": return 65;
+      case "verifying_math": return 88;
+      case "saving": return 92;
+      case "completed": return 100;
+      default: return item.status === "processing" ? 50 : 0;
+    }
+  };
+
+  const getItemStageStepText = (item: BatchOCRProgressItem): string => {
+    if (item.status === "success") return "مرحله ۵ از ۵: تکمیل استخراج";
+    if (item.status === "error") return `خطا در مرحله ${getStageStepNumber(item.stage)}`;
+    if (item.status === "queued") return "در صف انتظار";
+    
+    switch (item.stage) {
+      case "preprocessing": return "مرحله ۱ از ۵: پیش‌پردازش تصویر";
+      case "analyzing_layout": return "مرحله ۲ از ۵: تحلیل چیدمان";
+      case "extracting_fields": return "مرحله ۳ از ۵: استخراج Gemini";
+      case "verifying_math": return "مرحله ۴ از ۵: موازنه ریاضی";
+      case "saving": return "مرحله ۴ از ۵: ذخیره‌سازی";
+      case "completed": return "مرحله ۵ از ۵: تکمیل موفق";
+      default: return item.statusMessage || "در حال پردازش";
+    }
+  };
+
+  const getStageStepNumber = (stage?: string): number => {
+    switch (stage) {
+      case "preprocessing": return 1;
+      case "analyzing_layout": return 2;
+      case "extracting_fields": return 3;
+      case "verifying_math": case "saving": return 4;
+      case "completed": return 5;
+      default: return 1;
+    }
+  };
+
+  const overallProgressSum = items.reduce((sum, item) => sum + getItemPercent(item), 0);
+  const progressPercent = totalCount > 0 ? Math.round(overallProgressSum / totalCount) : 0;
 
   // Categories extraction
   const categoriesMap: Record<string, number> = {};
@@ -741,8 +786,8 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
                       )}
                     </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-bold truncate max-w-[200px] sm:max-w-[320px] text-slate-800 dark:text-slate-200">
                           {item.name}
                         </span>
@@ -756,78 +801,76 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
                         )}
                       </div>
 
-                      {/* Status Message */}
-                      <p className={`text-xs font-medium flex items-center gap-1.5 ${
-                        isSuccess ? "text-emerald-600 dark:text-emerald-400" : 
-                        isRetrying ? "text-amber-600 dark:text-amber-400" : 
-                        isProcessing ? "text-blue-600 dark:text-blue-400" : 
-                        isError ? "text-rose-600 dark:text-rose-400" :
-                        "text-slate-500 dark:text-slate-400"
-                      }`}>
-                        {isRetrying && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                        <span>{item.statusMessage}</span>
-                      </p>
+                      {/* Status & Stage Text */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className={`text-xs font-medium flex items-center gap-1.5 ${
+                          isSuccess ? "text-emerald-600 dark:text-emerald-400" : 
+                          isRetrying ? "text-amber-600 dark:text-amber-400" : 
+                          isProcessing ? "text-blue-600 dark:text-blue-400" : 
+                          isError ? "text-rose-600 dark:text-rose-400" :
+                          "text-slate-500 dark:text-slate-400"
+                        }`}>
+                          {isRetrying && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                          <span>{item.statusMessage}</span>
+                        </p>
+                      </div>
+
+                      {/* Individual Document Progress Bar */}
+                      <div className="w-full max-w-md bg-slate-200/80 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden mt-1.5 relative">
+                        <div 
+                          className={`h-full transition-all duration-500 rounded-full ${
+                            isSuccess ? "bg-emerald-500" 
+                            : isError ? "bg-rose-500" 
+                            : isRetrying ? "bg-amber-500" 
+                            : "bg-gradient-to-r from-blue-500 via-indigo-500 to-teal-400"
+                          }`}
+                          style={{ width: `${getItemPercent(item)}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right: Badges & Controls */}
+                  {/* Right: Stage Badge, Percentage & Controls */}
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                    {isProcessing && (
-                      <div className="px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 text-blue-600 dark:text-blue-400 text-[11px] font-bold flex items-center gap-1.5">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                        </span>
-                        <span>در حال استخراج...</span>
-                      </div>
-                    )}
-
-                    {isQueued && (
-                      <div className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-[11px] font-bold">
-                        در صف انتظار
-                      </div>
-                    )}
-
-                    {isRetrying && (
-                      <div className="px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] font-bold flex items-center gap-1.5">
-                        <span>تلاش مجدد ({item.attempt})</span>
-                      </div>
-                    )}
+                    {/* Stage & Percentage Badge */}
+                    <div className={`px-2.5 py-1 rounded-xl text-[11px] font-black flex items-center gap-1.5 border shadow-2xs ${
+                      isSuccess ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                      : isError ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                      : isRetrying ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                      : isProcessing ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700"
+                    }`}>
+                      <Zap className="w-3 h-3 text-current" />
+                      <span>{getItemStageStepText(item)}</span>
+                      <span className="font-extrabold dir-ltr text-[10px] opacity-90">({getItemPercent(item)}٪)</span>
+                    </div>
 
                     {isSuccess && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         {item.confidenceScore !== undefined && (
-                          <span className="px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold flex items-center gap-1.5 border border-emerald-100 dark:border-emerald-500/20">
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                            <span>{item.confidenceScore}% دقت</span>
+                          <span className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold flex items-center gap-1 border border-emerald-100 dark:border-emerald-500/20">
+                            <ShieldCheck className="w-3 h-3" />
+                            <span>{item.confidenceScore}%</span>
                           </span>
                         )}
-                        <span className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold flex items-center gap-1.5">
-                          <span>{item.extractedCount?.toLocaleString("fa-IR") || 0} ردیف</span>
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold">
+                          {item.extractedCount?.toLocaleString("fa-IR") || 0} ردیف
                         </span>
                       </div>
                     )}
 
-                    {isError && (
-                      <div className="flex items-center gap-2">
-                        {onRetryItem && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onRetryItem(item.id);
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] font-bold border border-amber-500/30 flex items-center gap-1 cursor-pointer"
-                            title="تلاش مجدد این سند"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                            <span>تلاش مجدد</span>
-                          </button>
-                        )}
-                        <span className="px-2.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 text-[11px] font-bold flex items-center gap-1">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          <span>خطا</span>
-                        </span>
-                      </div>
+                    {isError && onRetryItem && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRetryItem(item.id);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/30 flex items-center gap-1 cursor-pointer"
+                        title="تلاش مجدد این سند"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>تلاش مجدد</span>
+                      </button>
                     )}
 
                     {onRemoveItem && (
@@ -867,7 +910,57 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
                         isDarkMode ? "bg-slate-900/50 border-slate-800" : "bg-slate-50 border-slate-200"
                       }`}
                     >
-                      <div className="pt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {/* 5-Stage Stepper Pipeline Visualization */}
+                      <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 space-y-2">
+                        <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                          <span className="flex items-center gap-1.5">
+                            <Cpu className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
+                            <span>مراحل استخراج ۵ گانه موتور پردازش Gemini OCR:</span>
+                          </span>
+                          <span className="text-indigo-600 dark:text-indigo-400 font-extrabold dir-ltr">
+                            {getItemPercent(item)}٪
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                          {[
+                            { step: 1, name: "پیش‌پردازش تصویر", pct: 15, icon: "📸" },
+                            { step: 2, name: "تحلیل چیدمان", pct: 35, icon: "📐" },
+                            { step: 3, name: "Gemini OCR", pct: 65, icon: "⚡" },
+                            { step: 4, name: "موازنه و حسابرسی", pct: 88, icon: "⚖️" },
+                            { step: 5, name: "استخراج نهایی", pct: 100, icon: "✅" },
+                          ].map((st) => {
+                            const currentPct = getItemPercent(item);
+                            const isPassed = currentPct >= st.pct || isSuccess;
+                            const isActive = !isSuccess && !isError && (
+                              (st.step === 1 && (item.stage === "preprocessing" || currentPct <= 15)) ||
+                              (st.step === 2 && item.stage === "analyzing_layout") ||
+                              (st.step === 3 && item.stage === "extracting_fields") ||
+                              (st.step === 4 && (item.stage === "verifying_math" || item.stage === "saving")) ||
+                              (st.step === 5 && item.stage === "completed")
+                            );
+
+                            return (
+                              <div 
+                                key={st.step}
+                                className={`p-2 rounded-xl border flex flex-col items-center text-center transition-all ${
+                                  isPassed 
+                                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                                    : isActive
+                                    ? "bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-blue-300 shadow-xs scale-102"
+                                    : "bg-slate-100/60 dark:bg-slate-900/40 border-slate-200/60 dark:border-slate-800 text-slate-400"
+                                }`}
+                              >
+                                <div className="text-base mb-0.5">{st.icon}</div>
+                                <span className="text-[10px] font-extrabold leading-tight">{st.name}</span>
+                                <span className="text-[9px] font-medium opacity-80 mt-0.5 dir-ltr">{st.pct}٪</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs flex flex-col gap-1">
                           <span className="text-slate-500 dark:text-slate-400 font-medium text-[10px]">مدل استخراج:</span>
                           <span className="font-bold text-slate-800 dark:text-slate-200">{item.modelUsed || "Gemini Flash"}</span>

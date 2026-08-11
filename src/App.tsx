@@ -672,6 +672,7 @@ export default function App() {
 
   // Batch OCR Parallel Processing Engine States
   const [batchOCRItems, setBatchOCRItems] = useState<BatchOCRProgressItem[]>([]);
+  const batchOCRItemsRef = useRef<BatchOCRProgressItem[]>([]);
   const [isBatchProcessing, setIsBatchProcessing] = useState<boolean>(false);
   const [isBatchPanelOpen, setIsBatchPanelOpen] = useState<boolean>(false);
   const [isBatchPanelMinimized, setIsBatchPanelMinimized] = useState<boolean>(false);
@@ -721,11 +722,32 @@ export default function App() {
     chatFiles: any[] = []
   ): Promise<{ success: boolean; transactionsCount: number; error?: string }> => {
     let attempt = 1;
-    const maxAttempts = 50;
+    const maxAttempts = 10;
 
     const updateProgress = (patch: Partial<BatchOCRProgressItem>) => {
-      setBatchOCRItems(prev => prev.map(it => it.id === item.id ? { ...it, ...patch } : it));
+      const nextItems = batchOCRItemsRef.current.map(it => it.id === item.id ? { ...it, ...patch } : it);
+      batchOCRItemsRef.current = nextItems;
+      setBatchOCRItems(nextItems);
     };
+
+    // Sanitize and extract raw Base64 data
+    let cleanBase64 = item.base64 || "";
+    if (!cleanBase64 && item.preview && item.preview.includes("base64,")) {
+      cleanBase64 = item.preview.split("base64,")[1];
+    }
+    if (typeof cleanBase64 === "string" && cleanBase64.includes("base64,")) {
+      cleanBase64 = cleanBase64.split("base64,")[1];
+    }
+    cleanBase64 = cleanBase64 ? cleanBase64.trim() : "";
+
+    if (!cleanBase64) {
+      updateProgress({
+        status: "error",
+        statusMessage: "خطا: داده Base64 سند خالی یا نامعتبر است.",
+        errorMessage: "پای‌لود Base64 نامعتبر است"
+      });
+      return { success: false, transactionsCount: 0, error: "پای‌لود Base64 نامعتبر است" };
+    }
 
     const scanId = item.scanId || item.id;
     const finalPrompt = userPrompt || getCompiledAIInstructions();
@@ -733,17 +755,31 @@ export default function App() {
     const startTime = Date.now();
     updateProgress({
       status: "processing",
-      stage: "analyzing_layout",
+      stage: "preprocessing",
+      progressPercent: 15,
       attempt: 1,
-      statusMessage: "در حال تحلیل ساختار چیدمان و الگوی سند...",
+      statusMessage: "مرحله ۱ از ۵ (۱۵٪): پیش‌پردازش تصویر، بصرسازی و تفکیک زون‌ها...",
       startTime,
       modelUsed: selectedModel
     });
+
+    await new Promise(res => setTimeout(res, 250));
+
+    updateProgress({
+      status: "processing",
+      stage: "analyzing_layout",
+      progressPercent: 35,
+      statusMessage: "مرحله ۲ از ۵ (۳۵٪): تحلیل ساختار چیدمان، زون‌بندی و جدول اقلام...",
+    });
+
+    await new Promise(res => setTimeout(res, 250));
 
     while (attempt <= maxAttempts) {
       if (cancelBatchRef.current) {
         updateProgress({
           status: "error",
+          stage: "queued",
+          progressPercent: 0,
           statusMessage: "عملیات پردازش توسط کاربر لغو شد.",
           errorMessage: "لغو شده"
         });
@@ -757,6 +793,8 @@ export default function App() {
       if (cancelBatchRef.current) {
         updateProgress({
           status: "error",
+          stage: "queued",
+          progressPercent: 0,
           statusMessage: "عملیات پردازش توسط کاربر لغو شد.",
           errorMessage: "لغو شده"
         });
@@ -777,35 +815,57 @@ export default function App() {
           updateProgress({
             status: "retrying",
             stage: "extracting_fields",
+            progressPercent: 65,
             attempt,
             modelUsed: modelToUse,
-            statusMessage: `تلاش شماره ${attempt} - ارسال مجدد به ${modelToUse}...`
+            statusMessage: `مرحله ۳ از ۵ (۶۵٪): تلاش شماره ${attempt} - ارسال مجدد به ${modelToUse}...`
           });
         } else {
           updateProgress({
             status: "processing",
             stage: "extracting_fields",
+            progressPercent: 65,
             attempt: 1,
             modelUsed: modelToUse,
             statusMessage: isPdf && pdfExtractionStrategy === "pdf_to_markdown_to_json"
-              ? "در حال تبدیل PDF به متن ساختاریافته Markdown و استخراج JSON..."
-              : "در حال استخراج هوشمند لایه‌ها و جدول اقلام..."
+              ? "مرحله ۳ از ۵ (۶۵٪): تبدیل PDF به متن ساختاریافته Markdown و استخراج JSON..."
+              : "مرحله ۳ از ۵ (۶۵٪): ارسال سند به Gemini OCR و استخراج هوشمند فیلدها..."
           });
         }
 
-        const response = await fetch("/api/extract", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image: item.base64,
-            mimeType: item.mimeType,
-            model: modelToUse,
-            tokenSettings,
-            userPrompt: finalPrompt,
-            chatFiles,
-            pdfExtractionStrategy,
-          }),
-        });
+        // Live progress ticker while awaiting API call
+        const progressTicker = setInterval(() => {
+          setBatchOCRItems(prev => prev.map(it => {
+            if (it.id === item.id && it.status === "processing" && (it.progressPercent || 0) < 82) {
+              const nextPct = Math.min(82, (it.progressPercent || 65) + 4);
+              return {
+                ...it,
+                progressPercent: nextPct,
+                statusMessage: `مرحله ۳ از ۵ (${nextPct}٪): در حال دریافت و تحلیل هوشمند از Gemini OCR...`
+              };
+            }
+            return it;
+          }));
+        }, 1200);
+
+        let response: Response;
+        try {
+          response = await fetch("/api/extract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              image: cleanBase64,
+              mimeType: item.mimeType,
+              model: modelToUse,
+              tokenSettings,
+              userPrompt: finalPrompt,
+              chatFiles,
+              pdfExtractionStrategy,
+            }),
+          });
+        } finally {
+          clearInterval(progressTicker);
+        }
 
         const result = await response.json();
 
@@ -917,9 +977,19 @@ export default function App() {
             : 100;
 
           updateProgress({
+            status: "processing",
+            stage: "verifying_math",
+            progressPercent: 88,
+            statusMessage: "مرحله ۴ از ۵ (۸۸٪): حسابرسی، کنترل موازنه بدهکار/بستانکار و اعتبارسنجی ریاضی...",
+          });
+
+          await new Promise(res => setTimeout(res, 200));
+
+          updateProgress({
             status: "success",
             stage: "completed",
-            statusMessage: `استخراج موفقیت‌آمیز! (${extractedItems.length.toLocaleString("fa-IR")} ردیف مالی استخراج گردید)`,
+            progressPercent: 100,
+            statusMessage: `مرحله ۵ از ۵ (۱۰۰٪): استخراج و موازنه موفق! (${extractedItems.length.toLocaleString("fa-IR")} ردیف مالی استخراج گردید)`,
             extractedCount: extractedItems.length,
             confidenceScore: avgConfidence,
             documentType,
@@ -934,7 +1004,17 @@ export default function App() {
           logEvent("استخراج موازی موفق", `سند «${item.name}» با موفقیت در تلاش ${attempt} استخراج گردید.`);
           return { success: true, transactionsCount: extractedItems.length };
         } else {
-          throw new Error(result.error || `پاسخ ناموفق از سرور (کد ${response.status})`);
+          const isNonRetriable = response && (response.status === 400 || response.status === 401 || response.status === 403 || response.status === 413 || response.status === 422);
+          const errMsg = result?.error || `پاسخ ناموفق از سرور (کد ${response?.status || "نامشخص"})`;
+          if (isNonRetriable) {
+            updateProgress({
+              status: "error",
+              statusMessage: `خطای غیرقابل جبران (${response.status}): ${errMsg}`,
+              errorMessage: errMsg
+            });
+            return { success: false, transactionsCount: 0, error: errMsg };
+          }
+          throw new Error(errMsg);
         }
       } catch (err: any) {
         console.warn(`Attempt ${attempt} for file ${item.name} failed:`, err.message);
@@ -965,6 +1045,27 @@ export default function App() {
     return { success: false, transactionsCount: 0, error: "تلاش‌ها به پایان رسید" };
   };
 
+  const claimNextQueuedItem = (workerId: number): BatchOCRProgressItem | null => {
+    const queuedIndex = batchOCRItemsRef.current.findIndex(item => item.status === "queued");
+    if (queuedIndex === -1) return null;
+
+    const original = batchOCRItemsRef.current[queuedIndex];
+    const updatedItem: BatchOCRProgressItem = {
+      ...original,
+      status: "processing",
+      stage: "preprocessing",
+      progressPercent: 15,
+      statusMessage: `در حال استخراج توسط کارگر شماره ${workerId + 1}...`
+    };
+
+    const nextItems = [...batchOCRItemsRef.current];
+    nextItems[queuedIndex] = updatedItem;
+    batchOCRItemsRef.current = nextItems;
+    setBatchOCRItems(nextItems);
+
+    return updatedItem;
+  };
+
   const runBatchWorkerPool = async (userPrompt: string = "") => {
     cancelBatchRef.current = false;
     setIsBatchProcessing(true);
@@ -976,27 +1077,23 @@ export default function App() {
         }
         if (cancelBatchRef.current) break;
 
-        let targetItem: BatchOCRProgressItem | null = null;
-        setBatchOCRItems(prev => {
-          const queuedIndex = prev.findIndex(item => item.status === "queued");
-          if (queuedIndex !== -1) {
-            targetItem = { ...prev[queuedIndex] };
-            const updated = [...prev];
-            updated[queuedIndex] = {
-              ...updated[queuedIndex],
-              status: "processing",
-              statusMessage: `در حال استخراج توسط کارگر شماره ${workerId + 1}...`
-            };
-            return updated;
-          }
-          return prev;
-        });
-
+        const targetItem = claimNextQueuedItem(workerId);
         if (!targetItem) {
           break;
         }
 
-        await processSingleFileWithAutoRetry(targetItem, userPrompt);
+        try {
+          await processSingleFileWithAutoRetry(targetItem, userPrompt);
+        } catch (workerErr: any) {
+          console.error(`Worker ${workerId} encountered an uncaught error on ${targetItem.id}:`, workerErr);
+          const nextItems = batchOCRItemsRef.current.map(it =>
+            it.id === targetItem.id
+              ? { ...it, status: "error" as const, statusMessage: `خطا در کارگر: ${workerErr?.message || "خطای غیرمنتظره"}` }
+              : it
+          );
+          batchOCRItemsRef.current = nextItems;
+          setBatchOCRItems(nextItems);
+        }
       }
     };
 
@@ -1009,7 +1106,7 @@ export default function App() {
   };
 
   const handleRetryFailedBatchItems = () => {
-    setBatchOCRItems(prev => prev.map(item => {
+    const updated = batchOCRItemsRef.current.map(item => {
       if (item.status === "error") {
         return {
           ...item,
@@ -1019,12 +1116,14 @@ export default function App() {
         };
       }
       return item;
-    }));
+    });
+    batchOCRItemsRef.current = updated;
+    setBatchOCRItems(updated);
     runBatchWorkerPool();
   };
 
   const handleRetrySingleBatchItem = (itemId: string) => {
-    setBatchOCRItems(prev => prev.map(item => {
+    const updated = batchOCRItemsRef.current.map(item => {
       if (item.id === itemId) {
         return {
           ...item,
@@ -1034,12 +1133,16 @@ export default function App() {
         };
       }
       return item;
-    }));
+    });
+    batchOCRItemsRef.current = updated;
+    setBatchOCRItems(updated);
     runBatchWorkerPool();
   };
 
   const handleRemoveBatchItem = (itemId: string) => {
-    setBatchOCRItems(prev => prev.filter(item => item.id !== itemId));
+    const updated = batchOCRItemsRef.current.filter(item => item.id !== itemId);
+    batchOCRItemsRef.current = updated;
+    setBatchOCRItems(updated);
     showNotification("سند از صف پردازش حذف گردید.", "info");
   };
 
@@ -1079,6 +1182,7 @@ export default function App() {
       startTime: Date.now()
     }));
 
+    batchOCRItemsRef.current = initialItems;
     setBatchOCRItems(initialItems);
 
     showNotification(`پردازش موازی برای ${fileList.length.toLocaleString("fa-IR")} سند با ظرفیت ${batchConcurrencyLimitRef.current} کارگر همزمان آغاز شد.`, "info");
@@ -1483,14 +1587,13 @@ export default function App() {
     localStorage.setItem("document_audit_logs", JSON.stringify(auditLogs));
   }, [auditLogs]);
 
-  const logEvent = (action: string, details: string, type: 'info' | 'success' | 'warning' | 'error' | 'auth' = 'info', metadata?: Record<string, any>) => {
+  const logEvent = (action: string, details: string, type: 'info' | 'success' | 'warning' | 'error' | 'auth' = 'info') => {
     const newLog: import('./types').AuditLogEntry = {
       id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 9),
       timestamp: new Date().toISOString(),
       action,
       details,
       type,
-      metadata,
       user: currentUser ? {
         name: currentUser.name || currentUser.firstName + ' ' + currentUser.lastName,
         role: currentUser.role
@@ -3126,82 +3229,114 @@ export default function App() {
 
   // Convert File object to Base64 safely with auto-resizing to prevent payload size limits
   const convertFileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        
-        // Skip image resizing for PDFs
-        if (file.type === "application/pdf") {
-          resolve(result.split(",")[1]);
-          return;
-        }
+    return new Promise((resolve) => {
+      const fallbackRawBase64 = () => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const res = (e.target?.result as string || "").split(",")[1] || "";
+          resolve(res);
+        };
+        reader.onerror = () => resolve("");
+        reader.readAsDataURL(file);
+      };
 
-        const img = new Image();
-        img.src = result;
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          let MAX_WIDTH = 1600;
-          let MAX_HEIGHT = 1600;
-          let quality = 0.82;
+      const safetyTimer = setTimeout(() => {
+        fallbackRawBase64();
+      }, 2500);
 
-          if (tokenSettings.imageResolution === "super-eco") {
-            MAX_WIDTH = 600;
-            MAX_HEIGHT = 600;
-            quality = 0.35;
-          } else if (tokenSettings.imageResolution === "balanced") {
-            MAX_WIDTH = 1000;
-            MAX_HEIGHT = 1000;
-            quality = 0.55;
-          } else if (tokenSettings.imageResolution === "high") {
-            MAX_WIDTH = 1800;
-            MAX_HEIGHT = 1800;
-            quality = 0.82;
-          }
-
-          let width = img.width;
-          let height = img.height;
-
-          // Compute new dimensions keeping aspect ratio
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-
-          const ctx = canvas.getContext("2d");
-          if (!ctx) {
-            // Fallback to raw base64 if canvas context is not available
-            const base64Data = (event.target?.result as string).split(",")[1];
-            resolve(base64Data);
+      try {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const result = event.target?.result as string;
+          
+          if (!result) {
+            clearTimeout(safetyTimer);
+            resolve("");
             return;
           }
 
-          // Draw image to canvas
-          ctx.drawImage(img, 0, 0, width, height);
+          // Skip image resizing for PDFs
+          if (file.type === "application/pdf") {
+            clearTimeout(safetyTimer);
+            resolve(result.split(",")[1] || "");
+            return;
+          }
 
-          // Export as JPEG with chosen optimized quality
-          const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
-          const base64Data = compressedDataUrl.split(",")[1];
-          resolve(base64Data);
+          const img = new Image();
+          img.src = result;
+          img.onload = () => {
+            clearTimeout(safetyTimer);
+            try {
+              const canvas = document.createElement("canvas");
+              let MAX_WIDTH = 1600;
+              let MAX_HEIGHT = 1600;
+              let quality = 0.82;
+
+              if (tokenSettings.imageResolution === "super-eco") {
+                MAX_WIDTH = 600;
+                MAX_HEIGHT = 600;
+                quality = 0.35;
+              } else if (tokenSettings.imageResolution === "balanced") {
+                MAX_WIDTH = 1000;
+                MAX_HEIGHT = 1000;
+                quality = 0.55;
+              } else if (tokenSettings.imageResolution === "high") {
+                MAX_WIDTH = 1800;
+                MAX_HEIGHT = 1800;
+                quality = 0.82;
+              }
+
+              let width = img.width;
+              let height = img.height;
+
+              if (width > height) {
+                if (width > MAX_WIDTH) {
+                  height *= MAX_WIDTH / width;
+                  width = MAX_WIDTH;
+                }
+              } else {
+                if (height > MAX_HEIGHT) {
+                  width *= MAX_HEIGHT / height;
+                  height = MAX_HEIGHT;
+                }
+              }
+
+              canvas.width = Math.max(10, width);
+              canvas.height = Math.max(10, height);
+
+              const ctx = canvas.getContext("2d");
+              if (!ctx) {
+                const base64Data = result.split(",")[1] || "";
+                resolve(base64Data);
+                return;
+              }
+
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
+              const base64Data = compressedDataUrl.split(",")[1] || result.split(",")[1] || "";
+              resolve(base64Data);
+            } catch (e) {
+              const base64Data = result.split(",")[1] || "";
+              resolve(base64Data);
+            }
+          };
+
+          img.onerror = () => {
+            clearTimeout(safetyTimer);
+            const base64Data = result.split(",")[1] || "";
+            resolve(base64Data);
+          };
         };
-        img.onerror = () => {
-          const result = reader.result as string;
-          const base64Data = result.split(",")[1];
-          resolve(base64Data);
+
+        reader.onerror = () => {
+          clearTimeout(safetyTimer);
+          resolve("");
         };
-      };
-      reader.onerror = (error) => reject(error);
+      } catch (e) {
+        clearTimeout(safetyTimer);
+        resolve("");
+      }
     });
   };
 
