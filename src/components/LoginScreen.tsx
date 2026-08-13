@@ -56,6 +56,8 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
   const [fullName, setFullName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [userPhone, setUserPhone] = useState("");
   const [userNationalCode, setUserNationalCode] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -158,6 +160,12 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
       newErrors.password = "رمز عبور باید حداقل ۶ کاراکتر باشد.";
     }
 
+    if (!confirmPassword) {
+      newErrors.confirmPassword = "تکرار رمز عبور الزامی است.";
+    } else if (confirmPassword !== password) {
+      newErrors.confirmPassword = "رمز عبور و تکرار آن یکسان نیستند.";
+    }
+
     if (!userPhone.trim()) {
       newErrors.userPhone = "شماره همراه الزامی است.";
     } else if (!/^09\d{9}$/.test(userPhone.trim())) {
@@ -196,9 +204,11 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
     setLoading(true);
     setErrorMessage(null);
 
+    const cleanEmail = userEmail.trim().toLowerCase();
+
     try {
       // 1. Create firebase user using Email & Password
-      const credential = await createUserWithEmailAndPassword(auth, userEmail.trim(), password);
+      const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
       const user = credential.user;
 
       if (!user) {
@@ -213,7 +223,7 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
         name: fullName.trim(),
         firstName: fullName.trim().split(" ")[0] || "",
         lastName: fullName.trim().split(" ").slice(1).join(" ") || "",
-        email: userEmail.trim().toLowerCase(),
+        email: cleanEmail,
         phone: userPhone.trim(),
         nationalCode: userNationalCode.trim(),
         companyName: companyName.trim(),
@@ -243,7 +253,66 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
       console.error("Manual registration error:", err);
       let farsiError = "خطایی در فرآیند ثبت‌نام رخ داد.";
       if (err.code === "auth/email-already-in-use") {
-        farsiError = "این آدرس ایمیل قبلاً در سامانه ثبت شده است. لطفاً وارد شوید.";
+        // Automatically attempt login if email is already registered
+        try {
+          const signInCred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+          if (signInCred.user) {
+            const userDocRef = doc(db, "users", signInCred.user.uid);
+            let userSnap = null;
+            try {
+              userSnap = await getDoc(userDocRef);
+            } catch (snapErr) {
+              console.warn("Firestore lookup error:", snapErr);
+            }
+
+            if (userSnap && userSnap.exists()) {
+              const userData = userSnap.data();
+              showNotification(`حساب کاربری شما قبلاً ایجاد شده بود. ورود موفقیت‌آمیز انجام شد. خوش آمدید، ${userData.name || 'کاربر'}!`, "success");
+              onEnterDemo(
+                userData.name,
+                userData.email || cleanEmail,
+                userData.phone || userPhone.trim(),
+                userData.companyName || companyName.trim(),
+                userData.nationalCode || userNationalCode.trim(),
+                userData.jobTitle || jobTitle.trim()
+              );
+              return;
+            } else {
+              const payload = {
+                id: signInCred.user.uid,
+                name: fullName.trim() || signInCred.user.displayName || "کاربر",
+                firstName: fullName.trim().split(" ")[0] || "",
+                lastName: fullName.trim().split(" ").slice(1).join(" ") || "",
+                email: cleanEmail,
+                phone: userPhone.trim(),
+                nationalCode: userNationalCode.trim(),
+                companyName: companyName.trim(),
+                jobTitle: jobTitle.trim(),
+                role: "user",
+                status: "active",
+                createdAt: new Date().toISOString(),
+                isOnboarded: true
+              };
+              try {
+                await setDoc(userDocRef, payload);
+              } catch (writeErr) {
+                console.warn("Could not write user profile:", writeErr);
+              }
+              showNotification("ورود با موفقیت انجام شد و مشخصات حساب شما به‌روزرسانی گردید.", "success");
+              onEnterDemo(
+                payload.name,
+                payload.email,
+                payload.phone,
+                payload.companyName,
+                payload.nationalCode,
+                payload.jobTitle
+              );
+              return;
+            }
+          }
+        } catch (loginErr: any) {
+          farsiError = "این آدرس ایمیل قبلاً در سامانه ثبت شده است. اگر حساب متعلق به شماست، رمز عبور وارد شده نادرست است یا می‌توانید از تب «ورود دستی» استفاده نمایید.";
+        }
       } else if (err.code === "auth/weak-password") {
         farsiError = "رمز عبور ضعیف است. رمز عبور باید حداقل ۶ کاراکتر باشد.";
       } else if (err.code === "auth/invalid-email") {
@@ -262,7 +331,9 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!userEmail.trim()) {
+    const cleanEmail = userEmail.trim().toLowerCase();
+
+    if (!cleanEmail) {
       showNotification("آدرس ایمیل الزامی است.", "error");
       return;
     }
@@ -274,7 +345,7 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
     setLoading(true);
 
     try {
-      const credential = await signInWithEmailAndPassword(auth, userEmail.trim(), password);
+      const credential = await signInWithEmailAndPassword(auth, cleanEmail, password);
       const user = credential.user;
 
       if (!user) {
@@ -283,33 +354,65 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
 
       // Fetch user profile from Firestore
       const userDocRef = doc(db, "users", user.uid);
-      const userSnap = await getDoc(userDocRef);
+      let userSnap = null;
+      try {
+        userSnap = await getDoc(userDocRef);
+      } catch (docErr) {
+        console.warn("Firestore lookup error during login:", docErr);
+      }
 
-      if (userSnap.exists()) {
+      if (userSnap && userSnap.exists()) {
         const userData = userSnap.data();
-        showNotification(`خوش آمدید، ${userData.name}!`, "success");
+        showNotification(`خوش آمدید، ${userData.name || user.displayName || 'کاربر'}!`, "success");
         onEnterDemo(
           userData.name, 
-          userData.email, 
+          userData.email || user.email || cleanEmail, 
           userData.phone || "", 
           userData.companyName || "", 
           userData.nationalCode || "", 
           userData.jobTitle || ""
         );
       } else {
-        // Fallback if auth exists but no doc (e.g. incomplete registration)
-        setFullName(user.displayName || "");
-        setUserEmail(user.email || "");
-        setActiveTab("register");
-        showNotification("لطفاً برای تکمیل فرآیند، مشخصات ممیزی خود را وارد کنید.", "info");
+        // Fallback: create profile if user auth exists but doc is missing
+        const displayName = user.displayName || cleanEmail.split("@")[0] || "کاربر سامانه";
+        const fallbackProfile = {
+          id: user.uid,
+          name: displayName,
+          firstName: displayName.split(" ")[0] || "کاربر",
+          lastName: displayName.split(" ").slice(1).join(" ") || "",
+          email: user.email || cleanEmail,
+          phone: userPhone.trim() || "",
+          nationalCode: userNationalCode.trim() || "",
+          companyName: companyName.trim() || "سازمان (ورود دستی)",
+          jobTitle: jobTitle.trim() || "کاربر سیستم",
+          role: "user",
+          status: "active",
+          createdAt: new Date().toISOString(),
+          isOnboarded: true
+        };
+        try {
+          await setDoc(userDocRef, fallbackProfile);
+        } catch (e) {
+          console.warn("Could not save fallback profile to Firestore:", e);
+        }
+
+        showNotification(`ورود با موفقیت انجام شد. خوش آمدید، ${displayName}!`, "success");
+        onEnterDemo(
+          fallbackProfile.name,
+          fallbackProfile.email,
+          fallbackProfile.phone,
+          fallbackProfile.companyName,
+          fallbackProfile.nationalCode,
+          fallbackProfile.jobTitle
+        );
       }
     } catch (err: any) {
       console.error("Manual login error:", err);
       let farsiError = "ایمیل یا رمز عبور اشتباه است.";
-      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
-        farsiError = "ایمیل یا رمز عبور وارد شده با مشخصات سامانه همخوانی ندارد.";
-      } else if (err.code === "auth/invalid-credential") {
-        farsiError = "کد اعتبارسنجی نامعتبر است یا مشخصات نادرست می‌باشد.";
+      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+        farsiError = "ایمیل یا رمز عبور وارد شده با مشخصات سامانه همخوانی ندارد. لطفاً ابتدا ثبت‌نام کنید یا از رمز عبور صحیح استفاده نمایید.";
+      } else if (err.code === "auth/invalid-email") {
+        farsiError = "فرمت آدرس ایمیل وارد شده نامعتبر است.";
       } else if (err.message) {
         farsiError = err.message;
       }
@@ -612,40 +715,80 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                   </div>
                 </div>
 
-                {/* Password field */}
-                <div className="space-y-2 text-right">
-                  <label className={`text-[10px] font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    <span>رمز عبور (حداقل ۶ کاراکتر)</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      placeholder="گذرواژه امن خود را وارد کنید"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (errors.password) setErrors(prev => ({ ...prev, password: "" }));
-                      }}
-                      className={`w-full px-3.5 py-3 rounded-xl text-[11px] font-medium border text-left font-mono outline-none transition-colors ${
-                        errors.password 
-                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500" 
-                          : isDarkMode ? "bg-[#1A1A1D] border-white/10 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-slate-400 focus:bg-white"
-                      }`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute left-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                {/* Password and Confirm Password Row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-2 text-right">
+                    <label className={`text-[10px] font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      <span>رمز عبور (حداقل ۶ کاراکتر)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="گذرواژه امن خود را وارد کنید"
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (errors.password) setErrors(prev => ({ ...prev, password: "" }));
+                          if (errors.confirmPassword && confirmPassword === e.target.value) {
+                            setErrors(prev => ({ ...prev, confirmPassword: "" }));
+                          }
+                        }}
+                        className={`w-full px-3.5 py-3 rounded-xl text-[11px] font-medium border text-left font-mono outline-none transition-colors ${
+                          errors.password 
+                            ? "border-rose-500/50 bg-rose-500/5 text-rose-500" 
+                            : isDarkMode ? "bg-[#1A1A1D] border-white/10 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-slate-400 focus:bg-white"
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute left-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {errors.password && (
+                      <p className="text-[9px] text-rose-500 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>{errors.password}</span>
+                      </p>
+                    )}
                   </div>
-                  {errors.password && (
-                    <p className="text-[9px] text-rose-500 font-bold flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      <span>{errors.password}</span>
-                    </p>
-                  )}
+
+                  <div className="space-y-2 text-right">
+                    <label className={`text-[10px] font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      <span>تکرار رمز عبور</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="تکرار گذرواژه را وارد کنید"
+                        value={confirmPassword}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: "" }));
+                        }}
+                        className={`w-full px-3.5 py-3 rounded-xl text-[11px] font-medium border text-left font-mono outline-none transition-colors ${
+                          errors.confirmPassword 
+                            ? "border-rose-500/50 bg-rose-500/5 text-rose-500" 
+                            : isDarkMode ? "bg-[#1A1A1D] border-white/10 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-slate-400 focus:bg-white"
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute left-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {errors.confirmPassword && (
+                      <p className="text-[9px] text-rose-500 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>{errors.confirmPassword}</span>
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Row 2: Phone and National ID */}
