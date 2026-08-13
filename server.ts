@@ -121,12 +121,11 @@ async function generateContentWithRetry(
 ): Promise<any> {
   const originalModel = generateConfig.model;
   
-  // Construct the sequence of fallback models to try if the primary model fails or is overloaded
+  // Construct the sequence of models to try if the primary model fails or is overloaded
   const candidateModels = [
     originalModel,
-    "gemini-3.6-flash",
-    "gemini-flash-latest",
-    "gemini-3.1-flash-lite"
+    "gemini-3.7-flash",
+    "gemini-flash-latest"
   ];
   
   // Filter out duplicates and null/undefined values
@@ -143,10 +142,6 @@ async function generateContentWithRetry(
     while (attempt <= maxRetries) {
       try {
         const currentConfig = { ...generateConfig };
-        if (currentModel === "gemini-3.1-pro-preview") {
-          currentConfig.config = currentConfig.config || {};
-          currentConfig.config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
-        }
 
         const response = await ai.models.generateContent({
           ...currentConfig,
@@ -522,14 +517,12 @@ app.post("/api/extract", async (req, res) => {
 
     const ai = getGeminiClient();
 
-    // Dynamically select target backend model based on user's selection panel
+    // Target backend model powered by Gemini 3.7 Flash Ultra Gen 7
     const allowedModels = [
-      "gemini-3.6-flash",
-      "gemini-3.6-flash",
-      "gemini-flash-latest",
-      "gemini-3.1-pro-preview"
+      "gemini-3.7-flash",
+      "gemini-flash-latest"
     ];
-    let selectedModel = allowedModels.includes(model) ? model : "gemini-3.6-flash";
+    let selectedModel = allowedModels.includes(model) ? model : "gemini-3.7-flash";
 
     const memory = loadLearnedMemory();
     let mlPromptAdditions = "";
@@ -810,7 +803,8 @@ app.post("/api/audit-repair", async (req, res) => {
     }
 
     const ai = getGeminiClient();
-    const selectedModel = ["gemini-3.6-flash", "gemini-3.1-pro-preview"].includes(model) ? model : "gemini-3.6-flash";
+    const allowedRepairModels = ["gemini-3.7-flash", "gemini-flash-latest"];
+    const selectedModel = allowedRepairModels.includes(model) ? model : "gemini-3.7-flash";
 
     console.info("[API Audit Repair] Initiating on-demand mathematical alignment and OCR healing...");
 
@@ -908,7 +902,7 @@ app.post("/api/chat-pre-extract", async (req, res) => {
       }
     }
 
-    const selectedModel = model || "gemini-3.6-flash";
+    const selectedModel = model || "gemini-3.7-flash";
 
     const response = await generateContentWithRetry(ai, {
       model: selectedModel,
@@ -972,7 +966,7 @@ app.post("/api/chat-verification", async (req, res) => {
        ]
     });
 
-    const selectedModel = model || "gemini-3.6-flash";
+    const selectedModel = model || "gemini-3.7-flash";
 
     const response = await generateContentWithRetry(ai, {
       model: selectedModel,
@@ -1051,7 +1045,7 @@ app.post("/api/document-chat", async (req, res) => {
       }
     }
 
-    const selectedModel = model || "gemini-3.6-flash";
+    const selectedModel = model || "gemini-3.7-flash";
 
     const response = await generateContentWithRetry(ai, {
       model: selectedModel,
@@ -1087,7 +1081,7 @@ app.post("/api/chat", async (req, res) => {
     }));
 
     const response = await generateContentWithRetry(ai, {
-      model: "gemini-3.6-flash",
+      model: "gemini-3.7-flash",
       contents: contents,
       config: {
         systemInstruction: ERP_SUPPORT_SYSTEM_INSTRUCTION,
@@ -1201,7 +1195,7 @@ app.post("/api/auto-categorize", async (req, res) => {
     const prompt = `لیست فایل‌های مالی جهت دسته‌بندی هوشمند:\n${JSON.stringify(files, null, 2)}`;
 
     const response = await generateContentWithRetry(ai, {
-      model: "gemini-3.6-flash",
+      model: "gemini-3.7-flash",
       contents: prompt,
       config: {
         systemInstruction: AUTO_CATEGORIZE_SYSTEM_INSTRUCTION,

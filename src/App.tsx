@@ -1470,14 +1470,13 @@ export default function App() {
   // AI Model Selection & Daily Quota States
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     const saved = localStorage.getItem("selected_ai_model");
-    if (saved && saved !== "gemini-3.1-pro-preview") return saved;
-    return "gemini-3.6-flash";
+    if (saved && saved !== "gemini-3.6-flash" && saved !== "gemini-3.1-pro-preview") return saved;
+    return "gemini-3.7-flash";
   });
 
   const [modelQuotas, setModelQuotas] = useState<{ [key: string]: { limit: number; used: number; lastReset: number } }>(() => {
     const defaultQuotas = {
-      "gemini-3.6-flash": { limit: 2000, used: 0, lastReset: Date.now() },
-      "gemini-3.1-pro-preview": { limit: 50, used: 0, lastReset: Date.now() },
+      "gemini-3.7-flash": { limit: 5000, used: 0, lastReset: Date.now() },
     };
 
     const saved = localStorage.getItem("ai_model_quotas");
