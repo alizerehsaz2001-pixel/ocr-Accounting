@@ -16,7 +16,7 @@ export interface DynamicFieldValue {
 
 export interface DynamicRow {
   id: string; // client-side unique tracker
-  ضریب_اطمینان: number | null;
+  ضریب_اطمینان?: number | null;
   فیلد_ها: DynamicFieldValue[];
 }
 

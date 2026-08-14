@@ -562,31 +562,21 @@ app.post("/api/extract", async (req, res) => {
       systemInstruction += `\n\n${mlPromptAdditions}`;
     }
 
-    let promptText = `لطفاً داده‌های موجود در تصویر یا سند پیوست شده را به دقت تحلیل کرده و نوع سند و محتوای آن‌را مطابق آن‌چه دقیقاً در تصویر می‌بینید در یک آبجکت JSON استخراج کنید و هیچ متنی خارج از JSON تولید نکنید.`;
+    let promptText = `سند پیوست را با موتور ممیزی نسل ۷ آلترا به دقت تحلیل کرده و تمامی اطلاعات، مشخصات طرفین، ردیف‌های جدول به همراه «شرح کامل و جزء‌به‌جزء کالاها و خدمات» و همچنین «تمام توضیحات، یادداشت‌های حاشیه‌ای، بابت/علت صدور و شروط معامله» را بدون کوچک‌ترین حذف، تلخیص یا کوتاه‌سازی، با جزئیات کامل در قالب شیء JSON استاندارد استخراج نمایید.`;
 
     if (userPrompt && typeof userPrompt === "string" && userPrompt.trim()) {
-      promptText += `\n\n[دستور اختصاصی حسابدار / کاربر برای استخراج]:\n${userPrompt}\nلطفا توجه ویژه‌ای به این دستور کاربر داشته باشید و ترجیحاً استخراج و تحلیل را بر مبنای این درخواست انجام دهید.`;
-      if (userPrompt.includes("۱۰۰٪") || userPrompt.includes("دستور اکید") || userPrompt.includes("تمام اطلاعات") || userPrompt.includes("قطعی و الزام‌آور")) {
-        promptText += `\n\n🚨 [هشدار و دستور اکید استخراج ۱۰۰٪ جامع و بدون استثنا]: کاربر حالت Full Excel را فعال کرده است. شما به عنوان یک حسابرس ارشد موظف هستید تک‌تک اعداد، متون، جداول، کدهای اقتصادی، شناسه‌های ملی، آدرس‌ها، تلفن‌ها، تک‌تک سطرهای فاکتور (هر تعداد ردیف که باشد)، شرح کالاها با تمامی جزئیات، مقادیر، قیمت‌های واحد، تخفیفات، مالیات بر ارزش افزوده، عوارض، جمع کل، اطلاعات حساب و شبا، و تمامی یادداشت‌ها و شروط حاشیه‌ای سند را بدون کوچک‌ترین حذف، تلخیص یا خلاصه‌سازی استخراج کنید. جا انداختن حتی یک سطر از جدول یا یک فیلد از هدر، خطای نابخشودنی و حیاتی محسوب می‌شود و به هیچ وجه نباید اطلاعات را ادغام یا نادیده بگیرید. تک‌تک ردیف‌های جدول باید در JSON استخراج شوند و اطلاعات هدر و فوتر فاکتور در تمام ردیف‌های خروجیِ JSON به عنوان فیلدهای مسطح (Flat) تکرار شوند تا در اکسل به درستی فیلتر شوند.`;
-      }
-      if (userPrompt.includes("Strict Audit") || userPrompt.includes("ممیزی سخت‌گیرانه")) {
-        promptText += `\n\n🚨 [دستور ویژه ممیزی سخت‌گیرانه]: کاربر حالت "Strict Audit" را فعال کرده است. شما به عنوان یک ممیز ارشد، باید تک‌تک محاسبات ریاضی (مقدار × فی = جمع) و تراز مبالغ (مالیات، عوارض، تخفیف، جمع کل) را مستقلاً محاسبه و با سند تطبیق دهید. هرگونه مغایرت، خط‌خوردگی، ارقام مبهم یا کسری اطلاعات را با ذکر دلیل در "تحلیل_سند" برجسته کنید و مقادیر اشتباه را فیلتر نکنید بلکه مقدار سند را در کنار مقدار صحیح محاسبه شده گزارش کنید.`;
-      } else if (userPrompt.includes("Fast Extraction") || userPrompt.includes("سرعت بالا")) {
-        promptText += `\n\n⚡ [دستور ویژه استخراج سریع]: کاربر حالت "Fast" را فعال کرده است. ممیزی و محاسبات ریاضی پیچیده را نادیده بگیرید، مبالغ را همان‌طور که در سند آمده است فوراً استخراج کنید و پردازش‌های تحلیلی را برای افزایش سرعت به حداقل برسانید.`;
-      } else if (userPrompt.includes("Balanced") || userPrompt.includes("متوازن")) {
-        promptText += `\n\n⚖️ [دستور ویژه استخراج متوازن]: تطبیق استاندارد حسابداری مد نظر است. در صورت مغایرت جزئی، عدد نوشته شده در سند ملاک عمل است.`;
-      }
+      promptText += `\n[دستور اختصاصی ممیز / کاربر]:\n${userPrompt.trim()}\nتوجه اکید: تمامی شرح‌ها، توضیحات متنی و حواشی را به صورت ۱۰۰٪ کامل و بدون خلاصه کردن در فیلدهای مربوطه درج کنید.`;
     }
 
     if (tokenSettings) {
       if (tokenSettings.ecoPromptEnabled) {
-        promptText += `\n[تنبيه کاهش هزینه توکن خروجی]: لطفاً متن داخل فیلدهای «شرح» و «توضیحات» را تا حد ممکن بسیار کوتاه و زیر ۵ کلمه نگه دارید. از ایجاد متون طولانی جهت ذخیره توکن اکیداً خودداری کنید.`;
+        promptText += `\n[حالت صرفه‌جویی توکن]: متون فیلدهای شرح و توضیحات را مختصر (حداکثر ۵ کلمه) نگه دارید.`;
       }
       if (tokenSettings.maxRowsToExtract && tokenSettings.maxRowsToExtract !== "unlimited") {
-        promptText += `\n[محدودیت تعداد سطر]: فقط حداکثر ${tokenSettings.maxRowsToExtract} سطر ابتدایی فاکتور را برای خروجی خوانش کنید تا بقیه اقلام جهت صرفه‌جویی توکن استخراج نشوند.`;
+        promptText += `\n[محدودیت سطر]: حداکثر ${tokenSettings.maxRowsToExtract} سطر اول جدول را استخراج کنید.`;
       }
       if (tokenSettings.skipSecondaryFields) {
-        promptText += `\n[فشرده‌سازی فیلدهای خالی]: برای ستون‌هایی مانند «توضیحات» یا «شماره_سند» در صورتی که فاقد محتوای صریح هستند حتما مقدار null بگذارید تا فاکتور پاسخ خروجی فشرده بماند.`;
+        promptText += `\n[فشرده‌سازی فیلدهای خالی]: برای فیلدهای بدون محتوا مقدار null بگذارید.`;
       }
     }
 
@@ -682,10 +672,6 @@ app.post("/api/extract", async (req, res) => {
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  ضریب_اطمینان: {
-                    type: Type.INTEGER,
-                    description: "میزان اطمینان از صحت استخراج این ردیف (بین 0 تا 100) براساس وضوح تصویر.",
-                  },
                   فیلد_ها: {
                     type: Type.ARRAY,
                     description: "مقادیر استخراج شده برای این ردیف.",
@@ -699,7 +685,7 @@ app.post("/api/extract", async (req, res) => {
                     }
                   }
                 },
-                required: ["ضریب_اطمینان", "فیلد_ها"]
+                required: ["فیلد_ها"]
               }
             },
           },
@@ -859,24 +845,30 @@ app.post("/api/chat-pre-extract", async (req, res) => {
     let systemInstruction = PRE_EXTRACT_CHAT_SYSTEM_INSTRUCTION;
 
     if (customPrompt && customPrompt.trim()) {
-      systemInstruction += `\n\nدستورالعمل خاص و پرامپت اختصاصی کاربر که باید حتماً در تحلیل و پاسخ‌های خود لحاظ کنید:\n"""\n${customPrompt}\n"""`;
+      systemInstruction += `\n[دستور اختصاصی کاربر]: ${customPrompt.trim()}`;
     }
     
-    const rawMessages = messages.map((msg: any, index: number) => {
+    // Sliding window: keep up to the latest 8 messages to conserve tokens
+    const windowedMessages = messages.length > 8 ? messages.slice(-8) : messages;
+
+    const rawMessages = windowedMessages.map((msg: any, index: number) => {
       const msgParts: any[] = [{ text: msg.text || "فایل ضمیمه شد." }];
       
-      if (msg.files && Array.isArray(msg.files)) {
+      // Only attach files for the latest message or first message to prevent token explosion
+      if ((index === 0 || index === windowedMessages.length - 1) && msg.files && Array.isArray(msg.files)) {
          msg.files.forEach((f: any) => {
-            msgParts.push({
-               inlineData: {
-                  mimeType: f.mimeType || "application/pdf",
-                  data: f.base64
-               }
-            });
+            if (f.base64) {
+              msgParts.push({
+                 inlineData: {
+                    mimeType: f.mimeType || "application/pdf",
+                    data: f.base64
+                 }
+              });
+            }
          });
       }
 
-      // Attach the image only to the first message or if it's the only one
+      // Attach the image only to the first message in the window
       if (index === 0 && image) {
         msgParts.push({
           inlineData: {
@@ -932,20 +924,10 @@ app.post("/api/chat-verification", async (req, res) => {
     
     const ai = getGeminiClient();
     
-    const formattedMessages: any[] = messages.map((msg: any) => {
-      const parts: any[] = [{ text: msg.text || "فایل ضمیمه شد." }];
-      
-      if (msg.files && Array.isArray(msg.files)) {
-         msg.files.forEach((f: any) => {
-            parts.push({
-               inlineData: {
-                  mimeType: f.mimeType || "application/pdf",
-                  data: f.base64
-               }
-            });
-         });
-      }
+    const windowedMessages = messages.length > 8 ? messages.slice(-8) : messages;
 
+    const formattedMessages: any[] = windowedMessages.map((msg: any) => {
+      const parts: any[] = [{ text: msg.text || "فایل ضمیمه شد." }];
       return {
         role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
         parts: parts,
@@ -956,7 +938,7 @@ app.post("/api/chat-verification", async (req, res) => {
     formattedMessages.push({
        role: "user",
        parts: [
-         { text: "لطفاً با توجه به این گفتگو و این سند مالی، خلاصه تاییدیه استخراج (Verification Summary) را تهیه کن." },
+         { text: "خلاصه تاییدیه استخراج (Verification Summary) را به صورت Markdown مختصر تهیه کن." },
          {
            inlineData: {
              mimeType: mimeType || "image/png",
@@ -996,31 +978,22 @@ app.post("/api/document-chat", async (req, res) => {
     
     let systemInstruction = DOCUMENT_EXCLUSIVE_CHAT_SYSTEM_INSTRUCTION;
     if (documentName || documentType || documentAnalysis) {
-      systemInstruction += `\n\nمشخصات سند جاری:\n- نام سند: ${documentName || "سند مالی"}`;
-      if (documentType) systemInstruction += `\n- نوع سند: ${documentType}`;
-      if (documentAnalysis) systemInstruction += `\n- تحلیل اولیه: ${documentAnalysis}`;
+      systemInstruction += `\n[سند]: ${documentName || "سند مالی"}${documentType ? ` | نوع: ${documentType}` : ""}${documentAnalysis ? ` | تحلیل: ${documentAnalysis}` : ""}`;
     }
 
     if (documentData) {
-      const dataStr = typeof documentData === "string" ? documentData : JSON.stringify(documentData, null, 2);
-      systemInstruction += `\n\nاطلاعات و جدول داده‌های استخراج شده فعلی از این سند:\n\`\`\`json\n${dataStr.substring(0, 5000)}\n\`\`\``;
+      // Use compact JSON string to save significant tokens compared to indented formatting
+      const dataStr = typeof documentData === "string" ? documentData : JSON.stringify(documentData);
+      systemInstruction += `\n[داده‌های استخراج‌شده]: ${dataStr.substring(0, 3500)}`;
     }
 
-    const rawMessages = messages.map((msg: any, index: number) => {
+    // Sliding window of last 8 messages
+    const windowedMessages = messages.length > 8 ? messages.slice(-8) : messages;
+
+    const rawMessages = windowedMessages.map((msg: any, index: number) => {
       const msgParts: any[] = [{ text: msg.text || "فایل ضمیمه شد." }];
       
-      if (msg.files && Array.isArray(msg.files)) {
-         msg.files.forEach((f: any) => {
-            msgParts.push({
-               inlineData: {
-                  mimeType: f.mimeType || "application/pdf",
-                  data: f.base64
-               }
-            });
-         });
-      }
-
-      // Attach the document image to the first message if provided
+      // Attach the document image to the first message only
       if (index === 0 && documentImage) {
         msgParts.push({
           inlineData: {
@@ -1075,7 +1048,10 @@ app.post("/api/chat", async (req, res) => {
 
     const ai = getGeminiClient();
 
-    const contents = messages.map((msg: any) => ({
+    // Sliding window of last 10 messages for general ERP chat
+    const windowedMessages = messages.length > 10 ? messages.slice(-10) : messages;
+
+    const contents = windowedMessages.map((msg: any) => ({
       role: msg.role === "assistant" || msg.role === "model" ? "model" : "user",
       parts: [{ text: msg.text }],
     }));
@@ -1192,7 +1168,7 @@ app.post("/api/auto-categorize", async (req, res) => {
     }
 
     const ai = getGeminiClient();
-    const prompt = `لیست فایل‌های مالی جهت دسته‌بندی هوشمند:\n${JSON.stringify(files, null, 2)}`;
+    const prompt = `لیست فایل‌های مالی جهت دسته‌بندی هوشمند:\n${JSON.stringify(files)}`;
 
     const response = await generateContentWithRetry(ai, {
       model: "gemini-3.7-flash",

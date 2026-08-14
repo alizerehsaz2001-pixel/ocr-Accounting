@@ -2872,6 +2872,7 @@ export default function App() {
         // First include defined active columns in order
         finalColumns.forEach((col: any) => {
           const key = col.کلید;
+          if (key === "ضریب_اطمینان") return;
           // Prefer strict key, fallback to عنوان if somehow it's used
           const val = t[col.کلید] !== undefined ? t[col.کلید] : t[col.عنوان];
           if (val !== undefined) {
@@ -2885,7 +2886,6 @@ export default function App() {
             obj[normK] = t[k];
           }
         });
-        obj["ضریب_اطمینان"] = t.ضریب_اطمینان !== undefined && t.ضریب_اطمینان !== null ? Number(t.ضریب_اطمینان) : 100;
         return obj;
       });
 
@@ -2901,7 +2901,7 @@ export default function App() {
       const cleanJSON = transactions.map((t) => {
         const obj: any = {};
         Object.keys(t).forEach((k) => {
-          if (k !== "id") obj[k] = t[k];
+          if (k !== "id" && k !== "ضریب_اطمینان") obj[k] = t[k];
         });
         return obj;
       });
@@ -3650,12 +3650,12 @@ export default function App() {
         return;
       }
 
-      // Filter out internal id field
+      // Filter out internal id and confidence fields
       const cleanExportData = dataToExport.map((row: any) => {
         if (!row || typeof row !== "object") return row;
         const clean: any = {};
         Object.keys(row).forEach((k) => {
-          if (k !== "id") clean[k] = row[k];
+          if (k !== "id" && k !== "ضریب_اطمینان") clean[k] = row[k];
         });
         return clean;
       });
