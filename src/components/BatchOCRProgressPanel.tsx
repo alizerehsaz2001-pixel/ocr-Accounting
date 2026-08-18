@@ -533,19 +533,19 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
       <div className={`p-5 sm:p-6 border-b space-y-5 ${
         isDarkMode ? "border-slate-800/80 bg-slate-900/40" : "border-slate-100 bg-white"
       }`}>
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
           {/* Metric 1 */}
           <div className={`p-4 rounded-2xl border transition-all ${
             isDarkMode 
               ? "bg-slate-950/60 border-slate-800 hover:border-slate-700" 
               : "bg-slate-50/90 border-slate-200/80 hover:border-slate-300"
           }`}>
-            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
-              <span className="flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-blue-500" />
-                <span>کل اسناد</span>
+            <div className="flex items-center justify-between gap-1 flex-wrap text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
+              <span className="flex items-center gap-1.5 truncate">
+                <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                <span className="truncate">کل اسناد</span>
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500">صف</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 shrink-0">صف</span>
             </div>
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-black">{totalCount.toLocaleString("fa-IR")}</span>
@@ -559,12 +559,12 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
               ? "bg-slate-950/60 border-slate-800 hover:border-emerald-500/30" 
               : "bg-slate-50/90 border-slate-200/80 hover:border-emerald-300"
           }`}>
-            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                <span>استخراج موفق</span>
+            <div className="flex items-center justify-between gap-1 flex-wrap text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
+              <span className="flex items-center gap-1.5 truncate">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span className="truncate">استخراج موفق</span>
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500">تکمیل</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 shrink-0">تکمیل</span>
             </div>
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{successCount.toLocaleString("fa-IR")}</span>
@@ -578,12 +578,12 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
               ? "bg-slate-950/60 border-slate-800 hover:border-indigo-500/30" 
               : "bg-slate-50/90 border-slate-200/80 hover:border-indigo-300"
           }`}>
-            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-indigo-500" />
-                <span>ردیف‌های مالی</span>
+            <div className="flex items-center justify-between gap-1 flex-wrap text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
+              <span className="flex items-center gap-1.5 truncate">
+                <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+                <span className="truncate">ردیف‌های مالی</span>
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500">اقلام</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 shrink-0">اقلام</span>
             </div>
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{totalExtractedRows.toLocaleString("fa-IR")}</span>
@@ -597,12 +597,12 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
               ? "bg-slate-950/60 border-slate-800 hover:border-teal-500/30" 
               : "bg-slate-50/90 border-slate-200/80 hover:border-teal-300"
           }`}>
-            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
-              <span className="flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4 text-teal-500" />
-                <span>جمع مالی کل</span>
+            <div className="flex items-center justify-between gap-1 flex-wrap text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
+              <span className="flex items-center gap-1.5 truncate">
+                <TrendingUp className="w-4 h-4 text-teal-500 shrink-0" />
+                <span className="truncate">جمع مالی کل</span>
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-500">تومان</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-500 shrink-0">تومان</span>
             </div>
             <div className="flex items-baseline gap-1 truncate">
               <span className="text-lg font-black text-teal-600 dark:text-teal-400 truncate">
@@ -618,12 +618,12 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
               ? "bg-slate-950/60 border-slate-800 hover:border-emerald-500/30" 
               : "bg-slate-50/90 border-slate-200/80 hover:border-emerald-300"
           }`}>
-            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                <span>ضریب اطمینان</span>
+            <div className="flex items-center justify-between gap-1 flex-wrap text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
+              <span className="flex items-center gap-1.5 truncate">
+                <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                <span className="truncate">ضریب اطمینان</span>
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500">ممیزی</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 shrink-0">ممیزی</span>
             </div>
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-black">{avgConfidence}</span>
@@ -637,15 +637,15 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
               ? "bg-slate-950/60 border-slate-800 hover:border-purple-500/30" 
               : "bg-slate-50/90 border-slate-200/80 hover:border-purple-300"
           }`}>
-            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
-              <span className="flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-purple-500" />
-                <span>زمان باقی‌مانده</span>
+            <div className="flex items-center justify-between gap-1 flex-wrap text-slate-500 dark:text-slate-400 text-xs font-bold mb-2">
+              <span className="flex items-center gap-1.5 truncate">
+                <Clock className="w-4 h-4 text-purple-500 shrink-0" />
+                <span className="truncate">زمان باقی‌مانده</span>
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500">ETA</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 shrink-0">ETA</span>
             </div>
             <div className="flex items-baseline gap-1">
-              <span className="text-lg font-black text-slate-700 dark:text-slate-200">
+              <span className="text-lg font-black text-slate-700 dark:text-slate-200 truncate">
                 {isPaused ? "توقف" : etaSeconds ? `${etaSeconds} ثانیه` : isFinished ? "پایان" : "محاسبه..."}
               </span>
             </div>

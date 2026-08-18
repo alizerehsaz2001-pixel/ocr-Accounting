@@ -480,19 +480,21 @@ export default function AiSettingsModal({
                               : "bg-white/80 border-slate-200 text-slate-600 hover:border-slate-300"
                         }`}
                       >
-                        <div className="flex items-center justify-between w-full">
-                          <span className="text-[11px] font-black flex items-center gap-1.5">
-                            <span>{modeItem.title}</span>
+                        <div className="flex items-start justify-between w-full gap-2">
+                          <span className="text-[11px] font-black leading-tight flex-1">
+                            {modeItem.title}
                           </span>
-                          {isSelected ? (
-                            <CheckCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                          ) : (
-                            <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono">
-                              {modeItem.badge}
-                            </span>
-                          )}
+                          <div className="shrink-0 pt-0.5">
+                            {isSelected ? (
+                              <CheckCircle className="w-4 h-4 text-amber-500" />
+                            ) : (
+                              <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono whitespace-nowrap">
+                                {modeItem.badge}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-[9px] leading-relaxed opacity-80 mt-0.5">
+                        <p className="text-[9px] leading-relaxed opacity-80 mt-1">
                           {modeItem.desc}
                         </p>
                       </button>

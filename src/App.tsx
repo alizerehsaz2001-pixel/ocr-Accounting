@@ -5250,69 +5250,69 @@ export default function App() {
                       <div className="flex flex-col gap-4">
                         
                         {/* Enhanced Audit-Grade 100% Extraction Hero Card */}
-                        <div className={`relative overflow-hidden p-5 sm:p-7 rounded-2xl border transition-all duration-500 group ${
+                        <div className={`relative overflow-hidden p-6 sm:p-8 rounded-3xl border transition-all duration-500 group shadow-sm ${
                           isDarkMode 
-                            ? "bg-gradient-to-br from-slate-900 via-slate-900 to-amber-950/30 border-amber-500/30 shadow-[0_8px_30px_rgba(245,158,11,0.12)] hover:border-amber-500/50" 
-                            : "bg-gradient-to-br from-amber-50/80 via-white to-orange-50/60 border-amber-300/80 shadow-[0_8px_30px_rgba(245,158,11,0.08)] hover:border-amber-400"
+                            ? "bg-slate-900/60 border-amber-500/20 hover:border-amber-500/40 hover:bg-slate-900/80" 
+                            : "bg-gradient-to-br from-amber-50/50 to-orange-50/30 border-amber-200/60 hover:border-amber-300 hover:shadow-amber-500/10"
                         }`}>
-                          {/* Ambient background decorative elements */}
-                          <div className="absolute top-0 right-0 w-72 h-72 bg-amber-500/10 rounded-full blur-[70px] -mr-20 -mt-20 pointer-events-none group-hover:bg-amber-500/20 transition-colors duration-700"></div>
-                          <div className="absolute bottom-0 left-0 w-56 h-56 bg-orange-500/10 rounded-full blur-[60px] -ml-20 -mb-20 pointer-events-none group-hover:bg-orange-500/20 transition-colors duration-700"></div>
+                          {/* Subtle Ambient background decorative elements */}
+                          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-[80px] -mr-20 -mt-20 pointer-events-none transition-colors duration-700"></div>
+                          <div className="absolute bottom-0 left-0 w-48 h-48 bg-orange-500/5 rounded-full blur-[70px] -ml-20 -mb-20 pointer-events-none transition-colors duration-700"></div>
                           
-                          <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-                            <div className="flex flex-col gap-3.5 flex-1 w-full">
-                              <div className="flex items-center gap-3">
-                                <div className={`relative flex items-center justify-center w-11 h-11 rounded-2xl shadow-inner shrink-0 ${
-                                  isDarkMode ? "bg-gradient-to-br from-amber-800 to-amber-950 border border-amber-500/40 text-amber-300" : "bg-gradient-to-br from-amber-100 to-amber-200 border border-amber-300 text-amber-700 shadow-amber-500/20"
+                          <div className="relative z-10 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-8">
+                            <div className="flex flex-col gap-4 flex-1 w-full">
+                              <div className="flex items-start sm:items-center gap-4 flex-col sm:flex-row">
+                                <div className={`relative flex items-center justify-center w-12 h-12 rounded-2xl shadow-inner shrink-0 ${
+                                  isDarkMode ? "bg-amber-500/10 border border-amber-500/30 text-amber-400" : "bg-amber-100 border border-amber-300 text-amber-600 shadow-amber-500/10"
                                 }`}>
                                   <ShieldCheck className="w-6 h-6 animate-pulse" />
                                 </div>
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <h3 className={`text-base sm:text-lg font-black tracking-tight ${isDarkMode ? "text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-300 to-orange-300" : "text-transparent bg-clip-text bg-gradient-to-r from-amber-800 via-amber-700 to-orange-700"}`}>
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2.5 flex-wrap">
+                                    <h3 className={`text-base sm:text-lg font-black tracking-tight ${isDarkMode ? "text-amber-400" : "text-amber-800"}`}>
                                       استخراج ممیزی نسل ۷ آلترا (Audit-Grade)
                                     </h3>
                                     <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                                   </div>
-                                  <p className={`text-[10px] sm:text-[11px] font-bold ${isDarkMode ? "text-amber-400/80" : "text-amber-700/80"}`}>
+                                  <p className={`text-xs font-bold ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
                                     استاندارد رسمی حسابرسی، تطبیق سامانه مودیان و موازنه مالیاتی
                                   </p>
                                 </div>
                               </div>
                               
-                              <p className={`text-[11.5px] sm:text-[12.5px] leading-relaxed max-w-2xl font-medium ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                              <p className={`text-xs sm:text-sm leading-relaxed max-w-3xl font-medium ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
                                 پردازش هوشمند سند با <strong>استراتژی عدم-حدس (Strict Null)</strong>، تفکیک دقیق واحدهای ارزی و حفظ متن خام، همراه با <span className={isDarkMode ? "text-amber-400 font-bold" : "text-amber-600 font-bold"}>۵ لایه کنترل متقابل ریاضی</span> جهت تضمین ورود مستقیم اطلاعات به سیستم‌های <strong>ERP</strong> و جداول <strong>Excel</strong>.
                               </p>
                               
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                              <div className="flex flex-wrap gap-2.5 pt-2">
                                 {[
-                                  { icon: <ShieldAlert className="w-3.5 h-3.5" />, text: "عدم حدس (Strict Null)" },
-                                  { icon: <Binary className="w-3.5 h-3.5" />, text: "تفکیک واحد ارزی" },
-                                  { icon: <CheckSquare className="w-3.5 h-3.5" />, text: "خروجی ۴۵ کلیدی مسطح" },
-                                  { icon: <Calculator className="w-3.5 h-3.5" />, text: "۵ لایه کنترل ریاضی" }
+                                  { icon: <ShieldAlert className="w-4 h-4" />, text: "عدم حدس (Strict Null)" },
+                                  { icon: <Binary className="w-4 h-4" />, text: "تفکیک واحد ارزی" },
+                                  { icon: <CheckSquare className="w-4 h-4" />, text: "خروجی ۴۵ کلیدی مسطح" },
+                                  { icon: <Calculator className="w-4 h-4" />, text: "۵ لایه کنترل ریاضی" }
                                 ].map((feature, i) => (
-                                  <div key={i} className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-[10px] font-bold transition-all ${
+                                  <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-bold transition-all ${
                                     isDarkMode 
-                                      ? "bg-slate-800/80 text-amber-200 border border-slate-700/80" 
-                                      : "bg-white/90 text-amber-900 border border-amber-200/80 shadow-xs"
+                                      ? "bg-slate-800/50 text-slate-300 border border-slate-700/50" 
+                                      : "bg-white/80 text-slate-700 border border-slate-200 shadow-sm"
                                   }`}>
                                     <span className={isDarkMode ? "text-amber-400" : "text-amber-600"}>{feature.icon}</span>
-                                    <span className="truncate">{feature.text}</span>
+                                    <span>{feature.text}</span>
                                   </div>
                                 ))}
                               </div>
                             </div>
                             
                             {/* Primary Action Button */}
-                            <div className="flex w-full lg:w-auto relative group shrink-0 self-stretch lg:self-center">
-                              <div className={`absolute inset-0 rounded-2xl blur-lg opacity-40 group-hover:opacity-75 transition-opacity duration-300 ${isDarkMode ? 'bg-amber-500' : 'bg-orange-500'}`}></div>
+                            <div className="flex w-full xl:w-auto relative group shrink-0 mt-2 xl:mt-0">
+                              <div className={`absolute inset-0 rounded-2xl blur-md opacity-30 group-hover:opacity-60 transition-opacity duration-300 ${isDarkMode ? 'bg-amber-500' : 'bg-orange-500'}`}></div>
                               <button
                                 type="button"
                                 onClick={handleExtract100PercentAllToJsonAndExcel}
-                                className={`relative w-full px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-[12.5px] sm:text-[13.5px] font-black flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-lg active:scale-95 border ${
+                                className={`relative w-full xl:w-auto px-8 py-4 rounded-2xl text-sm font-black flex items-center justify-center gap-3 transition-all cursor-pointer shadow-md active:scale-95 border ${
                                   isDarkMode 
-                                    ? "bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 text-slate-950 border-amber-300 hover:from-amber-400 hover:to-orange-400 shadow-amber-950/40" 
-                                    : "bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 text-white border-amber-400 hover:from-amber-400 hover:to-orange-500 shadow-orange-500/25"
+                                    ? "bg-slate-800 text-amber-400 border-amber-500/30 hover:bg-slate-700 hover:border-amber-400" 
+                                    : "bg-white text-amber-700 border-amber-300 hover:bg-amber-50"
                                 }`}
                               >
                                 <Sparkles className="w-5 h-5 shrink-0 animate-spin" style={{ animationDuration: "3s" }} />
@@ -5329,8 +5329,8 @@ export default function App() {
                             : "bg-slate-50/80 border-slate-200"
                         }`}>
                           <div className="flex items-center justify-between p-3 sm:p-3.5 gap-2 flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] ${
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] shrink-0 ${
                                 isDarkMode ? "bg-slate-800 text-slate-300" : "bg-slate-200 text-slate-700"
                               }`}>
                                 <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -5338,7 +5338,7 @@ export default function App() {
                               <span className={`text-[11.5px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
                                 دستورات و پرامپت ارسالی به مدل OCR:
                               </span>
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${
                                 customPrompt.trim() 
                                   ? "bg-blue-500/15 text-blue-400 border border-blue-500/30" 
                                   : isDarkMode ? "bg-slate-800 text-slate-400" : "bg-slate-200 text-slate-600"
