@@ -93,7 +93,8 @@ import {
   Printer,
   Undo2, Calculator, LayoutGrid, List, Save, Database, Code, FileCode, MessageSquareText, Zap, Wrench, Star, Brain, FileSpreadsheet, Building, Phone, Edit2, Ban, KeyRound, Terminal, UserPlus, EyeOff, Binary, Mail
 } from "lucide-react";
-import { TransactionItem, UploadedFile, PreviousScan, DocumentExtractionSettings } from "./types";
+import { TransactionItem, UploadedFile, PreviousScan, DocumentExtractionSettings, ImagePreprocessingMode } from "./types";
+import { preprocessImageBase64 } from "./utils/imagePreprocessing";
 import CameraCapture from "./components/CameraCapture";
 import AudioNotesSection from "./components/AudioNotesSection";
 import ThemeSwitcher from "./components/ThemeSwitcher";
@@ -753,6 +754,21 @@ export default function App() {
 
     const scanId = item.scanId || item.id;
     const finalPrompt = userPrompt || getCompiledAIInstructions();
+    const isPdf = item.mimeType === "application/pdf" || item.name.toLowerCase().endsWith(".pdf");
+    const effectivePreprocessingMode: ImagePreprocessingMode = 
+      (item as any).extractionSettings?.imagePreprocessingMode || 
+      (item as any).imagePreprocessingMode || 
+      imagePreprocessingMode || 
+      "none";
+
+    const PREPROCESSING_LABELS: Record<ImagePreprocessingMode, string> = {
+      none: "استاندارد",
+      auto_enhance: "ارتقای خودکار چندمرحله‌ای OCR",
+      high_contrast: "کنتراست شدید",
+      grayscale_bw: "سیاه و سفید",
+      binarize_adaptive: "دوسطحی‌سازی تطبیقی",
+      sharpness_denoise: "شارپ‌سازی لبه‌ها",
+    };
 
     const startTime = Date.now();
     updateProgress({
@@ -760,12 +776,22 @@ export default function App() {
       stage: "preprocessing",
       progressPercent: 15,
       attempt: 1,
-      statusMessage: "مرحله ۱ از ۵ (۱۵٪): پیش‌پردازش تصویر، بصرسازی و تفکیک زون‌ها...",
+      statusMessage: !isPdf && effectivePreprocessingMode !== "none"
+        ? `مرحله ۱ از ۵ (۱۵٪): اعمال فیلتر پیش‌پردازش تصویر (${PREPROCESSING_LABELS[effectivePreprocessingMode]})...`
+        : "مرحله ۱ از ۵ (۱۵٪): پیش‌پردازش تصویر، بصرسازی و تفکیک زون‌ها...",
       startTime,
       modelUsed: selectedModel
     });
 
-    await new Promise(res => setTimeout(res, 250));
+    if (!isPdf && effectivePreprocessingMode !== "none") {
+      try {
+        cleanBase64 = await preprocessImageBase64(cleanBase64, effectivePreprocessingMode);
+      } catch (prepErr) {
+        console.warn("Preprocessing image failed, falling back to original image:", prepErr);
+      }
+    }
+
+    await new Promise(res => setTimeout(res, 200));
 
     updateProgress({
       status: "processing",
@@ -1291,6 +1317,7 @@ export default function App() {
         if (docSettings.strictnessMode) setStrictnessMode(docSettings.strictnessMode);
         if (docSettings.customPrompt !== undefined) setCustomPrompt(docSettings.customPrompt);
         if (docSettings.pdfExtractionStrategy) setPdfExtractionStrategy(docSettings.pdfExtractionStrategy);
+        if (docSettings.imagePreprocessingMode) setImagePreprocessingMode(docSettings.imagePreprocessingMode);
       }
       showNotification(`سند «${scan.file.name}» بارگذاری شد.`, "info");
     }
@@ -1525,6 +1552,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("pdf_extraction_strategy", pdfExtractionStrategy);
   }, [pdfExtractionStrategy]);
+
+  const [imagePreprocessingMode, setImagePreprocessingMode] = useState<ImagePreprocessingMode>(
+    () => (localStorage.getItem("image_preprocessing_mode") as ImagePreprocessingMode) || "none"
+  );
+
+  useEffect(() => {
+    localStorage.setItem("image_preprocessing_mode", imagePreprocessingMode);
+  }, [imagePreprocessingMode]);
 
   useEffect(() => {
     localStorage.setItem("ai_model_quotas", JSON.stringify(modelQuotas));
@@ -2978,6 +3013,7 @@ export default function App() {
       strictnessMode,
       customPrompt,
       pdfExtractionStrategy,
+      imagePreprocessingMode,
       savedAt: Date.now()
     };
 
@@ -3337,12 +3373,22 @@ export default function App() {
     };
     setActiveFile(newFile);
 
+    const isPdf = fileMimeType === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
+    let processedBase64 = base64Image;
+    if (!isPdf && imagePreprocessingMode && imagePreprocessingMode !== "none") {
+      try {
+        processedBase64 = await preprocessImageBase64(base64Image, imagePreprocessingMode);
+      } catch (e) {
+        console.warn("Preprocessing image failed, falling back to original:", e);
+      }
+    }
+
     try {
       const response = await fetch("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          image: base64Image,
+          image: processedBase64,
           mimeType: fileMimeType,
           model: selectedModel,
           tokenSettings,
@@ -3722,6 +3768,7 @@ export default function App() {
       if (docSettings.strictnessMode) setStrictnessMode(docSettings.strictnessMode);
       if (docSettings.customPrompt !== undefined) setCustomPrompt(docSettings.customPrompt);
       if (docSettings.pdfExtractionStrategy) setPdfExtractionStrategy(docSettings.pdfExtractionStrategy);
+      if (docSettings.imagePreprocessingMode) setImagePreprocessingMode(docSettings.imagePreprocessingMode);
     }
     setTransactions(scan.transactions);
     const formatted = JSON.stringify(scan.transactions, null, 2);
@@ -4098,6 +4145,8 @@ export default function App() {
         setCustomPrompt={setCustomPrompt}
         pdfExtractionStrategy={pdfExtractionStrategy}
         setPdfExtractionStrategy={setPdfExtractionStrategy}
+        imagePreprocessingMode={imagePreprocessingMode}
+        setImagePreprocessingMode={setImagePreprocessingMode}
         pendingFiles={pendingFiles}
         setPendingFiles={setPendingFiles}
         onUploadClick={() => fileInputRef.current?.click()}

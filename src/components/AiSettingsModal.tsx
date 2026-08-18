@@ -15,9 +15,15 @@ import {
   Code,
   Send,
   Mail,
-  Headphones
+  Headphones,
+  Wand2,
+  Sliders,
+  SunMedium,
+  Layers,
+  Image as ImageIcon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { ImagePreprocessingMode } from "../types";
 
 interface AiSettingsModalProps {
   isOpen: boolean;
@@ -33,6 +39,8 @@ interface AiSettingsModalProps {
   setCustomPrompt: (prompt: string) => void;
   pdfExtractionStrategy?: "direct" | "pdf_to_markdown_to_json";
   setPdfExtractionStrategy?: (strategy: "direct" | "pdf_to_markdown_to_json") => void;
+  imagePreprocessingMode?: ImagePreprocessingMode;
+  setImagePreprocessingMode?: (mode: ImagePreprocessingMode) => void;
   pendingFiles: Array<{
     base64: string;
     name: string;
@@ -62,6 +70,8 @@ export default function AiSettingsModal({
   setCustomPrompt,
   pdfExtractionStrategy = "pdf_to_markdown_to_json",
   setPdfExtractionStrategy,
+  imagePreprocessingMode = "none",
+  setImagePreprocessingMode,
   pendingFiles,
   setPendingFiles,
   onUploadClick,
@@ -391,6 +401,103 @@ export default function AiSettingsModal({
                       پردازش یک‌مرحله‌ای مستقیم از فایل PDF به خروجی JSON (حالت عادی).
                     </p>
                   </button>
+                </div>
+              </div>
+
+              {/* Image Preprocessing Mode (OCR Enhancement for Noisy/Distorted Documents) */}
+              <div className={`flex flex-col gap-2.5 md:col-span-2 p-3.5 rounded-2xl border transition-all ${
+                isDarkMode 
+                  ? "bg-amber-950/20 border-amber-500/30 text-slate-100" 
+                  : "bg-amber-50/50 border-amber-200 text-slate-800"
+              }`}>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <label className={`text-[11.5px] font-black flex items-center gap-1.5 ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                    <Wand2 className="w-4 h-4 text-amber-500 animate-pulse shrink-0" />
+                    حالت پیش‌پردازش تصویر قبل از OCR (تقویت وضوح اسناد مخدوش):
+                  </label>
+                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                    <SunMedium className="w-3 h-3 text-amber-500" />
+                    فیلترهای نوری و ارتقای دقت OCR
+                  </span>
+                </div>
+
+                <p className={`text-[10px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                  جهت افزایش چشمگیر دقت OCR روی فاکتورهای کم‌رنگ حرارتی، اسناد کاربنی خط‌خورده، عکس‌های سایه‌دار یا متون تار، پیش‌پردازش مورد نظر را انتخاب کنید تا قبل از ارسال به مدل پردازشگر اعمال شود.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 mt-1">
+                  {[
+                    {
+                      id: "none",
+                      title: "عادی (بدون فیلتر)",
+                      badge: "استاندارد",
+                      desc: "ارسال تصویر اصلی بدون هیچ‌گونه تغییر پیکسلی برای اسناد باکیفیت و اسکن‌شده."
+                    },
+                    {
+                      id: "auto_enhance",
+                      title: "🪄 ارتقای خودکار هوشمند",
+                      badge: "پیشنهادی ⭐️",
+                      desc: "چندمرحله‌ای: نرمال‌سازی هیستوگرام، سفیدسازی پس‌زمینه و پررنگ‌کردن جوهر متون."
+                    },
+                    {
+                      id: "high_contrast",
+                      title: "🔆 افزایش کنتراست شدید",
+                      badge: "کنتراست بالا",
+                      desc: "کشش کنتراست و اصلاح گاما؛ مناسب فاکتورهای حرارتی محو و برگه‌های کاربنی کم‌رنگ."
+                    },
+                    {
+                      id: "grayscale_bw",
+                      title: "🌓 سیاه و سفید (Grayscale)",
+                      badge: "خاکستری",
+                      desc: "تبدیل روشنایی خالص و حذف کانال‌های رنگی اضافی، تمبرهای مزاحم و پس‌زمینه‌ها."
+                    },
+                    {
+                      id: "binarize_adaptive",
+                      title: "🔲 دوسطحی‌سازی تطبیقی",
+                      badge: "Binarization",
+                      desc: "تبدیل به سیاه و سفید مطلق (0 و 255) جهت حذف کامل سایه‌ها و انعکاس نور موبایل."
+                    },
+                    {
+                      id: "sharpness_denoise",
+                      title: "🔍 شارپ‌سازی و وضوح لبه‌ها",
+                      badge: "رفع تاری",
+                      desc: "فیلتر لاپلاسین برای برجسته‌کردن لبه‌های حروف ریز، ارقام مات و متون چاپ سوزنی."
+                    }
+                  ].map((modeItem) => {
+                    const isSelected = (imagePreprocessingMode || "none") === modeItem.id;
+                    return (
+                      <button
+                        key={modeItem.id}
+                        type="button"
+                        onClick={() => setImagePreprocessingMode?.(modeItem.id as ImagePreprocessingMode)}
+                        className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between gap-1.5 cursor-pointer relative ${
+                          isSelected
+                            ? isDarkMode
+                              ? "bg-amber-600/25 border-amber-500 text-white shadow-md ring-1 ring-amber-500/50"
+                              : "bg-white border-amber-500 text-amber-950 shadow-md ring-1 ring-amber-500/30"
+                            : isDarkMode
+                              ? "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+                              : "bg-white/80 border-slate-200 text-slate-600 hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="text-[11px] font-black flex items-center gap-1.5">
+                            <span>{modeItem.title}</span>
+                          </span>
+                          {isSelected ? (
+                            <CheckCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                          ) : (
+                            <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono">
+                              {modeItem.badge}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[9px] leading-relaxed opacity-80 mt-0.5">
+                          {modeItem.desc}
+                        </p>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -34,12 +34,21 @@ export interface AudioNote {
   noteText?: string;
 }
 
+export type ImagePreprocessingMode =
+  | 'none'
+  | 'high_contrast'
+  | 'grayscale_bw'
+  | 'binarize_adaptive'
+  | 'sharpness_denoise'
+  | 'auto_enhance';
+
 export interface DocumentExtractionSettings {
   selectedModel: string;
   erpDestinationModule: string;
   strictnessMode: "balanced" | "speed" | "audit";
   customPrompt: string;
   pdfExtractionStrategy?: "direct" | "pdf_to_markdown_to_json";
+  imagePreprocessingMode?: ImagePreprocessingMode;
   savedAt?: number;
 }
 
@@ -57,6 +66,7 @@ export interface UploadedFile {
   documentAnalysis?: string;
   markdownContent?: string;
   tokensUsed?: number;
+  imagePreprocessingMode?: ImagePreprocessingMode;
   tokenDetails?: {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
