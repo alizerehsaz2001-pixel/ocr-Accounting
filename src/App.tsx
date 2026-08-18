@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
   Menu,
   ChevronDown,
+  ChevronUp,
   Landmark, Package,
   FileJson,
   Cpu,
@@ -547,6 +548,7 @@ export default function App() {
     preview?: string;
   }>>([]);
   const [customPrompt, setCustomPrompt] = useState<string>("");
+  const [showCustomPromptDetails, setShowCustomPromptDetails] = useState<boolean>(false);
   const [preExtractChat, setPreExtractChat] = useState<{ role: 'user' | 'assistant'; text: string; files?: { base64: string; name: string; mimeType: string; size: number }[] }[]>([]);
   const [preExtractInput, setPreExtractInput] = useState<string>("");
   const [preExtractFiles, setPreExtractFiles] = useState<{ base64: string; name: string; mimeType: string; size: number }[]>([]);
@@ -1071,6 +1073,10 @@ export default function App() {
     setIsBatchProcessing(true);
 
     const worker = async (workerId: number) => {
+      // Stagger worker start to avoid API burst limits
+      if (workerId > 0) {
+        await new Promise(res => setTimeout(res, workerId * 700));
+      }
       while (!cancelBatchRef.current) {
         while (isBatchPausedRef.current && !cancelBatchRef.current) {
           await new Promise(res => setTimeout(res, 400));
@@ -1718,16 +1724,10 @@ export default function App() {
   const handleExtractDirectToJson = async () => {
     if (pendingFiles.length === 0) return;
     const jsonInstruction = "لطفاً تمامی اطلاعات کلیدی، اقلام تراکنش، مبالغ، مالیات، عوارض، شناسه مودیان و کدهای اختصاصی این سند را به صورت مستقیم در قالب آرایه ساختاریافته استاندارد JSON با عناوین و کلیدهای فارسی استخراج و تنظیم کنید.";
-    setCustomPrompt(prev => {
-      const trimmed = prev.trim();
-      if (!trimmed) return jsonInstruction;
-      if (trimmed.includes("JSON") || trimmed.includes("جیسون")) return trimmed;
-      return `${trimmed}\n${jsonInstruction}`;
-    });
     setIsAiUnderstandingConfirmed(true);
     showNotification("تنظیمات خروجی مستقیم JSON فعال شد. در حال استخراج سند...", "success");
     setTimeout(() => {
-      handleDirectExtraction();
+      handleDirectExtraction(jsonInstruction);
     }, 150);
   };
 
@@ -1751,7 +1751,7 @@ export default function App() {
 📋 چک‌لیست ۴۵‌گانه جامع و استاندارد استخراج بی‌نقص (با کلیدهای فارسی):
 
 ۱) کیفیت سند و شناسه هدر (Quality & Header Metadata):
-- "سطح_اطمینان_استخراج": عدد بین 0.00 تا 1.00 نشان‌دهنده کیفیت و وضوح کلی OCR سند
+- "سطح_اطمینان_استخراج": عدد بین 0.00 تا 1.00 نشان‌دهنده کیفیت و ووضوح کلی OCR سند
 - "نوع_سند": (فاکتور فروش، صورتحساب الکترونیکی، قبض، فیش واریزی، رسید انبار، حواله، پیش‌فاکتور، بارنامه، صورت‌وضعیت)
 - "شماره_فاکتور": شماره اصلی فاکتور / سند / رسید / قبض
 - "شماره_سریال_چاپی": شماره مسلسل چاپی یا قرمز رنگ بالای سند
@@ -1823,35 +1823,21 @@ export default function App() {
 - "داده_نامطمئن_یا_غیرقابل_خواندن": هرگونه کلمه، کد یا رقمی که به دلیل تاری، مخدوش بودن یا مهر ناخوانا بوده و null ثبت شده است
 - "سایر_اطلاعات_و_حواشی_سند": هرگونه متون دست‌نویس، شماره بارنامه، پلاک خودرو، وزن باسکول، کد انبار یا متون تکمیلی فرعی
 - "مغایرت_محاسباتی": در صورت وجود هرگونه خطا در ضرب (تعداد × فی) یا جمع مبالغ فاکتور یا مغایرت واحد پول، شرح دقیق ریاضی را بنویسید؛ در غیر این صورت null قرار دهید.`;
-    
-    setCustomPrompt(prev => {
-      const trimmed = prev.trim();
-      if (!trimmed) return fullJsonInstruction;
-      return `${trimmed}\n\n⚠️ دستور ویژه کاربر (استخراج ۱۰۰٪ تمام اطلاعات به JSON):\n${fullJsonInstruction}`;
-    });
-
-    setPreExtractChat(prev => [
-      ...prev,
-      { role: "user", text: fullJsonInstruction },
-      { 
-        role: "assistant", 
-        text: "✅ تایید شد! دستور نسل ۷ آلترا ممیزی (Audit-Grade OCR Engine) ثبت گردید. عدم حدس (Strict Null)، نگهداری متن خام و واحد ارزی مجزا، اسکن ۸ زون با ۴۵ کلید مسطح و کنترل‌های ۵‌گانه متقابل ریاضی فعال گردید." 
-      }
-    ]);
 
     setIsAiUnderstandingConfirmed(true);
     logEvent("استخراج ۱۰۰٪ کلیه اطلاعات به JSON", "کاربر دستور استخراج ۱۰۰٪ کلیه اطلاعات سند (اعداد و متون) به JSON برای اکسل را صادر کرد.");
-    showNotification("دستور ویژه فول‌اکسل ثبت گردید. در حال استخراج ۱۰۰٪ داده‌ها و تولید خروجی اکسل...", "success");
+    showNotification("دستور ممیزی نسل ۷ آلترا ارسال شد. در حال استخراج ۱۰۰٪ داده‌ها...", "success");
 
     if (pendingFiles.length > 0) {
       setTimeout(() => {
-        handleDirectExtraction();
-      }, 200);
+        handleDirectExtraction(fullJsonInstruction);
+      }, 150);
     }
   };
 
   const getCompiledAIInstructions = () => {
-    let instructions = "";
+    let instructions = "⚠️ الزام استخراج ۱۰۰٪ جامع و بدون کوچک‌ترین حذف (Zero-Omission Extraction Rule):\n" +
+      "تمام جزئیات سند شامل تک‌تک ردیف‌های جدول اقلام/خدمات با شرح کامل، مشخصات فنی و سریال، مشخصات هویتی و ثبتی طرفین (فروشنده و خریدار)، کدهای اقتصادی، شناسه‌های ملی، شماره شبا، شماره فاکتور، تاریخ، جمع‌های کلان مالی، تخفیفات، مالیات ارزش افزوده، مبالغ حروفی، واحد ارزی، اطلاعات بانکی، تمام یادداشت‌ها، شروط معامله، متن مهرها و وضعیت امضاها باید بدون هیچ‌گونه خلاصه‌سازی یا حذفی با دقت ممیزی رسمی استخراج شوند.\n\n";
     
     // 1. Destination Module Guidelines
     if (erpDestinationModule === "general-ledger") {
@@ -1896,22 +1882,18 @@ export default function App() {
     return instructions;
   };
 
-  const handleDirectExtraction = async () => {
+  const handleDirectExtraction = async (overridePrompt?: string) => {
     if (pendingFiles.length === 0) return;
 
-    if (!customPrompt.trim()) {
-       showNotification("لطفاً پرامپت (دستورالعمل) را وارد کنید. این فیلد الزامی است.", "error");
-       return;
-    }
     setIsExtracting(true);
     setExtractionStep(1);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 800));
     
     setExtractionStep(2);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     setExtractionStep(3);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 800));
     
     const filesData = [...pendingFiles];
     setPendingFiles([]);
@@ -1919,15 +1901,8 @@ export default function App() {
     setExtractionStep(0);
     setVerificationSummary(null);
     
-    const finalPrompt = getCompiledAIInstructions();
+    const finalPrompt = overridePrompt || getCompiledAIInstructions();
     
-    const allChatFiles = preExtractChat.reduce((acc, msg) => {
-      if (msg.files && Array.isArray(msg.files)) {
-        acc.push(...msg.files);
-      }
-      return acc;
-    }, [] as any[]);
-
     await startBatchExtractionPipeline(filesData.map(fileData => ({
       id: fileData.id,
       name: fileData.name,
@@ -5140,148 +5115,300 @@ export default function App() {
                   initial={{ opacity: 0, scale: 0.99, y: 8 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   transition={{ duration: 0.35, ease: "easeOut" }}
-                  className="relative max-w-2xl w-full text-right"
+                  className="relative max-w-3xl w-full text-right"
                   dir="rtl"
                 >
-                  <div className={`absolute -inset-1.5 blur-2xl opacity-10 rounded-3xl ${isDarkMode ? "bg-blue-500" : "bg-blue-400"}`}></div>
-                  <div className={`relative rounded-3xl border p-6 w-full transition-all duration-300 ${
+                  <div className={`absolute -inset-1.5 blur-2xl opacity-15 rounded-3xl ${isDarkMode ? "bg-amber-500/20" : "bg-amber-400/20"}`}></div>
+                  <div className={`relative rounded-3xl border p-5 sm:p-7 w-full transition-all duration-300 ${
                     isDarkMode 
-                      ? "bg-slate-900/95 backdrop-blur-2xl border-slate-800/80 shadow-[0_20px_50px_rgba(0,0,0,0.3)]" 
-                      : "bg-white/95 backdrop-blur-2xl border-slate-200/80 shadow-[0_20px_50px_rgba(15,23,42,0.06)]"
+                      ? "bg-slate-900/95 backdrop-blur-2xl border-slate-800/90 shadow-[0_20px_50px_rgba(0,0,0,0.4)]" 
+                      : "bg-white/95 backdrop-blur-2xl border-slate-200/90 shadow-[0_20px_50px_rgba(15,23,42,0.08)]"
                   }`}>
                     
-                    {/* Minimal Header */}
-                    <div className={`p-4 border-b flex items-center justify-between ${isDarkMode ? "border-slate-800/60" : "border-slate-100"}`}>
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600"}`}>
-                          <FileText className="w-4 h-4" />
+                    {/* File Header Bar */}
+                    <div className={`pb-4 mb-4 border-b flex items-center justify-between gap-3 ${isDarkMode ? "border-slate-800/80" : "border-slate-100"}`}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                          isDarkMode 
+                            ? "bg-gradient-to-br from-amber-500/20 to-orange-500/10 text-amber-400 border border-amber-500/30" 
+                            : "bg-gradient-to-br from-amber-50 to-orange-100 text-amber-700 border border-amber-200"
+                        }`}>
+                          <FileSpreadsheet className="w-5 h-5" />
                         </div>
-                        <div>
-                          <h2 className={`text-sm font-black ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
-                            آماده‌سازی سند
-                          </h2>
-                          <p className={`text-[9px] ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                            {pendingFiles.length === 1 ? pendingFiles[0].name : `${pendingFiles.length} سند`} • {Math.round(pendingFiles.reduce((acc, f) => acc + f.size, 0) / 1024)} KB
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h2 className={`text-sm sm:text-base font-black truncate ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>
+                              آماده‌سازی سند جهت استخراج ممیزی
+                            </h2>
+                            <span className="text-[9.5px] px-2 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                              موتور هوشمند نسل ۷ آلترا
+                            </span>
+                          </div>
+                          <p className={`text-[10px] mt-0.5 truncate ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            {pendingFiles.length === 1 ? pendingFiles[0].name : `${pendingFiles.length} سند انتخابی`} • {Math.round(pendingFiles.reduce((acc, f) => acc + f.size, 0) / 1024)} کیلوبایت
                           </p>
                         </div>
                       </div>
                       
-                      {/* Compact Settings Trigger */}
-                      <button
-                        type="button"
-                        onClick={() => setIsAiSettingsOpen(true)}
-                        className={`p-1.5 rounded-lg transition-all ${isDarkMode ? "bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200" : "bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700"}`}
-                        title="تنظیمات استخراج (مدل، ماژول، سخت‌گیری)"
-                      >
-                        <Settings className="w-4 h-4" />
-                      </button>
+                      {/* Actions in Header */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setIsAiSettingsOpen(true)}
+                          className={`p-2 rounded-xl transition-all cursor-pointer border flex items-center gap-1 text-[11px] font-bold ${
+                            isDarkMode 
+                              ? "bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300" 
+                              : "bg-slate-100/80 hover:bg-slate-200 border-slate-200 text-slate-600"
+                          }`}
+                          title="تنظیمات پیشرفته هوش مصنوعی"
+                        >
+                          <Settings className="w-4 h-4 text-amber-400" />
+                          <span className="hidden sm:inline">تنظیمات</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingFiles([]);
+                            setCustomPrompt("");
+                          }}
+                          className={`p-2 rounded-xl transition-all cursor-pointer border text-rose-500 hover:bg-rose-500/10 ${
+                            isDarkMode ? "border-slate-800" : "border-slate-200"
+                          }`}
+                          title="حذف فایل و انصراف"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Simple Settings */}
+                    {/* Extraction Progress Indicator */}
                     {isExtracting ? (
-                      <div className="flex flex-col gap-4 py-12 items-center justify-center">
-                         <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                         <p className={`text-[12px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>در حال پردازش هوشمند سند...</p>
+                      <div className="flex flex-col gap-4 py-14 items-center justify-center">
+                        <div className="relative">
+                          <div className="w-12 h-12 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin"></div>
+                          <Sparkles className="w-5 h-5 text-amber-400 absolute inset-0 m-auto animate-pulse" />
+                        </div>
+                        <div className="text-center space-y-1">
+                          <p className={`text-sm font-black ${isDarkMode ? "text-slate-200" : "text-slate-800"}`}>
+                            در حال استخراج و ممیزی هوشمند سند...
+                          </p>
+                          <p className={`text-[11px] ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            اعمال استراتژی عدم-حدس، تفکیک ارزی و کنترل ۵ لایه موازنه ریاضی
+                          </p>
+                        </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col gap-4 p-4">
+                      <div className="flex flex-col gap-4">
                         
-                        {customPrompt.trim() && (
-                          <div className={`p-2.5 rounded-xl border text-[10px] leading-relaxed ${
-                            isDarkMode ? "bg-slate-900/50 border-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-700"
-                          }`}>
-                            <span className="font-bold text-blue-500 ml-1">دستور سفارشی:</span>
-                            {customPrompt}
-                          </div>
-                        )}
-
                         {/* Enhanced Audit-Grade 100% Extraction Hero Card */}
-                        <div className={`relative overflow-hidden p-6 lg:p-8 rounded-2xl border transition-all duration-500 group ${
+                        <div className={`relative overflow-hidden p-5 sm:p-7 rounded-2xl border transition-all duration-500 group ${
                           isDarkMode 
-                            ? "bg-slate-900 border-amber-500/30 shadow-[0_8px_30px_rgba(245,158,11,0.15)] hover:border-amber-500/60 hover:shadow-[0_8px_40px_rgba(245,158,11,0.25)]" 
-                            : "bg-gradient-to-br from-amber-50 via-white to-orange-50/50 border-amber-300 shadow-[0_8px_30px_rgba(245,158,11,0.1)] hover:shadow-[0_12px_40px_rgba(245,158,11,0.15)] hover:border-amber-400"
+                            ? "bg-gradient-to-br from-slate-900 via-slate-900 to-amber-950/30 border-amber-500/30 shadow-[0_8px_30px_rgba(245,158,11,0.12)] hover:border-amber-500/50" 
+                            : "bg-gradient-to-br from-amber-50/80 via-white to-orange-50/60 border-amber-300/80 shadow-[0_8px_30px_rgba(245,158,11,0.08)] hover:border-amber-400"
                         }`}>
-                          {/* Animated background glows */}
-                          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-[60px] -mr-20 -mt-20 pointer-events-none group-hover:bg-amber-500/20 transition-colors duration-700"></div>
-                          <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-[50px] -ml-20 -mb-20 pointer-events-none group-hover:bg-indigo-500/20 transition-colors duration-700"></div>
-                          <div className={`absolute inset-0 opacity-10 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:20px_20px] pointer-events-none ${isDarkMode ? "opacity-[0.03]" : "opacity-[0.05]"}`}></div>
+                          {/* Ambient background decorative elements */}
+                          <div className="absolute top-0 right-0 w-72 h-72 bg-amber-500/10 rounded-full blur-[70px] -mr-20 -mt-20 pointer-events-none group-hover:bg-amber-500/20 transition-colors duration-700"></div>
+                          <div className="absolute bottom-0 left-0 w-56 h-56 bg-orange-500/10 rounded-full blur-[60px] -ml-20 -mb-20 pointer-events-none group-hover:bg-orange-500/20 transition-colors duration-700"></div>
                           
-                          <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
-                            <div className="flex flex-col gap-4 flex-1 w-full">
-                              <div className="flex flex-wrap items-center gap-4">
-                                <div className={`relative flex items-center justify-center w-12 h-12 rounded-xl shadow-inner shrink-0 ${
-                                  isDarkMode ? "bg-gradient-to-br from-amber-900 to-amber-950 border border-amber-500/30 text-amber-400" : "bg-gradient-to-br from-amber-100 to-amber-200 border border-amber-300 text-amber-600 shadow-amber-500/20"
+                          <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                            <div className="flex flex-col gap-3.5 flex-1 w-full">
+                              <div className="flex items-center gap-3">
+                                <div className={`relative flex items-center justify-center w-11 h-11 rounded-2xl shadow-inner shrink-0 ${
+                                  isDarkMode ? "bg-gradient-to-br from-amber-800 to-amber-950 border border-amber-500/40 text-amber-300" : "bg-gradient-to-br from-amber-100 to-amber-200 border border-amber-300 text-amber-700 shadow-amber-500/20"
                                 }`}>
                                   <ShieldCheck className="w-6 h-6 animate-pulse" />
-                                  <div className="absolute inset-0 rounded-xl bg-amber-400/20 animate-ping opacity-20"></div>
                                 </div>
-                                <div className="flex flex-col">
-                                  <h3 className={`text-lg sm:text-xl font-black tracking-tight ${isDarkMode ? "text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500" : "text-transparent bg-clip-text bg-gradient-to-r from-amber-700 to-orange-600"}`}>
-                                    دستور ویژه ممیزی (نسل ۷ آلترا)
-                                  </h3>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className={`text-[11px] font-bold tracking-widest uppercase ${isDarkMode ? "text-amber-500/80" : "text-amber-700/70"}`}>
-                                      Audit-Grade Document Extraction
-                                    </span>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h3 className={`text-base sm:text-lg font-black tracking-tight ${isDarkMode ? "text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-300 to-orange-300" : "text-transparent bg-clip-text bg-gradient-to-r from-amber-800 via-amber-700 to-orange-700"}`}>
+                                      استخراج ممیزی نسل ۷ آلترا (Audit-Grade)
+                                    </h3>
                                     <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                                   </div>
+                                  <p className={`text-[10px] sm:text-[11px] font-bold ${isDarkMode ? "text-amber-400/80" : "text-amber-700/80"}`}>
+                                    استاندارد رسمی حسابرسی، تطبیق سامانه مودیان و موازنه مالیاتی
+                                  </p>
                                 </div>
                               </div>
                               
-                              <p className={`text-[12px] sm:text-[13px] leading-relaxed max-w-3xl font-medium ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                                قدرتمندترین موتور پردازش اسناد مالی با <strong>استراتژی عدم-حدس (Strict Null)</strong>. استخراج ایمن، تفکیک دقیق واحدهای ارزی و حفظ متن خام، همراه با <span className={isDarkMode ? "text-amber-400" : "text-amber-600 font-bold"}>۵ لایه کنترل متقابل ریاضی</span> جهت تضمین ورود مستقیم و بدون خطای داده‌ها به سیستم‌های <strong>ERP</strong> و جداول <strong>Excel</strong>.
+                              <p className={`text-[11.5px] sm:text-[12.5px] leading-relaxed max-w-2xl font-medium ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                                پردازش هوشمند سند با <strong>استراتژی عدم-حدس (Strict Null)</strong>، تفکیک دقیق واحدهای ارزی و حفظ متن خام، همراه با <span className={isDarkMode ? "text-amber-400 font-bold" : "text-amber-600 font-bold"}>۵ لایه کنترل متقابل ریاضی</span> جهت تضمین ورود مستقیم اطلاعات به سیستم‌های <strong>ERP</strong> و جداول <strong>Excel</strong>.
                               </p>
                               
-                              <div className="flex flex-wrap gap-2 sm:gap-3 mt-1">
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                                 {[
-                                  { icon: <ShieldAlert className="w-4 h-4" />, text: "استراتژی عدم حدس (Strict Null)" },
-                                  { icon: <Binary className="w-4 h-4" />, text: "تفکیک ارزی + متن خام" },
-                                  { icon: <CheckSquare className="w-4 h-4" />, text: "خروجی JSON ۴۵ کلیدی" },
-                                  { icon: <Calculator className="w-4 h-4" />, text: "۵ لایه کنترل ریاضی" }
+                                  { icon: <ShieldAlert className="w-3.5 h-3.5" />, text: "عدم حدس (Strict Null)" },
+                                  { icon: <Binary className="w-3.5 h-3.5" />, text: "تفکیک واحد ارزی" },
+                                  { icon: <CheckSquare className="w-3.5 h-3.5" />, text: "خروجی ۴۵ کلیدی مسطح" },
+                                  { icon: <Calculator className="w-3.5 h-3.5" />, text: "۵ لایه کنترل ریاضی" }
                                 ].map((feature, i) => (
-                                  <div key={i} className={`flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] font-bold transition-all ${
+                                  <div key={i} className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-[10px] font-bold transition-all ${
                                     isDarkMode 
-                                      ? "bg-slate-800/80 text-amber-100 border border-slate-700 hover:border-amber-500/40 hover:bg-slate-800 hover:shadow-[0_4px_12px_rgba(245,158,11,0.1)]" 
-                                      : "bg-white/80 text-amber-900 border border-amber-200/60 shadow-sm hover:border-amber-300 hover:shadow-md hover:-translate-y-0.5"
+                                      ? "bg-slate-800/80 text-amber-200 border border-slate-700/80" 
+                                      : "bg-white/90 text-amber-900 border border-amber-200/80 shadow-xs"
                                   }`}>
-                                    <span className={isDarkMode ? "text-amber-500" : "text-amber-600"}>{feature.icon}</span>
-                                    {feature.text}
+                                    <span className={isDarkMode ? "text-amber-400" : "text-amber-600"}>{feature.icon}</span>
+                                    <span className="truncate">{feature.text}</span>
                                   </div>
                                 ))}
                               </div>
                             </div>
                             
+                            {/* Primary Action Button */}
                             <div className="flex w-full lg:w-auto relative group shrink-0 self-stretch lg:self-center">
-                               {/* Glowing button background */}
-                               <div className={`absolute inset-0 rounded-2xl blur-xl opacity-40 group-hover:opacity-75 transition-opacity duration-300 ${isDarkMode ? 'bg-amber-500' : 'bg-orange-500'}`}></div>
-                               <button
-                                  type="button"
-                                  onClick={handleExtract100PercentAllToJsonAndExcel}
-                                  className={`relative w-full px-6 sm:px-8 py-4 sm:py-5 rounded-2xl text-[13px] sm:text-[14px] font-black flex items-center justify-center gap-3 transition-all cursor-pointer shadow-xl active:scale-95 border-2 ${
-                                    isDarkMode 
-                                      ? "bg-gradient-to-br from-amber-500 to-orange-600 text-amber-950 border-amber-400 hover:from-amber-400 hover:to-orange-500 shadow-amber-900/50" 
-                                      : "bg-gradient-to-br from-amber-500 to-orange-600 text-white border-amber-400 hover:from-amber-400 hover:to-orange-500 shadow-orange-500/30"
-                                  }`}
-                                >
-                                  <FileSpreadsheet className="w-5 h-5 sm:w-6 sm:h-6" />
-                                  <span className="tracking-wide">اجرای استخراج (ممیزی)</span>
-                                </button>
+                              <div className={`absolute inset-0 rounded-2xl blur-lg opacity-40 group-hover:opacity-75 transition-opacity duration-300 ${isDarkMode ? 'bg-amber-500' : 'bg-orange-500'}`}></div>
+                              <button
+                                type="button"
+                                onClick={handleExtract100PercentAllToJsonAndExcel}
+                                className={`relative w-full px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-[12.5px] sm:text-[13.5px] font-black flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-lg active:scale-95 border ${
+                                  isDarkMode 
+                                    ? "bg-gradient-to-r from-amber-500 via-amber-400 to-orange-500 text-slate-950 border-amber-300 hover:from-amber-400 hover:to-orange-400 shadow-amber-950/40" 
+                                    : "bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 text-white border-amber-400 hover:from-amber-400 hover:to-orange-500 shadow-orange-500/25"
+                                }`}
+                              >
+                                <Sparkles className="w-5 h-5 shrink-0 animate-spin" style={{ animationDuration: "3s" }} />
+                                <span className="tracking-wide">اجرای استخراج (ممیزی)</span>
+                              </button>
                             </div>
                           </div>
                         </div>
+
+                        {/* Collapsible Prompt & Custom Instructions Section */}
+                        <div className={`rounded-2xl border transition-all ${
+                          isDarkMode 
+                            ? "bg-slate-900/60 border-slate-800" 
+                            : "bg-slate-50/80 border-slate-200"
+                        }`}>
+                          <div className="flex items-center justify-between p-3 sm:p-3.5 gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] ${
+                                isDarkMode ? "bg-slate-800 text-slate-300" : "bg-slate-200 text-slate-700"
+                              }`}>
+                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                              </div>
+                              <span className={`text-[11.5px] font-bold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                                دستورات و پرامپت ارسالی به مدل OCR:
+                              </span>
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                                customPrompt.trim() 
+                                  ? "bg-blue-500/15 text-blue-400 border border-blue-500/30" 
+                                  : isDarkMode ? "bg-slate-800 text-slate-400" : "bg-slate-200 text-slate-600"
+                              }`}>
+                                {customPrompt.trim() ? "دستور اختصاصی تنظیم شد" : "موتور ممیزی نسل ۷ (پیش‌فرض سیستم)"}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setShowCustomPromptDetails(prev => !prev)}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border cursor-pointer ${
+                                showCustomPromptDetails 
+                                  ? isDarkMode ? "bg-amber-500/10 border-amber-500/30 text-amber-400" : "bg-amber-50 border-amber-200 text-amber-700"
+                                  : isDarkMode ? "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300" : "bg-white hover:bg-slate-100 border-slate-200 text-slate-700"
+                              }`}
+                            >
+                              {showCustomPromptDetails ? (
+                                <>
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                  <span>بستن متن پرامپت</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                  <span>مشاهده / شخصی‌سازی پرامپت (اختیاری)</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Expanded Prompt Details */}
+                          <AnimatePresence>
+                            {showCustomPromptDetails && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.25 }}
+                                className="overflow-hidden"
+                              >
+                                <div className={`p-4 pt-1 border-t space-y-3 ${isDarkMode ? "border-slate-800/80" : "border-slate-200/80"}`}>
+                                  <p className={`text-[10.5px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                                    دستورات کامل ممیزی، عدم-حدس و چک‌لیست ۴۵‌گانه به صورت پیش‌فرض و خودکار به مدل ارسال می‌گردد. در صورت نیاز به افزودن دستورات تکمیلی، می‌توانید از کادر زیر استفاده کنید:
+                                  </p>
+
+                                  <div className="relative">
+                                    <textarea
+                                      rows={3}
+                                      value={customPrompt}
+                                      onChange={(e) => setCustomPrompt(e.target.value)}
+                                      placeholder="دستورالعمل‌های اختصاصی خود را بنویسید (مثلاً: فقط جدول اقلام را استخراج کن، مبالغ را به تومان تبدیل کن، یا ستون تخفیف را نادیده بگیر)..."
+                                      className={`w-full p-3 text-[11px] rounded-xl border focus:outline-hidden transition-all resize-y ${
+                                        isDarkMode 
+                                          ? "bg-slate-950/80 border-slate-700 text-slate-200 focus:border-amber-500 placeholder-slate-600" 
+                                          : "bg-white border-slate-200 text-slate-800 focus:border-amber-500 placeholder-slate-400"
+                                      }`}
+                                    />
+                                  </div>
+
+                                  {/* Quick Presets */}
+                                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                        افزودن الگوهای آماده:
+                                      </span>
+                                      {[
+                                        { label: "⚡ خروجی مستقیم JSON", text: "استخراج ۱۰۰٪ کلیه داده‌ها در قالب استاندارد JSON با کلیدهای فارسی." },
+                                        { label: "🔍 فقط جدول اقلام و مبالغ", text: "فقط جدول اقلام کالا، تعداد، قیمت واحد، مالیات و مبالغ نهایی را استخراج کن." },
+                                        { label: "🛡️ نادیده گرفتن دست‌نویس و مهر", text: "از دست‌نویس‌های حاشیه‌ای و مهرهای ناخوانا صرف‌نظر کن و تنها بخش‌های چاپی رسمی را استخراج کن." },
+                                      ].map((p, idx) => (
+                                        <button
+                                          key={idx}
+                                          type="button"
+                                          onClick={() => {
+                                            setCustomPrompt(prev => prev.trim() ? `${prev.trim()}\n${p.text}` : p.text);
+                                          }}
+                                          className={`px-2.5 py-1 rounded-lg text-[9.5px] font-bold border transition-all cursor-pointer ${
+                                            isDarkMode 
+                                              ? "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300" 
+                                              : "bg-white hover:bg-slate-100 border-slate-200 text-slate-700"
+                                          }`}
+                                        >
+                                          + {p.label}
+                                        </button>
+                                      ))}
+                                    </div>
+
+                                    {customPrompt.trim() && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setCustomPrompt("")}
+                                        className="text-[10px] text-rose-500 hover:text-rose-600 font-bold underline cursor-pointer"
+                                      >
+                                        پاکسازی دستور سفارشی
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
                         
-                        {/* Actions */}
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/60">
+                        {/* Secondary Actions Toolbar */}
+                        <div className={`flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t ${isDarkMode ? "border-slate-800/80" : "border-slate-100"}`}>
                           <button
                             type="button"
                             onClick={() => {
                               setPendingFiles([]);
                               setCustomPrompt("");
                             }}
-                            className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${isDarkMode ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-600"}`}
+                            className={`px-4 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer ${
+                              isDarkMode ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                            }`}
                           >
                             انصراف
                           </button>
+                          
                           <div className="flex flex-wrap items-center justify-end gap-2">
                             <button
                               type="button"
@@ -5296,28 +5423,29 @@ export default function App() {
                               <MessageSquareText className="w-3.5 h-3.5 text-purple-500" />
                               <span>💬 چت اختصاصی سند</span>
                             </button>
+                            
                             <button
                               type="button"
                               onClick={handleExtractDirectToJson}
-                              className="px-4 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
+                              className="px-3.5 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
                               title="استخراج مستقیم کلیه اطلاعات و اقلام سند به فرمت ساختاریافته JSON"
                             >
                               <Code className="w-3.5 h-3.5 shrink-0 text-purple-200" />
-                              <span>⚡ استخراج و تبدیل مستقیم به JSON</span>
+                              <span>⚡ استخراج سریع JSON</span>
                             </button>
-                            <div className="flex flex-col items-end gap-1">
-                              <button
-                                type="button"
-                                onClick={handleDirectExtraction}
-                                className="px-5 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all bg-blue-600 hover:bg-blue-500 text-white shadow-md cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
-                              >
-                                <Sparkles className="w-3.5 h-3.5 shrink-0 text-blue-200 animate-pulse" />
-                                <span>شروع استخراج نهایی</span>
-                              </button>
-
-                            </div>
+                            
+                            <button
+                              type="button"
+                              onClick={() => handleDirectExtraction()}
+                              className="px-4 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all bg-blue-600 hover:bg-blue-500 text-white shadow-md cursor-pointer hover:-translate-y-0.5 active:translate-y-0"
+                              title="شروع استخراج استاندارد"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 shrink-0 text-blue-200 animate-pulse" />
+                              <span>شروع استخراج استاندارد</span>
+                            </button>
                           </div>
                         </div>
+
                       </div>
                     )}
                   </div>

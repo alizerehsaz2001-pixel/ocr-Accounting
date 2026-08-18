@@ -429,114 +429,149 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
 
   return (
     <div 
-      className={`min-h-screen w-full flex items-center justify-center p-4 relative overflow-y-auto py-12 font-sans select-none ${
+      className={`min-h-screen w-full flex items-center justify-center p-4 sm:p-6 relative overflow-y-auto py-10 font-sans select-none ${
         isDarkMode 
-          ? "bg-[#0A0A0B] text-slate-200" 
-          : "bg-[#FAFAFA] text-slate-800"
+          ? "bg-[#090D16] text-slate-100 selection:bg-indigo-500/30" 
+          : "bg-[#F3F6FA] text-slate-800 selection:bg-indigo-500/20"
       }`} 
       dir="rtl"
     >
-      {/* Background Visuals */}
+      {/* Background Ambient Visual Glows */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {isDarkMode ? (
           <>
-            <div className="absolute top-[-20%] right-[-10%] w-[70vw] h-[70vw] rounded-full blur-[140px] opacity-[0.07] bg-indigo-500"></div>
-            <div className="absolute bottom-[-20%] left-[-10%] w-[70vw] h-[70vw] rounded-full blur-[140px] opacity-[0.05] bg-blue-500"></div>
+            <div className="absolute -top-32 -right-32 w-[550px] h-[550px] rounded-full blur-[130px] opacity-25 bg-indigo-600/30"></div>
+            <div className="absolute -bottom-32 -left-32 w-[550px] h-[550px] rounded-full blur-[130px] opacity-20 bg-amber-500/20"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[160px] opacity-10 bg-blue-600/20"></div>
           </>
         ) : (
           <>
-            <div className="absolute top-[-20%] right-[-10%] w-[70vw] h-[70vw] rounded-full blur-[140px] opacity-[0.4] bg-indigo-100"></div>
-            <div className="absolute bottom-[-20%] left-[-10%] w-[70vw] h-[70vw] rounded-full blur-[140px] opacity-[0.3] bg-blue-100"></div>
+            <div className="absolute -top-32 -right-32 w-[550px] h-[550px] rounded-full blur-[130px] opacity-60 bg-indigo-100/70"></div>
+            <div className="absolute -bottom-32 -left-32 w-[550px] h-[550px] rounded-full blur-[130px] opacity-50 bg-amber-100/60"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[160px] opacity-40 bg-blue-50/70"></div>
           </>
         )}
-        <div className={`absolute inset-0 opacity-[0.02] ${isDarkMode ? "bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)]" : "bg-[linear-gradient(to_right,#000000_1px,transparent_1px),linear-gradient(to_bottom,#000000_1px,transparent_1px)]"} bg-[size:32px_32px]`}></div>
+        <div className={`absolute inset-0 opacity-[0.03] ${isDarkMode ? "bg-[radial-gradient(#ffffff_1px,transparent_1px)]" : "bg-[radial-gradient(#000000_1px,transparent_1px)]"} [background-size:24px_24px]`}></div>
       </div>
 
       <motion.div 
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-[540px] relative z-10 my-auto"
+        initial={{ opacity: 0, y: 18, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-[560px] relative z-10 my-auto"
       >
-        {/* Main Card */}
-        <div className={`rounded-3xl p-8 md:p-10 relative ${
+        {/* Main Glass Card */}
+        <div className={`rounded-3xl p-6 sm:p-9 relative transition-all duration-300 ${
           isDarkMode 
-            ? "bg-[#111113] border border-white/5 shadow-2xl shadow-black/50" 
-            : "bg-white border border-slate-200/60 shadow-xl shadow-slate-200/50"
+            ? "bg-slate-900/90 backdrop-blur-2xl border border-slate-800/90 shadow-[0_25px_60px_rgba(0,0,0,0.6)]" 
+            : "bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-[0_20px_50px_rgba(15,23,42,0.08)]"
         }`}>
-          {/* Top Bar Button */}
-          <div className="flex justify-between items-center mb-6">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
-              درگاه امن احراز هویت کاربران (SSL HTTPS)
-            </span>
+          
+          {/* Top Status & New Tab Bar */}
+          <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100 dark:border-slate-800/70">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-500 dark:text-emerald-400">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                درگاه امن احراز هویت (SSL 256-bit)
+              </span>
+            </div>
+
             <button
               onClick={openInNewTab}
-              className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors px-2.5 py-1 rounded-lg ${
-                isDarkMode ? "text-slate-400 hover:text-white hover:bg-slate-800" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              className={`flex items-center gap-1.5 text-[11px] font-bold transition-all px-2.5 py-1 rounded-xl border cursor-pointer ${
+                isDarkMode 
+                  ? "bg-slate-800/60 border-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-700" 
+                  : "bg-slate-100/80 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-200"
               }`}
-              title="باز کردن در تب جدید جهت هماهنگی کامل پروتکل‌های امنیتی"
+              title="باز کردن در تب جدید جهت سازگاری کامل پروتکل‌های امنیتی"
             >
               <span>تب جدید</span>
               <ExternalLink className="w-3 h-3" />
             </button>
           </div>
 
-          {/* Header */}
-          <div className="flex flex-col items-center text-center mb-8 relative">
-            <motion.div 
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
-              className="w-12 h-12 bg-slate-900 dark:bg-white rounded-2xl flex items-center justify-center text-white dark:text-slate-900 shadow-md mb-4"
-            >
-              <Lock className="w-5 h-5" />
-            </motion.div>
+          {/* Header Brand */}
+          <div className="flex flex-col items-center text-center mb-7 relative">
+            <div className="relative mb-3">
+              <div className="w-14 h-14 bg-gradient-to-tr from-indigo-600 via-indigo-500 to-blue-500 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-500/25">
+                <ShieldCheck className="w-7 h-7" />
+              </div>
+              <div className="absolute -bottom-1 -left-1 w-5 h-5 bg-amber-500 rounded-lg flex items-center justify-center text-white shadow-md">
+                <Sparkles className="w-3 h-3" />
+              </div>
+            </div>
             
-            <h1 className="text-xl font-bold tracking-tight mb-2">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight mb-1 bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-blue-500 to-amber-500">
               سامانه حسابداری و ممیزی زره‌اسکن
             </h1>
-            <p className={`text-xs max-w-[280px] leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-              ورود امن و رمزنگاری‌شده بر بستر ابری با تایید هویت دوکاناله
+            <p className={`text-[11.5px] max-w-[340px] leading-relaxed font-medium ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+              ورود امن و یکپارچه به موتور استخراج اسناد مالی و هوش حسابرسی
             </p>
           </div>
 
           {/* Navigation Tabs */}
-          <div className={`flex p-1.5 rounded-[20px] mb-8 relative ${isDarkMode ? "bg-slate-900/50 border border-slate-800/80" : "bg-slate-100 border border-slate-200/60"}`}>
+          <div className={`grid grid-cols-3 p-1.5 rounded-2xl mb-6 relative border ${
+            isDarkMode 
+              ? "bg-slate-950/70 border-slate-800/80" 
+              : "bg-slate-100/90 border-slate-200/80"
+          }`}>
             <button
               onClick={() => { setActiveTab("google"); setErrorMessage(null); }}
-              className={`flex-1 text-center py-3 text-xs font-bold rounded-2xl transition-all duration-300 relative z-10 cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 py-2.5 px-2 text-[11px] font-black rounded-xl transition-all duration-200 cursor-pointer ${
                 activeTab === "google" 
-                  ? isDarkMode ? "bg-gradient-to-r from-slate-800 to-slate-800/90 text-white shadow-lg shadow-black/20 border border-slate-700" : "bg-white text-slate-900 shadow-md shadow-slate-200/50 border border-slate-200" 
-                  : isDarkMode ? "text-slate-400 hover:text-slate-200 hover:bg-white/5" : "text-slate-500 hover:text-slate-800 hover:bg-black/5"
+                  ? isDarkMode 
+                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 border border-indigo-400/40" 
+                    : "bg-white text-indigo-700 shadow-md shadow-slate-300/60 border border-indigo-200" 
+                  : isDarkMode 
+                    ? "text-slate-400 hover:text-slate-200 hover:bg-white/5" 
+                    : "text-slate-600 hover:text-slate-900 hover:bg-black/5"
               }`}
             >
-              ورود با گوگل
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                <path fill={activeTab === "google" && isDarkMode ? "#ffffff" : "#EA4335"} d="M12.24 10.285V14.4h6.887c-.275 1.565-1.88 4.604-6.887 4.604-4.33 0-7.859-3.578-7.859-8s3.529-8 7.859-8c2.46 0 4.105 1.025 5.047 1.926l3.227-3.11C18.281 1.09 15.45 0 12.24 0 5.58 0 0 5.37 0 12s5.58 12 12.24 12c6.96 0 11.57-4.89 11.57-11.79 0-.79-.085-1.4-.19-1.925H12.24z" />
+              </svg>
+              <span className="truncate">ورود با گوگل</span>
             </button>
+
             <button
               onClick={() => { setActiveTab("register"); setErrorMessage(null); }}
-              className={`flex-1 text-center py-3 text-xs font-bold rounded-2xl transition-all duration-300 relative z-10 cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 py-2.5 px-2 text-[11px] font-black rounded-xl transition-all duration-200 cursor-pointer ${
                 activeTab === "register" 
-                  ? isDarkMode ? "bg-gradient-to-r from-slate-800 to-slate-800/90 text-white shadow-lg shadow-black/20 border border-slate-700" : "bg-white text-slate-900 shadow-md shadow-slate-200/50 border border-slate-200" 
-                  : isDarkMode ? "text-slate-400 hover:text-slate-200 hover:bg-white/5" : "text-slate-500 hover:text-slate-800 hover:bg-black/5"
+                  ? isDarkMode 
+                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 border border-indigo-400/40" 
+                    : "bg-white text-indigo-700 shadow-md shadow-slate-300/60 border border-indigo-200" 
+                  : isDarkMode 
+                    ? "text-slate-400 hover:text-slate-200 hover:bg-white/5" 
+                    : "text-slate-600 hover:text-slate-900 hover:bg-black/5"
               }`}
             >
-              ثبت‌نام جدید
+              <User className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">ثبت‌نام جدید</span>
             </button>
+
             <button
               onClick={() => { setActiveTab("login"); setErrorMessage(null); }}
-              className={`flex-1 text-center py-3 text-xs font-bold rounded-2xl transition-all duration-300 relative z-10 cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 py-2.5 px-2 text-[11px] font-black rounded-xl transition-all duration-200 cursor-pointer ${
                 activeTab === "login" 
-                  ? isDarkMode ? "bg-gradient-to-r from-slate-800 to-slate-800/90 text-white shadow-lg shadow-black/20 border border-slate-700" : "bg-white text-slate-900 shadow-md shadow-slate-200/50 border border-slate-200" 
-                  : isDarkMode ? "text-slate-400 hover:text-slate-200 hover:bg-white/5" : "text-slate-500 hover:text-slate-800 hover:bg-black/5"
+                  ? isDarkMode 
+                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 border border-indigo-400/40" 
+                    : "bg-white text-indigo-700 shadow-md shadow-slate-300/60 border border-indigo-200" 
+                  : isDarkMode 
+                    ? "text-slate-400 hover:text-slate-200 hover:bg-white/5" 
+                    : "text-slate-600 hover:text-slate-900 hover:bg-black/5"
               }`}
             >
-              ورود دستی
+              <KeyRound className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">ورود دستی</span>
             </button>
           </div>
 
-          {/* Quick Demo Bypass Option for Seamless UX */}
-          <div className="mb-8">
+          {/* Quick 1-Click Demo VIP Button */}
+          <div className="mb-6">
             <button
               type="button"
               onClick={() => {
@@ -550,26 +585,28 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                 );
                 showNotification("خوش آمدید! شما با موفقیت به عنوان کاربر مهمان وارد شدید.", "success");
               }}
-              className={`w-full py-3.5 px-4 rounded-2xl text-xs font-black flex items-center justify-center gap-3 transition-all duration-300 cursor-pointer group border ${
+              className={`w-full py-3 px-4 rounded-2xl text-[11.5px] font-black flex items-center justify-between transition-all duration-300 cursor-pointer group border shadow-sm ${
                 isDarkMode 
-                  ? "bg-gradient-to-r from-indigo-950/60 via-slate-900 to-blue-950/60 border-indigo-500/30 text-indigo-200 hover:border-indigo-400 hover:shadow-[0_0_25px_rgba(99,102,241,0.25)]" 
-                  : "bg-gradient-to-r from-indigo-50 via-white to-blue-50 border-indigo-200 text-indigo-800 hover:border-indigo-300 hover:shadow-lg hover:shadow-indigo-500/10"
+                  ? "bg-gradient-to-r from-amber-500/10 via-slate-900 to-indigo-950/40 border-amber-500/30 text-amber-200 hover:border-amber-400 hover:shadow-[0_0_20px_rgba(245,158,11,0.15)]" 
+                  : "bg-gradient-to-r from-amber-50/80 via-white to-indigo-50/70 border-amber-200/90 text-amber-900 hover:border-amber-300 hover:shadow-md"
               }`}
             >
-              <Sparkles className="w-4 h-4 text-indigo-500 group-hover:animate-pulse group-hover:scale-110 transition-transform" />
-              <span>ورود فوری به محیط آزمایشی (دپوی حسابرسی)</span>
-              <span className="px-2.5 py-1 rounded-lg text-[10px] font-extrabold bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400 animate-pulse group-hover:scale-110 transition-transform" />
+                <span>ورود فوری به محیط آزمایشی (بدون نیاز به ثبت‌نام)</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-lg text-[9.5px] font-black bg-amber-500/20 text-amber-400 border border-amber-500/30">
                 1-Click Demo
               </span>
             </button>
           </div>
 
-          {/* Error Message */}
+          {/* Error Alert Box */}
           {errorMessage && (
             <motion.div 
-              initial={{ opacity: 0, y: -10 }}
+              initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mb-5 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs leading-relaxed text-right flex flex-col gap-3"
+              className="mb-5 p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-rose-500 text-[11px] leading-relaxed text-right flex flex-col gap-2.5"
             >
               <div className="flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
@@ -579,7 +616,7 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                 <button
                   type="button"
                   onClick={openInNewTab}
-                  className="px-3 py-1.5 bg-rose-500 text-white rounded-lg text-[10px] font-bold flex items-center gap-1.5 hover:bg-rose-600 transition-colors shadow-sm cursor-pointer"
+                  className="px-3 py-1 bg-rose-500 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 hover:bg-rose-600 transition-colors cursor-pointer"
                 >
                   <ExternalLink className="w-3 h-3" />
                   <span>باز کردن در تب جدید</span>
@@ -587,7 +624,7 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                 <button
                   type="button"
                   onClick={() => { setActiveTab("login"); setErrorMessage(null); }}
-                  className="px-3 py-1.5 bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 rounded-lg text-[10px] font-bold hover:opacity-90 transition-opacity cursor-pointer"
+                  className="px-3 py-1 bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 rounded-lg text-[10px] font-bold hover:opacity-90 transition-opacity cursor-pointer"
                 >
                   <span>انتقال به ورود دستی</span>
                 </button>
@@ -597,11 +634,11 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
 
           {/* TAB 1: Google Sign In */}
           {activeTab === "google" && (
-            <div className="space-y-8">
-              <div className={`p-5 rounded-[20px] text-center text-xs leading-relaxed border ${
-                isDarkMode ? "bg-white/[0.03] text-slate-300 border-white/5" : "bg-slate-50 text-slate-600 border-slate-200/50"
+            <div className="space-y-6">
+              <div className={`p-4 rounded-2xl text-center text-[11px] leading-relaxed border ${
+                isDarkMode ? "bg-slate-950/60 text-slate-300 border-slate-800" : "bg-slate-50 text-slate-600 border-slate-200/80"
               }`}>
-                جهت سهولت ورود و عدم نیاز به حفظ گذرواژه، می‌توانید با یک کلیک از طریق حساب کاربری تایید شده گوگل خود وارد سامانه شوید.
+                با کلیک روی دکمه زیر، مستقیماً از طریق حساب معتبر گوگل خود وارد سامانه شوید و به تمام اسناد و ابزارهای ممیزی دسترسی پیدا کنید.
               </div>
 
               <motion.button
@@ -609,43 +646,43 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                 whileTap={{ scale: 0.99 }}
                 onClick={handleGoogleSignIn}
                 disabled={loading}
-                className={`w-full flex items-center justify-center gap-3.5 px-5 py-4 rounded-[20px] font-bold text-xs transition-all cursor-pointer border shadow-md ${
+                className={`w-full flex items-center justify-center gap-3 px-5 py-4 rounded-2xl font-black text-xs transition-all cursor-pointer border shadow-lg ${
                   isDarkMode 
-                    ? "bg-[#1A1A1D] border-white/10 text-slate-200 hover:bg-[#222225] hover:border-white/20 hover:shadow-black/50" 
-                    : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:shadow-slate-200/60"
+                    ? "bg-slate-800 hover:bg-slate-750 border-slate-700 text-slate-100 hover:border-slate-600 shadow-slate-950/40" 
+                    : "bg-white hover:bg-slate-50 border-slate-200 text-slate-800 shadow-slate-200/80"
                 }`}
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-                    <span>در حال اتصال امن به سرورهای احراز هویت گوگل...</span>
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+                    <span>در حال اتصال امن به سرورهای گوگل...</span>
                   </>
                 ) : (
                   <>
-                    <svg className="w-5.5 h-5.5 shrink-0 drop-shadow-sm" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                       <path
                         fill="#EA4335"
                         d="M12.24 10.285V14.4h6.887c-.275 1.565-1.88 4.604-6.887 4.604-4.33 0-7.859-3.578-7.859-8s3.529-8 7.859-8c2.46 0 4.105 1.025 5.047 1.926l3.227-3.11C18.281 1.09 15.45 0 12.24 0 5.58 0 0 5.37 0 12s5.58 12 12.24 12c6.96 0 11.57-4.89 11.57-11.79 0-.79-.085-1.4-.19-1.925H12.24z"
                       />
                     </svg>
-                    <span>احراز هویت و ورود یکپارچه با گوگل</span>
+                    <span>احراز هویت و ورود مستقیم با حساب گوگل</span>
                   </>
                 )}
               </motion.button>
 
-              <div className={`p-4 rounded-[20px] text-[11px] leading-relaxed flex flex-col md:flex-row items-center justify-between gap-4 border ${
+              <div className={`p-3.5 rounded-2xl text-[10.5px] leading-relaxed flex items-center justify-between gap-3 border ${
                 isDarkMode 
-                  ? "bg-amber-500/5 border-amber-500/10 text-amber-200/90" 
-                  : "bg-amber-50/50 border-amber-200 text-amber-800"
+                  ? "bg-amber-500/5 border-amber-500/15 text-amber-200/90" 
+                  : "bg-amber-50/60 border-amber-200 text-amber-800"
               }`}>
-                <span className="text-center md:text-right">💡 اگر در پیش‌نمایش با خطای مسدود شدن مواجه شدید، روی دکمه مقابل کلیک کنید:</span>
+                <span>💡 در صورت مواجهه با محدودیت فریم مرورگر:</span>
                 <button
                   type="button"
                   onClick={openInNewTab}
-                  className="shrink-0 px-3.5 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-300 font-bold rounded-xl hover:bg-amber-500/20 transition-colors cursor-pointer flex items-center gap-1.5 border border-amber-500/20"
+                  className="shrink-0 px-3 py-1 bg-amber-500/15 text-amber-600 dark:text-amber-300 font-bold rounded-xl hover:bg-amber-500/25 transition-colors cursor-pointer flex items-center gap-1 border border-amber-500/20"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>باز کردن تب جدید</span>
+                  <ExternalLink className="w-3 h-3" />
+                  <span>تب جدید</span>
                 </button>
               </div>
             </div>
@@ -654,16 +691,17 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
           {/* TAB 2: Register Details */}
           {activeTab === "register" && (
             <motion.div 
-              initial={{ opacity: 0, x: -10 }}
+              initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
               className="space-y-4"
             >
               <form onSubmit={handleRegisterSubmit} className="space-y-4">
                 
                 {/* Row 1: Name and Email */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2.5 text-right">
-                    <label className={`text-xs font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5 text-right">
+                    <label className={`text-[11px] font-bold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <User className="w-3 h-3 text-indigo-400" />
                       <span>نام و نام خانوادگی</span>
                     </label>
                     <input
@@ -674,22 +712,23 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                         setFullName(e.target.value);
                         if (errors.fullName) setErrors(prev => ({ ...prev, fullName: "" }));
                       }}
-                      className={`w-full px-4 py-3.5 rounded-2xl text-xs font-medium border transition-colors outline-none ${
+                      className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium border transition-colors outline-none ${
                         errors.fullName 
-                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500 focus:border-rose-500" 
-                          : isDarkMode ? "bg-[#161618] border-white/10 text-white focus:border-indigo-500 focus:bg-[#1A1A1D]" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
+                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500" 
+                          : isDarkMode ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
                       }`}
                     />
                     {errors.fullName && (
-                      <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
+                      <p className="text-[9.5px] text-rose-500 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
                         <span>{errors.fullName}</span>
                       </p>
                     )}
                   </div>
 
-                  <div className="space-y-2.5 text-right">
-                    <label className={`text-xs font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                  <div className="space-y-1.5 text-right">
+                    <label className={`text-[11px] font-bold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <Mail className="w-3 h-3 text-indigo-400" />
                       <span>آدرس ایمیل</span>
                     </label>
                     <input
@@ -700,31 +739,32 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                         setUserEmail(e.target.value);
                         if (errors.userEmail) setErrors(prev => ({ ...prev, userEmail: "" }));
                       }}
-                      className={`w-full px-4 py-3.5 rounded-2xl text-xs font-medium border text-left font-mono transition-colors outline-none ${
+                      className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium border text-left font-mono transition-colors outline-none ${
                         errors.userEmail 
-                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500 focus:border-rose-500" 
-                          : isDarkMode ? "bg-[#161618] border-white/10 text-white focus:border-indigo-500 focus:bg-[#1A1A1D]" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
+                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500" 
+                          : isDarkMode ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
                       }`}
                     />
                     {errors.userEmail && (
-                      <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
+                      <p className="text-[9.5px] text-rose-500 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
                         <span>{errors.userEmail}</span>
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Password and Confirm Password Row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2.5 text-right">
-                    <label className={`text-xs font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                {/* Row 2: Password and Confirm Password */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5 text-right">
+                    <label className={`text-[11px] font-bold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <Lock className="w-3 h-3 text-indigo-400" />
                       <span>رمز عبور (حداقل ۶ کاراکتر)</span>
                     </label>
                     <div className="relative">
                       <input
                         type={showPassword ? "text" : "password"}
-                        placeholder="گذرواژه امن خود را وارد کنید"
+                        placeholder="گذرواژه امن"
                         value={password}
                         onChange={(e) => {
                           setPassword(e.target.value);
@@ -733,127 +773,131 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                             setErrors(prev => ({ ...prev, confirmPassword: "" }));
                           }
                         }}
-                        className={`w-full px-4 py-3.5 rounded-2xl text-xs font-medium border text-left font-mono outline-none transition-colors ${
+                        className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium border text-left font-mono outline-none transition-colors ${
                           errors.password 
-                            ? "border-rose-500/50 bg-rose-500/5 text-rose-500 focus:border-rose-500" 
-                            : isDarkMode ? "bg-[#161618] border-white/10 text-white focus:border-indigo-500 focus:bg-[#1A1A1D]" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
+                            ? "border-rose-500/50 bg-rose-500/5 text-rose-500" 
+                            : isDarkMode ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
                         }`}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute left-4 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                        className="absolute left-3 top-2.5 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
                       >
-                        {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                     {errors.password && (
-                      <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
+                      <p className="text-[9.5px] text-rose-500 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
                         <span>{errors.password}</span>
                       </p>
                     )}
                   </div>
 
-                  <div className="space-y-2.5 text-right">
-                    <label className={`text-xs font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                  <div className="space-y-1.5 text-right">
+                    <label className={`text-[11px] font-bold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <Lock className="w-3 h-3 text-indigo-400" />
                       <span>تکرار رمز عبور</span>
                     </label>
                     <div className="relative">
                       <input
                         type={showConfirmPassword ? "text" : "password"}
-                        placeholder="تکرار گذرواژه را وارد کنید"
+                        placeholder="تکرار گذرواژه"
                         value={confirmPassword}
                         onChange={(e) => {
                           setConfirmPassword(e.target.value);
                           if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: "" }));
                         }}
-                        className={`w-full px-4 py-3.5 rounded-2xl text-xs font-medium border text-left font-mono outline-none transition-colors ${
+                        className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium border text-left font-mono outline-none transition-colors ${
                           errors.confirmPassword 
-                            ? "border-rose-500/50 bg-rose-500/5 text-rose-500 focus:border-rose-500" 
-                            : isDarkMode ? "bg-[#161618] border-white/10 text-white focus:border-indigo-500 focus:bg-[#1A1A1D]" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
+                            ? "border-rose-500/50 bg-rose-500/5 text-rose-500" 
+                            : isDarkMode ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
                         }`}
                       />
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute left-4 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                        className="absolute left-3 top-2.5 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
                       >
-                        {showConfirmPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                     {errors.confirmPassword && (
-                      <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
+                      <p className="text-[9.5px] text-rose-500 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
                         <span>{errors.confirmPassword}</span>
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Row 2: Phone and National ID */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2.5 text-right">
-                    <label className={`text-xs font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                      <span>شماره تلفن همراه</span>
+                {/* Row 3: Phone and National ID */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5 text-right">
+                    <label className={`text-[11px] font-bold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <Phone className="w-3 h-3 text-indigo-400" />
+                      <span>شماره همراه</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="مثال: 09123456789"
+                      placeholder="09123456789"
                       value={userPhone}
                       onChange={(e) => {
                         setUserPhone(e.target.value);
                         if (errors.userPhone) setErrors(prev => ({ ...prev, userPhone: "" }));
                       }}
-                      className={`w-full px-4 py-3.5 rounded-2xl text-xs font-medium outline-none transition-colors border text-left font-mono ${
+                      className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium outline-none transition-colors border text-left font-mono ${
                         errors.userPhone
-                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500 focus:border-rose-500"
+                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500"
                           : isDarkMode 
-                            ? "bg-[#161618] border-white/10 text-white focus:border-indigo-500 focus:bg-[#1A1A1D]" 
+                            ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" 
                             : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
                       }`}
                     />
                     {errors.userPhone && (
-                      <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
+                      <p className="text-[9.5px] text-rose-500 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
                         <span>{errors.userPhone}</span>
                       </p>
                     )}
                   </div>
 
-                  <div className="space-y-2.5 text-right">
-                    <label className={`text-xs font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                  <div className="space-y-1.5 text-right">
+                    <label className={`text-[11px] font-bold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <FileText className="w-3 h-3 text-indigo-400" />
                       <span>کد ملی ۱۰ رقمی</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="مثال: 0012345678"
+                      placeholder="0012345678"
                       value={userNationalCode}
                       onChange={(e) => {
                         setUserNationalCode(e.target.value);
                         if (errors.userNationalCode) setErrors(prev => ({ ...prev, userNationalCode: "" }));
                       }}
-                      className={`w-full px-4 py-3.5 rounded-2xl text-xs font-medium outline-none transition-colors border text-left font-mono ${
+                      className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium outline-none transition-colors border text-left font-mono ${
                         errors.userNationalCode
-                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500 focus:border-rose-500"
+                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500"
                           : isDarkMode 
-                            ? "bg-[#161618] border-white/10 text-white focus:border-indigo-500 focus:bg-[#1A1A1D]" 
+                            ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" 
                             : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
                       }`}
                     />
                     {errors.userNationalCode && (
-                      <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
+                      <p className="text-[9.5px] text-rose-500 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
                         <span>{errors.userNationalCode}</span>
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Row 3: Company Name and Job Title */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2.5 text-right">
-                    <label className={`text-xs font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                {/* Row 4: Company and Job Title */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1.5 text-right">
+                    <label className={`text-[11px] font-bold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <Building2 className="w-3 h-3 text-indigo-400" />
                       <span>نام شرکت / موسسه مالی</span>
                     </label>
                     <input
@@ -864,25 +908,26 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                         setCompanyName(e.target.value);
                         if (errors.companyName) setErrors(prev => ({ ...prev, companyName: "" }));
                       }}
-                      className={`w-full px-4 py-3.5 rounded-2xl text-xs font-medium outline-none transition-colors border ${
+                      className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium outline-none transition-colors border ${
                         errors.companyName
-                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500 focus:border-rose-500"
+                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500"
                           : isDarkMode 
-                            ? "bg-[#161618] border-white/10 text-white focus:border-indigo-500 focus:bg-[#1A1A1D]" 
+                            ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" 
                             : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
                       }`}
                     />
                     {errors.companyName && (
-                      <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
+                      <p className="text-[9.5px] text-rose-500 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
                         <span>{errors.companyName}</span>
                       </p>
                     )}
                   </div>
 
-                  <div className="space-y-2.5 text-right">
-                    <label className={`text-xs font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                      <span>سمت شغلی</span>
+                  <div className="space-y-1.5 text-right">
+                    <label className={`text-[11px] font-bold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <Briefcase className="w-3 h-3 text-indigo-400" />
+                      <span>سمت سازمانی</span>
                     </label>
                     <input
                       type="text"
@@ -892,17 +937,17 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                         setJobTitle(e.target.value);
                         if (errors.jobTitle) setErrors(prev => ({ ...prev, jobTitle: "" }));
                       }}
-                      className={`w-full px-4 py-3.5 rounded-2xl text-xs font-medium outline-none transition-colors border ${
+                      className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium outline-none transition-colors border ${
                         errors.jobTitle
-                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500 focus:border-rose-500"
+                          ? "border-rose-500/50 bg-rose-500/5 text-rose-500"
                           : isDarkMode 
-                            ? "bg-[#161618] border-white/10 text-white focus:border-indigo-500 focus:bg-[#1A1A1D]" 
+                            ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" 
                             : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
                       }`}
                     />
                     {errors.jobTitle && (
-                      <p className="text-[10px] text-rose-500 font-bold flex items-center gap-1 mt-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
+                      <p className="text-[9.5px] text-rose-500 font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
                         <span>{errors.jobTitle}</span>
                       </p>
                     )}
@@ -910,21 +955,21 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                 </div>
 
                 {/* Confidentiality Agreement */}
-                <div className="pt-2 text-right">
+                <div className="pt-1 text-right">
                   <button
                     type="button"
                     onClick={() => {
                       setAgreeConfidentiality(!agreeConfidentiality);
                       if (errors.agree) setErrors(prev => ({ ...prev, agree: "" }));
                     }}
-                    className="flex items-start gap-2.5 text-right cursor-pointer group"
+                    className="flex items-start gap-2 text-right cursor-pointer group"
                   >
                     <div className={`mt-0.5 shrink-0 transition-colors ${
                       agreeConfidentiality 
-                        ? isDarkMode ? "text-white" : "text-slate-900" 
+                        ? "text-indigo-500" 
                         : errors.agree 
                           ? "text-rose-500" 
-                          : "text-slate-400 group-hover:text-slate-500 dark:group-hover:text-slate-300"
+                          : "text-slate-400"
                     }`}>
                       {agreeConfidentiality ? (
                         <CheckSquare className="w-4 h-4" />
@@ -935,9 +980,9 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                     <span className={`text-[10px] leading-relaxed transition-colors select-none ${
                       errors.agree 
                         ? "text-rose-500 font-bold" 
-                        : isDarkMode ? "text-slate-400" : "text-slate-500"
+                        : isDarkMode ? "text-slate-400" : "text-slate-600"
                     }`}>
-                      اینجانب صحت اطلاعات فوق را تأیید کرده و متعهد به حفظ محرمانگی کامل اسناد و صورتهای مالی بارگذاری شده می‌باشم.
+                      اینجانب صحت اطلاعات فوق را تأیید نموده و متعهد به حفظ محرمانگی کامل اسناد و صورتهای مالی بارگذاری شده می‌باشم.
                     </span>
                   </button>
                   {errors.agree && (
@@ -948,25 +993,21 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                   )}
                 </div>
 
-                {/* Submit Button */}
+                {/* Submit Register Button */}
                 <motion.button
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.99 }}
                   type="submit"
                   disabled={loading}
-                  className={`w-full flex items-center justify-center gap-3 px-5 py-4 rounded-2xl font-bold text-xs transition-all cursor-pointer mt-6 shadow-lg ${
-                    isDarkMode 
-                      ? "bg-gradient-to-r from-indigo-500 to-indigo-600 text-white hover:from-indigo-400 hover:to-indigo-500 hover:shadow-indigo-500/25 border border-indigo-400/20" 
-                      : "bg-gradient-to-r from-slate-900 to-slate-800 text-white hover:from-slate-800 hover:to-slate-700 hover:shadow-slate-900/20 border border-slate-900/10"
-                  }`}
+                  className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-xs transition-all cursor-pointer mt-4 shadow-lg bg-gradient-to-r from-indigo-600 via-indigo-500 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-indigo-500/25 border border-indigo-400/20"
                 >
                   {loading ? (
                     <>
-                      <Loader2 className="w-4.5 h-4.5 animate-spin" />
-                      <span>در حال ثبت اطلاعات...</span>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>در حال ایجاد حساب کاربری...</span>
                     </>
                   ) : (
-                    <span>ایجاد حساب و ورود</span>
+                    <span>تکمیل ثبت‌نام و ورود به سامانه</span>
                   )}
                 </motion.button>
               </form>
@@ -976,20 +1017,20 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
           {/* TAB 3: Direct login with email & password */}
           {activeTab === "login" && (
             <motion.div 
-              initial={{ opacity: 0, x: 10 }}
+              initial={{ opacity: 0, x: 8 }}
               animate={{ opacity: 1, x: 0 }}
-              className="space-y-6"
+              className="space-y-4"
             >
-              <div className={`p-4 rounded-2xl text-center text-xs leading-relaxed ${
-                isDarkMode ? "bg-white/[0.03] text-slate-300 border border-white/5" : "bg-slate-50 text-slate-600 border border-slate-200/50"
+              <div className={`p-3.5 rounded-2xl text-center text-[11px] leading-relaxed ${
+                isDarkMode ? "bg-slate-950/60 text-slate-300 border border-slate-800" : "bg-slate-50 text-slate-600 border border-slate-200/80"
               }`}>
-                اگر پیش از این ثبت‌نام کرده‌اید، اطلاعات ورود خود را وارد نمایید.
+                در صورتی که قبلاً ثبت‌نام کرده‌اید، آدرس ایمیل و گذرواژه خود را وارد فرمایید:
               </div>
 
-              <form onSubmit={handleLoginSubmit} className="space-y-6">
-                <div className="space-y-2.5 text-right">
-                  <label className={`text-xs font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                    <Mail className="w-3.5 h-3.5" />
+              <form onSubmit={handleLoginSubmit} className="space-y-4">
+                <div className="space-y-1.5 text-right">
+                  <label className={`text-[11px] font-bold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                    <Mail className="w-3 h-3 text-indigo-400" />
                     <span>آدرس ایمیل</span>
                   </label>
                   <input
@@ -997,17 +1038,17 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                     placeholder="user@example.com"
                     value={userEmail}
                     onChange={(e) => setUserEmail(e.target.value)}
-                    className={`w-full px-4 py-3.5 rounded-2xl text-xs font-medium border text-left font-mono outline-none transition-all duration-300 ${
+                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium border text-left font-mono outline-none transition-all duration-200 ${
                       isDarkMode 
-                        ? "bg-[#161618] border-white/10 text-white focus:border-indigo-500 focus:bg-[#1A1A1D] focus:shadow-[0_0_20px_rgba(99,102,241,0.1)]" 
-                        : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white focus:shadow-[0_0_20px_rgba(99,102,241,0.1)]"
+                        ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" 
+                        : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
                     }`}
                   />
                 </div>
 
-                <div className="space-y-2.5 text-right">
-                  <label className={`text-xs font-bold flex items-center gap-1.5 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                    <KeyRound className="w-3.5 h-3.5" />
+                <div className="space-y-1.5 text-right">
+                  <label className={`text-[11px] font-bold flex items-center gap-1 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
+                    <KeyRound className="w-3 h-3 text-indigo-400" />
                     <span>گذرواژه</span>
                   </label>
                   <div className="relative">
@@ -1016,41 +1057,37 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
                       placeholder="رمز عبور خود را وارد کنید"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className={`w-full px-4 py-3.5 rounded-2xl text-xs font-medium border text-left font-mono outline-none transition-all duration-300 ${
+                      className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-medium border text-left font-mono outline-none transition-all duration-200 ${
                         isDarkMode 
-                          ? "bg-[#161618] border-white/10 text-white focus:border-indigo-500 focus:bg-[#1A1A1D] focus:shadow-[0_0_20px_rgba(99,102,241,0.1)]" 
-                          : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white focus:shadow-[0_0_20px_rgba(99,102,241,0.1)]"
+                          ? "bg-slate-950 border-slate-800 text-white focus:border-indigo-500" 
+                          : "bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-500 focus:bg-white"
                       }`}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute left-4 top-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                      className="absolute left-3 top-2.5 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
                     >
-                      {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
 
-                {/* Submit Button */}
+                {/* Submit Login Button */}
                 <motion.button
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.99 }}
                   type="submit"
                   disabled={loading}
-                  className={`w-full flex items-center justify-center gap-3 px-5 py-4 rounded-2xl font-bold text-xs transition-all cursor-pointer mt-4 shadow-lg ${
-                    isDarkMode 
-                      ? "bg-gradient-to-r from-indigo-500 to-indigo-600 text-white hover:from-indigo-400 hover:to-indigo-500 hover:shadow-indigo-500/25 border border-indigo-400/20" 
-                      : "bg-gradient-to-r from-slate-900 to-slate-800 text-white hover:from-slate-800 hover:to-slate-700 hover:shadow-slate-900/20 border border-slate-900/10"
-                  }`}
+                  className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-black text-xs transition-all cursor-pointer mt-4 shadow-lg bg-gradient-to-r from-indigo-600 via-indigo-500 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-indigo-500/25 border border-indigo-400/20"
                 >
                   {loading ? (
                     <>
-                      <Loader2 className="w-4.5 h-4.5 animate-spin" />
-                      <span>در حال تایید هویت...</span>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>در حال اعتبارسنجی و ورود...</span>
                     </>
                   ) : (
-                    <span>ورود به سیستم</span>
+                    <span>ورود به حساب کاربری</span>
                   )}
                 </motion.button>
               </form>
@@ -1058,18 +1095,18 @@ export default function LoginScreen({ isDarkMode, onEnterDemo, showNotification 
           )}
 
           {/* Footer Info & Support Channels */}
-          <div className={`mt-6 pt-5 border-t flex flex-col gap-3 text-center ${isDarkMode ? "border-slate-800/80" : "border-slate-100"}`}>
+          <div className={`mt-6 pt-4 border-t flex flex-col gap-3 text-center ${isDarkMode ? "border-slate-800/80" : "border-slate-100"}`}>
             <div className="flex items-center gap-1.5 justify-center">
               <Lock className="w-3.5 h-3.5 text-emerald-500" />
-              <span className={`text-[9.5px] font-bold ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                اتصال دارای استاندارد پیشرفته محافظت از داده و رمزنگاری هوشمند SSL می‌باشد.
+              <span className={`text-[10px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                پروتکل‌های محرمانگی مالی و رمزنگاری بانکی فعال است.
               </span>
             </div>
 
-            <div className={`p-3 rounded-2xl border text-xs flex flex-wrap items-center justify-between gap-2 ${
-              isDarkMode ? "bg-slate-900/60 border-slate-800/80 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-700"
+            <div className={`p-2.5 rounded-2xl border text-xs flex flex-wrap items-center justify-between gap-2 ${
+              isDarkMode ? "bg-slate-950/60 border-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-700"
             }`}>
-              <span className="text-[10px] font-extrabold text-slate-400">ارتباط و پشتیبانی خرید:</span>
+              <span className="text-[10px] font-black text-slate-400">ارتباط و پشتیبانی اختصاصی:</span>
               <div className="flex items-center gap-3 text-[11px] font-mono dir-ltr">
                 <a 
                   href="https://t.me/Alizhz" 

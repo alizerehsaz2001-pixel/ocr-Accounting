@@ -121,11 +121,12 @@ async function generateContentWithRetry(
 ): Promise<any> {
   const originalModel = generateConfig.model;
   
-  // Construct the sequence of models to try if the primary model fails or is overloaded
+  // Construct the sequence of supported Gemini 3.x models to try
   const candidateModels = [
     originalModel,
     "gemini-3.7-flash",
-    "gemini-flash-latest"
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite"
   ];
   
   // Filter out duplicates and null/undefined values
@@ -133,9 +134,10 @@ async function generateContentWithRetry(
   
   let lastError: any = null;
 
-  for (const currentModel of uniqueCandidates) {
+  for (let mIdx = 0; mIdx < uniqueCandidates.length; mIdx++) {
+    const currentModel = uniqueCandidates[mIdx];
     let attempt = 0;
-    let delay = 800; // Start with 800ms delay to allow service to recover
+    let delay = 1000;
 
     console.info(`[Gemini API] Attempting generation with model: "${currentModel}"`);
 
@@ -167,9 +169,8 @@ async function generateContentWithRetry(
 
         if (isPermanentZeroLimit) {
           console.warn(
-            `[Gemini API] Model "${currentModel}" has 0 quota or is unavailable on this key. Instantly falling back to the next model...`
+            `[Gemini API] Model "${currentModel}" has 0 quota or is unavailable on this key. Falling back to the next model...`
           );
-          // Set lastError so we have context if all fail, then break immediately to move to next model
           lastError = apiError;
           break;
         }
@@ -178,17 +179,9 @@ async function generateContentWithRetry(
           apiStatus === 429 ||
           apiStatus === "RESOURCE_EXHAUSTED" ||
           errorMessage.includes("quota exceeded") ||
-          errorMessage.includes("limit") ||
           errorMessage.includes("rate limit") ||
-          errorMessage.includes("exhausted");
-
-        if (isQuotaExceeded) {
-          console.warn(
-            `[Gemini API] Model "${currentModel}" is rate-limited or out of quota (429/quota). Bypassing retries and falling back to the next model immediately...`
-          );
-          lastError = apiError;
-          break; // Break the retry loop and immediately fall back to the next model
-        }
+          errorMessage.includes("exhausted") ||
+          errorMessage.includes("too many requests");
 
         const isHighDemand =
           apiStatus === 503 ||
@@ -199,48 +192,34 @@ async function generateContentWithRetry(
           errorMessage.includes("unavailable") ||
           errorMessage.includes("503");
 
-        if (isHighDemand) {
-          console.warn(
-            `[Gemini API] Model "${currentModel}" is experiencing high demand or is unavailable (503/UNAVAILABLE). Bypassing retries and falling back to next model immediately...`
-          );
-          lastError = apiError;
-          break; // Break the retry loop and fall back immediately to prevent browser timeouts (Failed to fetch)
-        }
-
         const isTransient =
-          apiStatus === "RESOURCE_EXHAUSTED" ||
-          apiStatus === 429 ||
-          apiStatus === "UNAVAILABLE" ||
-          apiStatus === 503 ||
+          isQuotaExceeded ||
+          isHighDemand ||
           apiStatus === 500 ||
           apiStatus === "INTERNAL" ||
-          errorMessage.includes("quota") ||
-          errorMessage.includes("limit") ||
-          errorMessage.includes("exhausted") ||
-          errorMessage.includes("demand") ||
-          errorMessage.includes("temporary") ||
-          errorMessage.includes("unavailable") ||
-          errorMessage.includes("overloaded") ||
-          errorMessage.includes("rate limit") ||
-          errorMessage.includes("503") ||
-          errorMessage.includes("429");
+          errorMessage.includes("timeout") ||
+          errorMessage.includes("econnreset");
 
         if (isTransient && attempt <= maxRetries) {
+          const jitter = Math.floor(Math.random() * 500);
+          const currentWait = delay + jitter;
           console.warn(
-            `[Gemini API] Transient error on "${currentModel}" (Status: ${apiStatus || "Error"}): ${errorMessage.substring(0, 120)}. ` +
-            `Retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`
+            `[Gemini API] Transient/Rate limit on "${currentModel}" (Status: ${apiStatus || "429"}). Waiting ${currentWait}ms before retry (Attempt ${attempt}/${maxRetries})...`
           );
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          delay *= 2; // Exponential backoff
+          await new Promise((resolve) => setTimeout(resolve, currentWait));
+          delay *= 1.8; // Exponential backoff
         } else {
-          // If not transient, or we ran out of retries for this model, break the inner loop and move to the next candidate model
           console.warn(
-            `[Gemini API] Model "${currentModel}" failed with ${isTransient ? "transient errors (retries exhausted)" : "non-transient error"}. ` +
-            `Status: ${apiStatus || "N/A"}. Error: ${apiError.message || apiError}`
+            `[Gemini API] Model "${currentModel}" failed (${isTransient ? "retries exhausted" : "non-transient error"}). Switching to next candidate model...`
           );
           break;
         }
       }
+    }
+
+    // Brief pause before trying the next candidate model to avoid hammering RPM
+    if (mIdx < uniqueCandidates.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
     }
   }
 
@@ -438,7 +417,7 @@ app.post("/api/ml/feedback", async (req, res) => {
         const feedbackPayload = `[گزارش بازخورد کاربر]\n- امتیاز کیفیت: ${rating} از 5\n- توضیحات و اصلاحات کاربر:\n"${feedbackText}"\n\n[تراکنش‌های استخراج شده فعلی جهت بررسی و ارزیابی]:\n${JSON.stringify(transactions || [])}`;
 
         const response = await generateContentWithRetry(ai, {
-          model: "gemini-3.6-flash",
+          model: "gemini-3.7-flash",
           contents: feedbackPayload,
           config: {
             systemInstruction: ML_FEEDBACK_SYSTEM_INSTRUCTION,
@@ -562,10 +541,22 @@ app.post("/api/extract", async (req, res) => {
       systemInstruction += `\n\n${mlPromptAdditions}`;
     }
 
-    let promptText = `سند پیوست را با موتور ممیزی نسل ۷ آلترا به دقت تحلیل کرده و تمامی اطلاعات، مشخصات طرفین، ردیف‌های جدول به همراه «شرح کامل و جزء‌به‌جزء کالاها و خدمات» و همچنین «تمام توضیحات، یادداشت‌های حاشیه‌ای، بابت/علت صدور و شروط معامله» را بدون کوچک‌ترین حذف، تلخیص یا کوتاه‌سازی، با جزئیات کامل در قالب شیء JSON استاندارد استخراج نمایید.`;
+    let promptText = `سند پیوست را با موتور ممیزی نسل ۷ آلترا به دقت و به صورت ۱۰۰٪ کامل تحلیل نمایید.
+کاربر اکیداً تاکید کرده است که «تمام جزئیات سند بدون استثناء باید استخراج شود».
+
+الزامات قطعی و غیرقابل چشم‌پوشی:
+۱. استخراج تک‌تک ردیف‌های جدول کالا/خدمات بدون ادغام یا حذف حتی یک ردیف.
+۲. استخراج کامل «شرح کالا یا خدمات» با تمام پسوندها، پیشوندها، مدل، برند، رنگ، سایز، ابعاد، مشخصات فنی و سریال بدون کوچک‌ترین کوتاه‌سازی یا تلخیص.
+۳. استخراج کامل مشخصات هویتی فروشنده و خریدار (نام کامل، شناسه ملی/کد ملی، کد اقتصادی، شماره ثبت، کدپستی، تلفن، آدرس کامل، شهر و استان).
+۴. استخراج کامل اطلاعات سربرگ (شماره فاکتور/سند، تاریخ شمسی، تاریخ میلادی، شناسه یکتای مالیاتی سامانه مودیان، نحوه تسویه، شماره سفارش).
+۵. استخراج کامل ارقام جزء (تعداد، واحد، فی واحد، مبلغ کل سطر، تخفیف سطر، مالیات سطر، مبلغ نهایی سطر) و ارقام کلان (جمع کل قبل از تخفیف، جمع تخفیفات، مالیات بر ارزش افزوده، عوارض، مبلغ قابل پرداخت نهایی، مبلغ به حروف، واحد ارزی).
+۶. استخراج کامل اطلاعات بانکی و تسویه (نام بانک، شماره حساب، شماره کارت، شماره شبا، صاحب حساب، شماره پیگیری، بابت تراکنش).
+۷. استخراج تمام یادداشت‌ها، شروط معامله، گارانتی، توضیحات پاورقی و حاشیه سند، متن مهرها و وضعیت امضاها.
+
+خروجی باید منحصراً شیء استاندارد JSON مطابق Schema باشد که تمام فیلدهای فوق را در ستون‌ها و ردیف‌ها پوشش دهد.`;
 
     if (userPrompt && typeof userPrompt === "string" && userPrompt.trim()) {
-      promptText += `\n[دستور اختصاصی ممیز / کاربر]:\n${userPrompt.trim()}\nتوجه اکید: تمامی شرح‌ها، توضیحات متنی و حواشی را به صورت ۱۰۰٪ کامل و بدون خلاصه کردن در فیلدهای مربوطه درج کنید.`;
+      promptText += `\n\n[دستور اختصاصی ممیز / کاربر]:\n${userPrompt.trim()}\nتوجه اکید: تمامی شرح‌ها، توضیحات متنی، متون حاشیه‌ای و ردیف‌های جدول را به صورت ۱۰۰٪ کامل و بدون خلاصه کردن در فیلدهای مربوطه درج کنید.`;
     }
 
     if (tokenSettings) {
@@ -616,6 +607,8 @@ app.post("/api/extract", async (req, res) => {
         }
       } catch (mdErr) {
         console.warn("[PDF-to-Markdown OCR] Step 1 conversion encountered an error, falling back to direct pass:", mdErr);
+        // Wait a brief moment before step 2 fallback to let token rate limits recover
+        await new Promise((resolve) => setTimeout(resolve, 1200));
       }
     }
 
@@ -643,43 +636,48 @@ app.post("/api/extract", async (req, res) => {
       config: {
         systemInstruction: systemInstruction,
         responseMimeType: "application/json",
+        maxOutputTokens: 8192,
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             نوع_سند: {
               type: Type.STRING,
-              description: "نوع سند حسابداری (مانند فاکتور فروش، چک، رسید پرداختی، قبض مالیاتی، فیش حقوقی، صورتحساب بانکی، قرارداد، و غیره)",
+              description: "نوع دقیق سند حسابداری و تجاری (مانند فاکتور فروش، صورتحساب الکترونیکی سامانه مودیان، رسید پرداخت، فیش واریزی، قبض مالیاتی، رسید انبار، صورتحساب بانکی، فیش حقوقی، چک، قرارداد و غیره)",
             },
             تحلیل_سند: {
               type: Type.STRING,
-              description: "تحلیل هوشمند و کلی در مورد کیفیت سند، ایرادات احتمالی ارقام، قواعد مالیاتی حاکم بر این نوع سند، و اطمینان کلی از صحت داده‌ها.",
+              description: "تحلیل هوشمند، جامع و ممیزی کامل سند شامل بررسی صحت ارقام، موازنه ریاضی سطرها و جمع کل، وضعیت سامانه مودیان و کیفیت داده‌ها.",
             },
             ستون_ها: {
               type: Type.ARRAY,
-              description: "لیست ستون‌های پویای این سند که استخراج شده‌اند. هر ستون باید دارای یک کلید فارسی (مانند نام_کالا، تعداد، قیمت_واحد، قیمت_کل، مالیات، توضیحات) و یک عنوان خوانای فارسی باشد تا خروجی JSON کاملاً فارسی و مناسب فایل اکسل باشد.",
+              description: "فهرست کامل تمامی ستون‌های استخراج شده از سند (اطلاعات سربرگ، طرفین، اقلام جدول، سرجمع‌های مالی، پرداخت و شروط) با کلیدهای یکتای فارسی و عناوین خوانا.",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  کلید: { type: Type.STRING, description: "کلید یکتای ستون به زبان فارسی (مثلا تعداد یا قیمت_واحد)" },
-                  عنوان: { type: Type.STRING, description: "عنوان فارسی ستون (مثلا تعداد)" }
+                  کلید: { type: Type.STRING, description: "کلید یکتای ستون به زبان فارسی (مثلا شماره_فاکتور، تاریخ، نام_فروشنده، شناسه_ملی_فروشنده، کد_اقتصادی_فروشنده، تلفن_فروشنده، آدرس_فروشنده، نام_خریدار، شناسه_ملی_خریدار، کد_اقتصادی_خریدار، تلفن_خریدار، آدرس_خریدار، ردیف، کد_کالا، شرح_کامل_کالا_یا_خدمات، تعداد، واحد_سنجش، فی_واحد، مبلغ_کل_ردیف، تخفیف_ردیف، مالیات_ارزش_افزوده_ردیف، مبلغ_نهایی_ردیف، توضیحات_ردیف، جمع_کل_قبل_تخفیف، جمع_تخفیفات، مالیات_و_عوارض_کل، مبلغ_قابل_پرداخت، مبلغ_به_حروف، واحد_ارزی، نام_بانک، شماره_حساب، شماره_شبا، شماره_پیگیری، توضیحات_و_شروط_سند، وضعیت_مهر_و_امضا)" },
+                  عنوان: { type: Type.STRING, description: "عنوان فارسی خوانا و استاندارد ستون" }
                 },
                 required: ["کلید", "عنوان"]
               }
             },
             ردیف_ها: {
               type: Type.ARRAY,
-              description: "لیست ردیف‌های استخراج شده منطبق بر ستون‌ها.",
+              description: "لیست تمامی ردیف‌های استخراج شده منطبق بر ستون‌ها. تک‌تک ردیف‌های جدول بدون جا انداختن حتی یک ردیف باید با تمام جزئیات و تکرار اطلاعات عمومی هدر در هر سطر درج گردند.",
               items: {
                 type: Type.OBJECT,
                 properties: {
+                  ضریب_اطمینان: {
+                    type: Type.NUMBER,
+                    description: "ضریب اطمینان دقت استخراج این ردیف بین 0 تا 100"
+                  },
                   فیلد_ها: {
                     type: Type.ARRAY,
-                    description: "مقادیر استخراج شده برای این ردیف.",
+                    description: "مقادیر استخراج شده برای تمامی فیلدهای این ردیف.",
                     items: {
                       type: Type.OBJECT,
                       properties: {
                         کلید: { type: Type.STRING, description: "کلید فارسی ستون مربوطه (منطبق با ستون_ها)" },
-                        مقدار: { type: Type.STRING, description: "مقدار استخراج شده (حتی اعداد به فرم رشته). در صورت خالی بودن null یا خالی." }
+                        مقدار: { type: Type.STRING, description: "مقدار استخراج شده (متن کامل بدون خلاصه، یا عدد خالص). در صورت عدم وجود مقدار null یا خالی قرار گیرد." }
                       },
                       required: ["کلید"]
                     }
