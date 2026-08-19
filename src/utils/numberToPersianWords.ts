@@ -176,7 +176,8 @@ export const formatAmountWithWords = (
 };
 
 /**
- * Enriches extracted OCR or Accounting JSON objects/arrays with word equivalents for all significant monetary fields.
+ * Enriches extracted OCR or Accounting JSON objects/arrays with word equivalents for all significant monetary fields
+ * and guarantees Debit (مبلغ_بدهکار) & Credit (مبلغ_بستانکار) double-entry columns are always populated.
  */
 export const enrichJSONWithWords = (data: any): any => {
   if (!data) return data;
@@ -184,15 +185,64 @@ export const enrichJSONWithWords = (data: any): any => {
   // Deep clone to avoid mutating original unexpectedly
   const result = JSON.parse(JSON.stringify(data));
 
+  // Helper to extract numeric amount from a row or fields array
+  const getRowAmount = (rowFields: any[] | Record<string, any>): number => {
+    let rawAmount: any = null;
+    if (Array.isArray(rowFields)) {
+      const field = rowFields.find(f => f && f.کلید && (
+        f.کلید === "مبلغ_نهایی_ردیف" ||
+        f.کلید === "مبلغ_کل_ردیف" ||
+        f.کلید === "مبلغ_کل" ||
+        f.کلید === "مبلغ" ||
+        f.کلید === "فی_واحد" ||
+        f.کلید === "مبلغ_قابل_پرداخت"
+      ));
+      if (field) rawAmount = field.مقدار;
+    } else if (typeof rowFields === "object") {
+      rawAmount = rowFields["مبلغ_نهایی_ردیف"] || rowFields["مبلغ_کل_ردیف"] || rowFields["مبلغ_کل"] || rowFields["مبلغ"] || rowFields["فی_واحد"] || rowFields["مبلغ_قابل_پرداخت"];
+    }
+    if (rawAmount !== null && rawAmount !== undefined && rawAmount !== "") {
+      const num = Number(toEnglishDigits(String(rawAmount)).replace(/,/g, ""));
+      return isNaN(num) ? 0 : num;
+    }
+    return 0;
+  };
+
+  // Helper to determine whether doc is debit-heavy (purchase/expense) or credit-heavy (sales/income)
+  const isPurchaseOrExpenseDoc = (docTypeStr?: string): boolean => {
+    if (!docTypeStr) return true; // Default to purchase/expense
+    const dt = docTypeStr.toLowerCase();
+    if (dt.includes("فروش") || dt.includes("درآمد") || dt.includes("واریز") || dt.includes("دریافت")) {
+      return false;
+    }
+    return true;
+  };
+
   // Case 1: Standard AI OCR Schema object { نوع_سند, ستون_ها, ردیف_ها }
   if (result.ردیف_ها && Array.isArray(result.ردیف_ها)) {
     const wordColumnsToAdd = new Map<string, string>();
+    const isPurchase = isPurchaseOrExpenseDoc(result.نوع_سند);
+
+    // Ensure ستون_ها contains بدهکار and بستانکار
+    if (!result.ستون_ها) result.ستون_ها = [];
+    if (Array.isArray(result.ستون_ها)) {
+      const hasDebitCol = result.ستون_ها.some((c: any) => c.کلید === "مبلغ_بدهکار");
+      const hasCreditCol = result.ستون_ها.some((c: any) => c.کلید === "مبلغ_بستانکار");
+      if (!hasDebitCol) result.ستون_ها.push({ کلید: "مبلغ_بدهکار", عنوان: "مبلغ بدهکار (ریال)" });
+      if (!hasCreditCol) result.ستون_ها.push({ کلید: "مبلغ_بستانکار", عنوان: "مبلغ بستانکار (ریال)" });
+    }
 
     result.ردیف_ها.forEach((rowObj: any) => {
       if (rowObj.فیلد_ها && Array.isArray(rowObj.فیلد_ها)) {
         const newFields: any[] = [];
+        let hasDebitField = false;
+        let hasCreditField = false;
+
         rowObj.فیلد_ها.forEach((f: any) => {
           newFields.push(f);
+          if (f && f.کلید === "مبلغ_بدهکار") hasDebitField = true;
+          if (f && f.کلید === "مبلغ_بستانکار") hasCreditField = true;
+
           if (f && f.کلید && isMonetaryKey(f.کلید) && !f.کلید.endsWith("_به_حروف")) {
             const rawVal = f.مقدار;
             if (rawVal !== null && rawVal !== undefined && rawVal !== "") {
@@ -213,9 +263,37 @@ export const enrichJSONWithWords = (data: any): any => {
             }
           }
         });
+
+        // Inject بدهکار & بستانکار if missing from row
+        if (!hasDebitField || !hasCreditField) {
+          const amt = getRowAmount(rowObj.فیلد_ها);
+          if (!hasDebitField) {
+            newFields.push({
+              کلید: "مبلغ_بدهکار",
+              عنوان: "مبلغ بدهکار (ریال)",
+              مقدار: isPurchase ? (amt ? String(amt) : "0") : "0"
+            });
+          }
+          if (!hasCreditField) {
+            newFields.push({
+              کلید: "مبلغ_بستانکار",
+              عنوان: "مبلغ بستانکار (ریال)",
+              مقدار: !isPurchase ? (amt ? String(amt) : "0") : "0"
+            });
+          }
+        }
+
         rowObj.فیلد_ها = newFields;
       } else if (typeof rowObj === "object") {
         // Direct object row
+        const amt = getRowAmount(rowObj);
+        if (rowObj["مبلغ_بدهکار"] === undefined) {
+          rowObj["مبلغ_بدهکار"] = isPurchase ? (amt ? String(amt) : "0") : "0";
+        }
+        if (rowObj["مبلغ_بستانکار"] === undefined) {
+          rowObj["مبلغ_بستانکار"] = !isPurchase ? (amt ? String(amt) : "0") : "0";
+        }
+
         Object.keys(rowObj).forEach((k) => {
           if (isMonetaryKey(k) && !k.endsWith("_به_حروف")) {
             const rawVal = rowObj[k];
@@ -233,7 +311,7 @@ export const enrichJSONWithWords = (data: any): any => {
       }
     });
 
-    // Also update ستون_ها array if present
+    // Also update ستون_ها array if present with word columns
     if (result.ستون_ها && Array.isArray(result.ستون_ها)) {
       wordColumnsToAdd.forEach((title, key) => {
         const exists = result.ستون_ها.some((c: any) => c.کلید === key);
@@ -251,6 +329,14 @@ export const enrichJSONWithWords = (data: any): any => {
     return result.map((row) => {
       if (!row || typeof row !== "object") return row;
       const newRow = { ...row };
+      const amt = getRowAmount(newRow);
+      if (newRow["مبلغ_بدهکار"] === undefined) {
+        newRow["مبلغ_بدهکار"] = amt ? String(amt) : "0";
+      }
+      if (newRow["مبلغ_بستانکار"] === undefined) {
+        newRow["مبلغ_بستانکار"] = "0";
+      }
+
       Object.keys(row).forEach((k) => {
         if (isMonetaryKey(k) && !k.endsWith("_به_حروف")) {
           const rawVal = row[k];

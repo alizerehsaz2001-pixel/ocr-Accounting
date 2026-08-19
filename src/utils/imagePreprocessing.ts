@@ -11,13 +11,8 @@
  * - Smart Multi-pass Auto OCR Enhancement
  */
 
-export type ImagePreprocessingMode =
-  | 'none'
-  | 'high_contrast'
-  | 'grayscale_bw'
-  | 'binarize_adaptive'
-  | 'sharpness_denoise'
-  | 'auto_enhance';
+import { ImagePreprocessingMode } from '../types';
+export type { ImagePreprocessingMode };
 
 export interface PreprocessingOptions {
   contrastFactor?: number; // default 1.5
@@ -185,6 +180,74 @@ function applyAutoOcrEnhancement(data: Uint8ClampedArray): void {
 }
 
 /**
+ * Super-resolution adaptive edge and character enhancement
+ * Performs background illumination leveling, high-boost filtering, and sharp contrast normalization
+ */
+function applySuperResolutionAdaptive(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  // Step 1: Grayscale & find min/max luminance
+  let minLum = 255;
+  let maxLum = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    if (lum < minLum) minLum = lum;
+    if (lum > maxLum) maxLum = lum;
+  }
+  if (maxLum - minLum < 15) {
+    maxLum = 255;
+    minLum = 0;
+  }
+  const range = maxLum - minLum;
+
+  // Step 2: Normalize and high-boost contrast
+  const normalizedData = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    let norm = (lum - minLum) / range;
+    norm = Math.pow(norm, 1.35); // Gamma correction
+    let val = norm * 255;
+    if (val > 185) val = 255; // Crisp paper background
+    else if (val < 90) val = Math.max(0, val * 0.5); // Deep ink
+    normalizedData[i] = val;
+    normalizedData[i + 1] = val;
+    normalizedData[i + 2] = val;
+    normalizedData[i + 3] = data[i + 3];
+  }
+
+  // Step 3: High-boost 3x3 sharpening kernel
+  const output = new Uint8ClampedArray(data.length);
+  const kernel = [
+    -1, -1, -1,
+    -1,  9, -1,
+    -1, -1, -1
+  ];
+
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      let r = 0;
+      for (let ky = -1; ky <= 1; ky++) {
+        for (let kx = -1; kx <= 1; kx++) {
+          const pixelIdx = ((y + ky) * width + (x + kx)) * 4;
+          const weight = kernel[(ky + 1) * 3 + (kx + 1)];
+          r += normalizedData[pixelIdx] * weight;
+        }
+      }
+      const targetIdx = (y * width + x) * 4;
+      const finalVal = Math.min(255, Math.max(0, r));
+      output[targetIdx] = finalVal;
+      output[targetIdx + 1] = finalVal;
+      output[targetIdx + 2] = finalVal;
+      output[targetIdx + 3] = data[targetIdx + 3];
+    }
+  }
+
+  return output;
+}
+
+/**
  * Preprocesses an image given as base64 string or data-URL and returns the enhanced base64 string
  */
 export async function preprocessImageBase64(
@@ -249,6 +312,13 @@ export async function preprocessImageBase64(
         applyAutoOcrEnhancement(data);
         ctx.putImageData(imgData, 0, 0);
         break;
+
+      case 'super_resolution_adaptive': {
+        const superRes = applySuperResolutionAdaptive(data, canvas.width, canvas.height);
+        const newImgData = new ImageData(superRes, canvas.width, canvas.height);
+        ctx.putImageData(newImgData, 0, 0);
+        break;
+      }
 
       default:
         break;

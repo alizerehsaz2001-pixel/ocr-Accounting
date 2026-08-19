@@ -768,6 +768,7 @@ export default function App() {
       grayscale_bw: "سیاه و سفید",
       binarize_adaptive: "دوسطحی‌سازی تطبیقی",
       sharpness_denoise: "شارپ‌سازی لبه‌ها",
+      super_resolution_adaptive: "سوپر رزولوشن تطبیقی و ریزجزئیات",
     };
 
     const startTime = Date.now();
@@ -834,9 +835,10 @@ export default function App() {
         
         // Auto fallback model selection on retries
         let modelToUse = selectedModel;
-        if (attempt >= 2) {
-          if (selectedModel === "gemini-2.5-flash") modelToUse = "gemini-2.5-pro";
-          else if (selectedModel === "gemini-2.5-pro") modelToUse = "gemini-2.5-flash";
+        if (attempt === 2) {
+          modelToUse = "gemini-3.6-flash";
+        } else if (attempt >= 3) {
+          modelToUse = "gemini-3.6-flash";
         }
 
         if (attempt > 1) {
@@ -1306,20 +1308,47 @@ export default function App() {
   };
 
   const handleViewScanFromBatch = (scanId: string) => {
-    const scan = previousScans.find(s => s.id === scanId);
+    const scan = previousScans.find(s => s.id === scanId || s.file?.id === scanId);
     if (scan) {
-      setActiveFile(scan.file);
-      setTransactions(scan.transactions || []);
-      const docSettings = scan.extractionSettings || scan.file?.extractionSettings;
-      if (docSettings) {
-        if (docSettings.selectedModel) setSelectedModel(docSettings.selectedModel);
-        if (docSettings.erpDestinationModule) setErpDestinationModule(docSettings.erpDestinationModule);
-        if (docSettings.strictnessMode) setStrictnessMode(docSettings.strictnessMode);
-        if (docSettings.customPrompt !== undefined) setCustomPrompt(docSettings.customPrompt);
-        if (docSettings.pdfExtractionStrategy) setPdfExtractionStrategy(docSettings.pdfExtractionStrategy);
-        if (docSettings.imagePreprocessingMode) setImagePreprocessingMode(docSettings.imagePreprocessingMode);
+      selectPreviousScan(scan);
+      setPendingFiles([]);
+      setIsBatchPanelOpen(false);
+      setIsBatchPanelMinimized(true);
+      setIsFileManagerOpen(false);
+      setInspectingScanId(null);
+      setActiveTab("analysis");
+      showNotification(`جدول و جزئیات سند «${scan.file.name}» باز شد.`, "success");
+    } else {
+      const batchItem = batchOCRItems.find(i => i.scanId === scanId || i.id === scanId);
+      if (batchItem && batchItem.transactions) {
+        const fileObj = {
+          id: batchItem.id,
+          name: batchItem.name,
+          size: batchItem.size || 0,
+          preview: batchItem.preview || "",
+          status: "idle" as const,
+          error: null,
+          extractedJson: batchItem.transactions,
+          documentAnalysis: batchItem.documentAnalysis || "",
+          tokensUsed: batchItem.tokensUsed || 0,
+          processingTimeSec: batchItem.processingTimeSec || 0,
+          mimeType: batchItem.mimeType || "image/jpeg"
+        };
+        setActiveFile(fileObj);
+        setTransactions(batchItem.transactions);
+        const formatted = JSON.stringify(batchItem.transactions, null, 2);
+        setRawJsonText(formatted);
+        setConverterInputJson(formatted);
+        setPendingFiles([]);
+        setIsBatchPanelOpen(false);
+        setIsBatchPanelMinimized(true);
+        setIsFileManagerOpen(false);
+        setInspectingScanId(null);
+        setActiveTab("analysis");
+        showNotification(`جدول و جزئیات سند «${batchItem.name}» باز شد.`, "success");
+      } else {
+        showNotification("اطلاعات این سند در تاریخچه یافت نشد.", "warning");
       }
-      showNotification(`سند «${scan.file.name}» بارگذاری شد.`, "info");
     }
   };
 
@@ -1503,7 +1532,7 @@ export default function App() {
   // AI Model Selection & Daily Quota States
   const [selectedModel, setSelectedModel] = useState<string>(() => {
     const saved = localStorage.getItem("selected_ai_model");
-    if (saved && saved !== "gemini-3.6-flash" && saved !== "gemini-3.1-pro-preview") return saved;
+    if (saved && (saved === "gemini-3.7-flash" || saved === "gemini-3.6-flash")) return saved;
     return "gemini-3.7-flash";
   });
 
@@ -1546,7 +1575,7 @@ export default function App() {
   }, [selectedModel]);
 
   const [pdfExtractionStrategy, setPdfExtractionStrategy] = useState<"direct" | "pdf_to_markdown_to_json">(
-    () => (localStorage.getItem("pdf_extraction_strategy") as any) || "pdf_to_markdown_to_json"
+    () => (localStorage.getItem("pdf_extraction_strategy") as any) || "direct"
   );
 
   useEffect(() => {
@@ -1832,6 +1861,8 @@ export default function App() {
 - "نرخ_مالیات_بر_ارزش_افزوده_ردیف": درصد مالیات این سطر (مثلاً 10)
 - "مالیات_ارزش_افزوده_ردیف": مبلغ مالیات و عوارض این سطر
 - "مبلغ_نهایی_ردیف": مبلغ خالص و نهایی پرداختی این سطر
+- "مبلغ_بدهکار": مبلغ بدهکار آرتیکل/ردیف به ریال (در فاکتور خرید و هزینه مقدار سطر و در فاکتور فروش 0)
+- "مبلغ_بستانکار": مبلغ بستانکار آرتیکل/ردیف به ریال (در فاکتور فروش مقدار سطر و در فاکتور خرید 0)
 
 ۵) خلاصه مالی کلان، واحد ارزی و متن خام (Financial Totals & Currency):
 - "واحد_ارزی": واحد ارزی اصلی سند (ریال / تومان / USD / EUR)
@@ -1871,8 +1902,8 @@ export default function App() {
   };
 
   const getCompiledAIInstructions = () => {
-    let instructions = "⚠️ الزام استخراج ۱۰۰٪ جامع و بدون کوچک‌ترین حذف (Zero-Omission Extraction Rule):\n" +
-      "تمام جزئیات سند شامل تک‌تک ردیف‌های جدول اقلام/خدمات با شرح کامل، مشخصات فنی و سریال، مشخصات هویتی و ثبتی طرفین (فروشنده و خریدار)، کدهای اقتصادی، شناسه‌های ملی، شماره شبا، شماره فاکتور، تاریخ، جمع‌های کلان مالی، تخفیفات، مالیات ارزش افزوده، مبالغ حروفی، واحد ارزی، اطلاعات بانکی، تمام یادداشت‌ها، شروط معامله، متن مهرها و وضعیت امضاها باید بدون هیچ‌گونه خلاصه‌سازی یا حذفی با دقت ممیزی رسمی استخراج شوند.\n\n";
+    let instructions = "⚠️ الزام استخراج ۱۰۰٪ جامع و بدهکار/بستانکار دوبل (Zero-Omission & Double-Entry Rule):\n" +
+      "تمام جزئیات سند شامل تک‌تک ردیف‌های جدول اقلام/خدمات با شرح کامل، ستون‌های «مبلغ_بدهکار» و «مبلغ_بستانکار»، مشخصات فنی و سریال، مشخصات هویتی و ثبتی طرفین (فروشنده و خریدار)، کدهای اقتصادی، شناسه‌های ملی، شماره شبا، شماره فاکتور، تاریخ، جمع‌های کلان مالی، تخفیفات، مالیات ارزش افزوده، مبالغ حروفی، واحد ارزی، اطلاعات بانکی، تمام یادداشت‌ها، شروط معامله، متن مهرها و وضعیت امضاها باید بدون هیچ‌گونه خلاصه‌سازی یا حذفی با دقت ممیزی رسمی استخراج شوند.\n\n";
     
     // 1. Destination Module Guidelines
     if (erpDestinationModule === "general-ledger") {
@@ -3395,6 +3426,7 @@ export default function App() {
           userPrompt,
           chatFiles,
           pdfExtractionStrategy,
+          strictnessMode,
         }),
       });
 
@@ -4697,14 +4729,23 @@ export default function App() {
           <div className="px-3 py-1 space-y-2">
             {[
               {
-                id: "gemini-3.6-flash",
-                name: "Gemini 3.6 Flash (آخرین آپدیت)",
+                id: "gemini-3.7-flash",
+                name: "Gemini 3.7 Flash (نسل ۷ آلترا)",
                 badge: "موتور اصلی هوشمند",
                 tokenLimit: "سند تا ۵۰MB",
                 costPerRequest: "حدود ۱,۰۰۰ توکن",
-                desc: "پردازش فوق‌سریع و هوشمند فاکتورها با بالاترین دقت استخراج.",
+                desc: "پردازش فوق‌سریع و ممیزی هوشمند فاکتورها با بالاترین دقت استخراج.",
                 badgeClass: isDarkMode ? "bg-emerald-500/20 text-emerald-300 border-emerald-900/30" : "bg-emerald-50 text-emerald-700 border-emerald-200",
               },
+              {
+                id: "gemini-3.6-flash",
+                name: "Gemini 3.6 Flash (سریع و بهینه)",
+                badge: "پشتیبان سریع",
+                tokenLimit: "سند تا ۳۰MB",
+                costPerRequest: "حدود ۹۰۰ توکن",
+                desc: "موتور سریع و بهینه جهت پردازش مداوم، با خطای کمتر.",
+                badgeClass: isDarkMode ? "bg-blue-500/20 text-blue-300 border-blue-900/30" : "bg-blue-50 text-blue-700 border-blue-200",
+              }
             ].map((m) => {
               const quota = modelQuotas[m.id] || { limit: 100, used: 0, lastReset: Date.now() };
               const percentUsed = Math.min(100, Math.round((quota.used / quota.limit) * 100));
@@ -4807,10 +4848,10 @@ export default function App() {
             <button
               onClick={() => {
                 setModelQuotas({
-                  "gemini-3.6-flash": { limit: 2000, used: 0, lastReset: Date.now() },
-      "gemini-3.1-pro-preview": { limit: 50, used: 0, lastReset: Date.now() },
+                  "gemini-3.7-flash": { limit: 5000, used: 0, lastReset: Date.now() },
+                  "gemini-3.6-flash": { limit: 5000, used: 0, lastReset: Date.now() },
                 });
-                showNotification("سهمیه استفاده روزانه مدل ریست گردید.", "success");
+                showNotification("سهمیه استفاده روزانه مدل‌ها ریست گردید.", "success");
               }}
               className={`w-full flex items-center justify-center gap-2 py-2 border border-dashed rounded-xl text-[10px] transition-all cursor-pointer font-bold ${
                 isDarkMode 

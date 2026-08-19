@@ -281,7 +281,8 @@ export default function AiSettingsModal({
                        : "bg-slate-50 border-slate-200 text-slate-800 focus:border-blue-500/40"
                    }`}
                 >
-                   <option value="gemini-3.7-flash">Gemini 3.7 Flash (نسل ۷ آلترا - پرچم‌دار فوق‌سریع و هوشمند ممیزی)</option>
+                   <option value="gemini-3.7-flash">Gemini 3.7 Flash (نسل ۷ آلترا - پرچم‌دار هوشمند ممیزی)</option>
+                   <option value="gemini-3.6-flash">Gemini 3.6 Flash (سریع و بهینه با کمترین خطا)</option>
                 </select>
               </div>
 
@@ -352,6 +353,36 @@ export default function AiSettingsModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-1">
                   <button
                     type="button"
+                    onClick={() => setPdfExtractionStrategy?.("direct")}
+                    className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between gap-1.5 cursor-pointer relative ${
+                      pdfExtractionStrategy === "direct"
+                        ? isDarkMode
+                          ? "bg-emerald-600/25 border-emerald-500 text-white shadow-md ring-1 ring-emerald-500/50"
+                          : "bg-white border-emerald-500 text-emerald-950 shadow-md ring-1 ring-emerald-500/30"
+                        : isDarkMode
+                          ? "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+                          : "bg-white/80 border-slate-200 text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-[11px] font-black flex items-center gap-1.5">
+                        <span>⚡ استخراج مستقیم و فوق‌سریع (تک‌مرحله‌ای)</span>
+                      </span>
+                      {pdfExtractionStrategy === "direct" ? (
+                        <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                      ) : (
+                        <span className="text-[8.5px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-bold">
+                          ۲ الی ۴ ثانیه 🚀
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[9.5px] leading-relaxed opacity-80">
+                      پردازش فوق‌سریع تک‌مرحله‌ای مستقیم از فایل به خروجی ساختاریافته بدون تاخیر (سرعت حداکثری).
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setPdfExtractionStrategy?.("pdf_to_markdown_to_json")}
                     className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between gap-1.5 cursor-pointer relative ${
                       pdfExtractionStrategy === "pdf_to_markdown_to_json"
@@ -365,40 +396,14 @@ export default function AiSettingsModal({
                   >
                     <div className="flex items-center justify-between w-full">
                       <span className="text-[11px] font-black flex items-center gap-1.5">
-                        <span>📝 تبدیل PDF به Markdown ⬅️ استخراج JSON</span>
+                        <span>🔬 تبدیل PDF به Markdown ⬅️ سپس JSON</span>
                       </span>
                       {pdfExtractionStrategy === "pdf_to_markdown_to_json" && (
                         <CheckCircle className="w-4 h-4 text-indigo-500 shrink-0" />
                       )}
                     </div>
                     <p className="text-[9.5px] leading-relaxed opacity-80">
-                      پیرامون اسناد چندصفحه‌ای و فاکتورها، ابتدا ساختار Markdown دقیق شکل گرفته و سپس به JSON تبدیل می‌گردد (حداکثر دقت).
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPdfExtractionStrategy?.("direct")}
-                    className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between gap-1.5 cursor-pointer relative ${
-                      pdfExtractionStrategy === "direct"
-                        ? isDarkMode
-                          ? "bg-indigo-600/25 border-indigo-500 text-white shadow-md ring-1 ring-indigo-500/50"
-                          : "bg-white border-indigo-500 text-indigo-950 shadow-md ring-1 ring-indigo-500/30"
-                        : isDarkMode
-                          ? "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
-                          : "bg-white/80 border-slate-200 text-slate-600 hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <span className="text-[11px] font-black flex items-center gap-1.5">
-                        <span>📷 استخراج مستقیم تصویری PDF به JSON</span>
-                      </span>
-                      {pdfExtractionStrategy === "direct" && (
-                        <CheckCircle className="w-4 h-4 text-indigo-500 shrink-0" />
-                      )}
-                    </div>
-                    <p className="text-[9.5px] leading-relaxed opacity-80">
-                      پردازش یک‌مرحله‌ای مستقیم از فایل PDF به خروجی JSON (حالت عادی).
+                      پیرامون اسناد بسیار پیچیده یا چندصفحه‌ای سنگین (دقت مضاعف اما زمان‌برتر به دلیل دو مرحله‌ای بودن).
                     </p>
                   </button>
                 </div>
@@ -462,6 +467,12 @@ export default function AiSettingsModal({
                       title: "🔍 شارپ‌سازی و وضوح لبه‌ها",
                       badge: "رفع تاری",
                       desc: "فیلتر لاپلاسین برای برجسته‌کردن لبه‌های حروف ریز، ارقام مات و متون چاپ سوزنی."
+                    },
+                    {
+                      id: "super_resolution_adaptive",
+                      title: "🔬 سوپر رزولوشن و ریزجزئیات آلترا",
+                      badge: "فوق‌پیشرفته 🚀",
+                      desc: "تقویت هوشمند رزولوشن، تفکیک حروف به هم چسبیده، رفع سایه و استخراج ۱۰۰٪ ریزترین جزئیات."
                     }
                   ].map((modeItem) => {
                     const isSelected = (imagePreprocessingMode || "none") === modeItem.id;

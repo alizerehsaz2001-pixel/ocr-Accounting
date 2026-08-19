@@ -840,16 +840,16 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
                       </div>
 
                       {/* Status & Stage Text */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className={`text-xs font-bold flex items-center gap-1.5 ${
+                      <div className="flex items-center gap-2 flex-wrap min-w-0 w-full">
+                        <p className={`text-xs font-bold flex items-center gap-1.5 break-words line-clamp-2 ${
                           isSuccess ? "text-emerald-600 dark:text-emerald-400" : 
                           isRetrying ? "text-amber-600 dark:text-amber-400" : 
                           isProcessing ? "text-indigo-600 dark:text-indigo-400" : 
                           isError ? "text-rose-600 dark:text-rose-400" :
                           "text-slate-500 dark:text-slate-400"
                         }`}>
-                          {isRetrying && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                          <span>{item.statusMessage}</span>
+                          {isRetrying && <RefreshCw className="w-3.5 h-3.5 shrink-0 animate-spin" />}
+                          <span className="break-all sm:break-words">{item.statusMessage}</span>
                         </p>
                       </div>
 
@@ -1029,7 +1029,7 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
 
                       {/* Error details if any */}
                       {item.errorMessage && (
-                        <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 text-rose-700 dark:text-rose-300 text-xs leading-relaxed font-medium">
+                        <div className="p-3.5 mt-2 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 text-rose-700 dark:text-rose-300 text-xs leading-relaxed font-medium break-words max-h-32 overflow-y-auto">
                           <strong className="font-black">پیام خطا:</strong> {item.errorMessage}
                         </div>
                       )}
@@ -1082,11 +1082,11 @@ export const BatchOCRProgressPanel: React.FC<BatchOCRProgressPanelProps> = ({
                           <span>{copiedId === item.id ? "مشخصات کپی شد" : "کپی خلاصه مشخصات"}</span>
                         </button>
 
-                        {isSuccess && onViewScan && item.scanId && (
+                        {isSuccess && onViewScan && (item.scanId || item.id) && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              onViewScan(item.scanId!);
+                              onViewScan(item.scanId || item.id);
                             }}
                             className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-[11px] font-black flex items-center gap-2 shadow-lg shadow-indigo-500/25 cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
                           >

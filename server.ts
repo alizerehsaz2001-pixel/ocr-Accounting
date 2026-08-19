@@ -114,22 +114,28 @@ function getGeminiClient(): GoogleGenAI {
   return aiClient;
 }
 
+function getCanonicalModel(modelName: string): string {
+  if (!modelName) return "gemini-3.7-flash";
+  const lower = modelName.toLowerCase().trim();
+  if (lower === "gemini-3.6-flash") return "gemini-3.6-flash";
+  return "gemini-3.7-flash";
+}
+
 async function generateContentWithRetry(
   ai: GoogleGenAI,
   generateConfig: { model: string; contents: any; config?: any },
   maxRetries = 2
 ): Promise<any> {
-  const originalModel = generateConfig.model;
+  const originalModel = generateConfig.model || "gemini-3.7-flash";
   
-  // Construct the sequence of supported Gemini 3.x models to try
+  // Construct the sequence of distinct supported Gemini models to try across different quota buckets
   const candidateModels = [
-    originalModel,
+    getCanonicalModel(originalModel),
     "gemini-3.7-flash",
-    "gemini-flash-latest",
-    "gemini-3.1-flash-lite"
+    "gemini-3.6-flash"
   ];
   
-  // Filter out duplicates and null/undefined values
+  // Filter out duplicates and falsy values while preserving priority order
   const uniqueCandidates = Array.from(new Set(candidateModels.filter(Boolean)));
   
   let lastError: any = null;
@@ -162,17 +168,24 @@ async function generateContentWithRetry(
         const errorMessage = (apiError.message || "").toLowerCase();
         const apiStatus = apiError.status || apiError.statusCode || (apiError.error && apiError.error.code);
         
+        const isNotFoundOrUnsupported =
+          apiStatus === 404 ||
+          errorMessage.includes("not found") ||
+          errorMessage.includes("is not supported") ||
+          errorMessage.includes("unrecognized model") ||
+          errorMessage.includes("invalid argument");
+
         const isPermanentZeroLimit =
           errorMessage.includes("limit: 0") ||
           errorMessage.includes("limit:0") ||
-          (errorMessage.includes("quota exceeded") && (errorMessage.includes("limit") || errorMessage.includes("free_tier")));
+          errorMessage.includes("limit: 0.0");
 
-        if (isPermanentZeroLimit) {
+        if (isNotFoundOrUnsupported || isPermanentZeroLimit) {
           console.warn(
-            `[Gemini API] Model "${currentModel}" has 0 quota or is unavailable on this key. Falling back to the next model...`
+            `[Gemini API] Model "${currentModel}" is unavailable or has 0 quota (${apiError.message || apiStatus}). Fast-switching to next candidate model...`
           );
           lastError = apiError;
-          break;
+          break; // Fast fail to next model without wasting retries
         }
 
         const isQuotaExceeded =
@@ -183,6 +196,14 @@ async function generateContentWithRetry(
           errorMessage.includes("exhausted") ||
           errorMessage.includes("too many requests");
 
+        if (isQuotaExceeded) {
+          console.warn(
+            `[Gemini API] Model "${currentModel}" quota exceeded (429/RESOURCE_EXHAUSTED). Fast-switching immediately to next distinct candidate model...`
+          );
+          lastError = apiError;
+          break; // Fast switch to next candidate model family to avoid holding up response
+        }
+
         const isHighDemand =
           apiStatus === 503 ||
           apiStatus === "UNAVAILABLE" ||
@@ -192,8 +213,15 @@ async function generateContentWithRetry(
           errorMessage.includes("unavailable") ||
           errorMessage.includes("503");
 
+        if (isHighDemand && uniqueCandidates.length > 1) {
+          console.warn(
+            `[Gemini API] High demand/503 on "${currentModel}". Fast-switching immediately to alternate candidate model...`
+          );
+          lastError = apiError;
+          break; // Fast switch to next candidate model
+        }
+
         const isTransient =
-          isQuotaExceeded ||
           isHighDemand ||
           apiStatus === 500 ||
           apiStatus === "INTERNAL" ||
@@ -201,16 +229,16 @@ async function generateContentWithRetry(
           errorMessage.includes("econnreset");
 
         if (isTransient && attempt <= maxRetries) {
-          const jitter = Math.floor(Math.random() * 500);
+          const jitter = Math.floor(Math.random() * 400);
           const currentWait = delay + jitter;
           console.warn(
-            `[Gemini API] Transient/Rate limit on "${currentModel}" (Status: ${apiStatus || "429"}). Waiting ${currentWait}ms before retry (Attempt ${attempt}/${maxRetries})...`
+            `[Gemini API] Transient issue on "${currentModel}" (Status: ${apiStatus || "503"} - ${apiError.message || "High demand"}). Waiting ${currentWait}ms before retry (Attempt ${attempt}/${maxRetries})...`
           );
           await new Promise((resolve) => setTimeout(resolve, currentWait));
-          delay *= 1.8; // Exponential backoff
+          delay *= 1.5;
         } else {
           console.warn(
-            `[Gemini API] Model "${currentModel}" failed (${isTransient ? "retries exhausted" : "non-transient error"}). Switching to next candidate model...`
+            `[Gemini API] Model "${currentModel}" failed (${isTransient ? "retries exhausted" : `error: ${apiError.message || apiStatus}`}). Switching to next candidate model...`
           );
           break;
         }
@@ -223,17 +251,23 @@ async function generateContentWithRetry(
     }
   }
 
-  // If all candidate models failed, throw the last error
+  // If all candidate models failed, throw the last error with descriptive guidance
   const finalError = lastError || new Error("All Gemini API models failed during generation.");
   const finalMessage = (finalError.message || "").toLowerCase();
   const finalStatus = finalError.status || finalError.statusCode || (finalError.error && finalError.error.code);
   
   if (finalStatus === 429 || finalMessage.includes("quota") || finalMessage.includes("limit") || finalMessage.includes("rate limit") || finalMessage.includes("exhausted")) {
-    throw new Error("سهمیه یا محدودیت در تعداد درخواست‌های کلید API شما به پایان رسیده است (Quota Exceeded / Rate Limit). لطفا تنظیمات صورتحساب و سقف مصرف کلید خود را بررسی کنید یا چند دقیقه دیگر مجددا تلاش کنید.");
+    throw new Error("سهمیه یا محدودیت در تعداد درخواست‌های کلید API شما به پایان رسیده است (Quota Exceeded / Rate Limit). لطفا چند لحظه دیگر مجددا تلاش کنید یا از کلید اختصاصی در بخش تنظیمات استفاده فرمایید.");
   }
   if (finalStatus === 503 || finalMessage.includes("demand") || finalMessage.includes("temporary") || finalMessage.includes("unavailable") || finalMessage.includes("503")) {
-    throw new Error("در حال حاضر ترافیک سرورهای گوگل بسیار بالا است و سرویس موقتاً در دسترس نیست (Service Unavailable / High Demand). لطفا مجدداً تلاش فرمایید.");
+    throw new Error("در حال حاضر ترافیک سرورهای هوش مصنوعی بسیار بالا است و سرویس موقتاً در دسترس نیست (High Demand). لطفا چند ثانیه بعد مجدداً تلاش فرمایید.");
   }
+  
+  // Catch-all to prevent ugly JSON errors from spilling into the UI
+  if (finalMessage.includes("{") || finalMessage.length > 100) {
+     throw new Error("خطای نامشخص از سمت سرور هوش مصنوعی دریافت شد. لطفاً اتصال اینترنت خود را بررسی کرده و مجدداً تلاش نمایید.");
+  }
+  
   throw finalError;
 }
 
@@ -481,7 +515,7 @@ app.post("/api/ml/feedback", async (req, res) => {
 // Persian/Farsi financial documents extraction endpoint
 app.post("/api/extract", async (req, res) => {
   try {
-    const { image, mimeType, model, tokenSettings, userPrompt, chatFiles, pdfExtractionStrategy } = req.body;
+    const { image, mimeType, model, tokenSettings, userPrompt, chatFiles, pdfExtractionStrategy, strictnessMode } = req.body;
 
     let cleanImageBase64 = typeof image === "string" ? image : "";
     if (cleanImageBase64.includes("base64,")) {
@@ -496,10 +530,10 @@ app.post("/api/extract", async (req, res) => {
 
     const ai = getGeminiClient();
 
-    // Target backend model powered by Gemini 3.7 Flash Ultra Gen 7
+    // Target backend model powered by Gemini 3.7 Flash Ultra Gen 7 and modern Gemini 3.x models
     const allowedModels = [
       "gemini-3.7-flash",
-      "gemini-flash-latest"
+      "gemini-3.6-flash"
     ];
     let selectedModel = allowedModels.includes(model) ? model : "gemini-3.7-flash";
 
@@ -541,17 +575,39 @@ app.post("/api/extract", async (req, res) => {
       systemInstruction += `\n\n${mlPromptAdditions}`;
     }
 
-    let promptText = `سند پیوست را با موتور ممیزی نسل ۷ آلترا به دقت و به صورت ۱۰۰٪ کامل تحلیل نمایید.
-کاربر اکیداً تاکید کرده است که «تمام جزئیات سند بدون استثناء باید استخراج شود».
+    let promptText = `شما به عنوان برترین، خبره‌ترین و ارشدترین حسابدار رسمی و ممیز مالیاتی ایران (Master Senior CPA) سند پیوست را به صورت ۱۰۰٪ کامل، بدون کوچک‌ترین حذف، تلخیص یا ادغام و دقیقاً منطبق بر قوانین و استانداردهای حسابداری دوبل و مالیاتی ایران تحلیل و استخراج نمایید.
+کاربر اکیداً تاکید کرده است که «همه چیو کامل دربیاره کامل بر اساس قوانین حسابداری ایران به عنوان بهترین حسابدار ایران که به تمامی قوانین کامل آشناس».
 
-الزامات قطعی و غیرقابل چشم‌پوشی:
-۱. استخراج تک‌تک ردیف‌های جدول کالا/خدمات بدون ادغام یا حذف حتی یک ردیف.
-۲. استخراج کامل «شرح کالا یا خدمات» با تمام پسوندها، پیشوندها، مدل، برند، رنگ، سایز، ابعاد، مشخصات فنی و سریال بدون کوچک‌ترین کوتاه‌سازی یا تلخیص.
-۳. استخراج کامل مشخصات هویتی فروشنده و خریدار (نام کامل، شناسه ملی/کد ملی، کد اقتصادی، شماره ثبت، کدپستی، تلفن، آدرس کامل، شهر و استان).
-۴. استخراج کامل اطلاعات سربرگ (شماره فاکتور/سند، تاریخ شمسی، تاریخ میلادی، شناسه یکتای مالیاتی سامانه مودیان، نحوه تسویه، شماره سفارش).
-۵. استخراج کامل ارقام جزء (تعداد، واحد، فی واحد، مبلغ کل سطر، تخفیف سطر، مالیات سطر، مبلغ نهایی سطر) و ارقام کلان (جمع کل قبل از تخفیف، جمع تخفیفات، مالیات بر ارزش افزوده، عوارض، مبلغ قابل پرداخت نهایی، مبلغ به حروف، واحد ارزی).
-۶. استخراج کامل اطلاعات بانکی و تسویه (نام بانک، شماره حساب، شماره کارت، شماره شبا، صاحب حساب، شماره پیگیری، بابت تراکنش).
+الزامات قطعی و استاندارد حسابداری و ممیزی ایران:
+۱. استخراج تک‌تک ردیف‌های جدول کالا/خدمات از اولین تا آخرین ردیف بدون ادغام، حذف یا خلاصه کردن.
+۲. استخراج کامل «شرح کالا یا خدمات» با تمام پسوندها، پیشوندها، مدل، برند، پارت نامبر (Part Number)، مشخصات فنی، رنگ، سایز، ابعاد، سریال، کشور سازنده و توضیحات سطر.
+۳. استخراج کامل مشخصات هویتی و ثبتی طرفین طبق ماده ۱۶۹ مکرر ق.م.م (نام کامل، شناسه ملی ۱۱ رقمی / کد ملی ۱۰ رقمی، کد اقتصادی ۱۲ رقمی جدید/قدیم، شماره ثبت، کدپستی ۱۰ رقمی، شماره‌های تماس ثابت و همراه، آدرس دقیق پستی).
+۴. استخراج کامل اطلاعات سربرگ و رهگیری مالیاتی (شماره فاکتور، تاریخ شمسی کامل YYYY/MM/DD، تاریخ میلادی، شناسه یکتای مالیاتی ۲۲ رقمی سامانه مودیان، نحوه تسویه، شماره سفارش خرید، شماره حواله انبار).
+۵. استخراج کامل ارقام جزء (تعداد، واحد، فی واحد، مبلغ کل سطر، تخفیف سطر، مبلغ پس از تخفیف، نرخ مالیات ارزش افزوده، مبلغ مالیات سطر، مبلغ عوارض سطر، مبلغ نهایی سطر) و ارقام کلان (جمع کل قبل از تخفیف، جمع تخفیفات، مالیات بر ارزش افزوده، عوارض، مبلغ قابل پرداخت نهایی، مبلغ به حروف فارسی، واحد ارزی).
+۶. استخراج کامل اطلاعات بانکی و تسویه (نام بانک، نام شعبه، شماره حساب، شماره کارت، شماره شبا، صاحب حساب، شماره پیگیری، شماره ارجاع RRN، شناسه پرداخت، بابت تراکنش).
 ۷. استخراج تمام یادداشت‌ها، شروط معامله، گارانتی، توضیحات پاورقی و حاشیه سند، متن مهرها و وضعیت امضاها.
+
+🏛️ ضوابط و استانداردهای حسابداری دوبل ایران برای ثبت و تشخیص حساب بانک و کدینگ دفاتر (Iranian Double-Entry CPA Standards):
+شما باید در تحلیل سند و تولید خروجی، ماهیت رویدادهای مالی و گردش حساب‌ها را دقیقاً بر اساس استانداردهای حسابداری ایران و سیستم دوبل تعیین فرمایید:
+الف) بانک بدهکار می‌شود (ورود پول / افزایش نقد و بانک):
+  - دریافت وجه از مشتریان و خریداران (بستانکار: حساب‌های دریافتنی تجاری)
+  - دریافت pre-payment یا پیش‌دریافت از خریداران (بستانکار: حساب پیش‌دریافت‌ها)
+  - دریافت تسهیلات، اعتبارات و وام‌های بانکی (بستانکار: تسهیلات مالی دریافتی)
+  - واریز سرمایه اولیه یا افزایش سرمایه نقدی توسط شرکا / سهامداران (بستانکار: حساب سرمایه)
+  - وصول اسناد دریافتنی (چک‌ها)، سود سپرده بانکی، یا واریزی‌های نقدی متفرقه
+ب) بانک بستانکار می‌شود (خروج پول / کاهش نقد و بانک):
+  - پرداخت به تامین‌کنندگان و فروشندگان کالا و خدمات (بدهکار: حساب‌های پرداختنی تجاری)
+  - پرداخت پیش‌پرداخت به فروشندگان و پیمانکاران (بدهکار: حساب پیش‌پرداخت‌ها)
+  - پرداخت هزینه‌های جاری (حقوق و دستمزد پرسنل، اجاره‌بها، هزینه‌های اداری، عمومی، توزیع و فروش، قبوض آب، برق، گاز و تلفن)
+  - پرداخت اقساط تسهیلات و وام‌ها و کارمزدهای خدمات و تراکنش‌های بانکی
+  - پرداخت مالیات عملکرد، مالیات بر ارزش افزوده و حق بیمه سازمان تأمین اجتماعی
+
+ج) در بخش «تحلیل_سند» (که درون شیء JSON قرار دارد)، حتماً و صریحاً با تیتر و ساختار مشخص بیان فرمایید کدام حساب یا سرفصل بدهکار است و کدام بستانکار است:
+- 🔵 **حساب(های) بدهکار:** [نام دقیق حساب / سرفصل کل و معین]
+- 🔴 **حساب(های) بستانکار:** [نام دقیق حساب / سرفصل کل و معین]
+(نکته: در این بخش متنی، فقط نام سرفصل‌ها را ذکر بفرمایید و نیازی به ذکر مبلغ نیست).
+
+در ستون‌ها و ردیف‌های JSON، علاوه بر «مبلغ_بدهکار» و «مبلغ_بستانکار»، حتماً ستون‌ها و فیلدهای «حساب_بدهکار»، «حساب_بستانکار»، «ماهیت_گردش_بانک» و «طرف_حساب» را بر پایه این اصول استخراج، تنظیم و شفاف‌سازی نمایید تا در خروجی JSON کاملاً مشخص باشد کدام فیلد بدهکار و کدام بستانکار است.
 
 خروجی باید منحصراً شیء استاندارد JSON مطابق Schema باشد که تمام فیلدهای فوق را در ستون‌ها و ردیف‌ها پوشش دهد.`;
 
@@ -580,7 +636,8 @@ app.post("/api/extract", async (req, res) => {
 
     let markdownText: string | null = null;
     const isPdfFile = mimeType === "application/pdf" || (mimeType && mimeType.includes("pdf"));
-    const shouldRunPdfToMarkdown = pdfExtractionStrategy === "pdf_to_markdown_to_json" || (isPdfFile && pdfExtractionStrategy !== "direct");
+    // Default to ultra-fast direct single-pass extraction unless user explicitly chose the multi-step markdown conversion
+    const shouldRunPdfToMarkdown = pdfExtractionStrategy === "pdf_to_markdown_to_json";
 
     if (shouldRunPdfToMarkdown) {
       try {
@@ -607,8 +664,6 @@ app.post("/api/extract", async (req, res) => {
         }
       } catch (mdErr) {
         console.warn("[PDF-to-Markdown OCR] Step 1 conversion encountered an error, falling back to direct pass:", mdErr);
-        // Wait a brief moment before step 2 fallback to let token rate limits recover
-        await new Promise((resolve) => setTimeout(resolve, 1200));
       }
     }
 
@@ -646,15 +701,15 @@ app.post("/api/extract", async (req, res) => {
             },
             تحلیل_سند: {
               type: Type.STRING,
-              description: "تحلیل هوشمند، جامع و ممیزی کامل سند شامل بررسی صحت ارقام، موازنه ریاضی سطرها و جمع کل، وضعیت سامانه مودیان و کیفیت داده‌ها.",
+              description: "تحلیل هوشمند، جامع و ممیزی کامل سند شامل تصریح دقیق و شفاف اینکه کدام حساب/سرفصل «بدهکار» و کدام «بستانکار» است، بررسی صحت ارقام و موازنه ریاضی سطرها و جمع کل.",
             },
             ستون_ها: {
               type: Type.ARRAY,
-              description: "فهرست کامل تمامی ستون‌های استخراج شده از سند (اطلاعات سربرگ، طرفین، اقلام جدول، سرجمع‌های مالی، پرداخت و شروط) با کلیدهای یکتای فارسی و عناوین خوانا.",
+              description: "فهرست کامل تمامی ستون‌های استخراج شده از سند با کلیدهای یکتای فارسی و عناوین خوانا.",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  کلید: { type: Type.STRING, description: "کلید یکتای ستون به زبان فارسی (مثلا شماره_فاکتور، تاریخ، نام_فروشنده، شناسه_ملی_فروشنده، کد_اقتصادی_فروشنده، تلفن_فروشنده، آدرس_فروشنده، نام_خریدار، شناسه_ملی_خریدار، کد_اقتصادی_خریدار، تلفن_خریدار، آدرس_خریدار، ردیف، کد_کالا، شرح_کامل_کالا_یا_خدمات، تعداد، واحد_سنجش، فی_واحد، مبلغ_کل_ردیف، تخفیف_ردیف، مالیات_ارزش_افزوده_ردیف، مبلغ_نهایی_ردیف، توضیحات_ردیف، جمع_کل_قبل_تخفیف، جمع_تخفیفات، مالیات_و_عوارض_کل، مبلغ_قابل_پرداخت، مبلغ_به_حروف، واحد_ارزی، نام_بانک، شماره_حساب، شماره_شبا، شماره_پیگیری، توضیحات_و_شروط_سند، وضعیت_مهر_و_امضا)" },
+                  کلید: { type: Type.STRING, description: "کلید یکتای ستون به زبان فارسی (مانند شماره_فاکتور، تاریخ، شناسه_یکتای_مالیاتی، نام_فروشنده، شناسه_ملی_فروشنده، کد_اقتصادی_فروشنده، نام_خریدار، شناسه_ملی_خریدار، کد_کالا_سامانه_مودیان، شرح_کامل_کالا_یا_خدمات، تعداد، واحد_سنجش، فی_واحد، مبلغ_کل_ردیف، تخفیف_ردیف، مالیات_ارزش_افزوده_ردیف، مبلغ_نهایی_ردیف، حساب_بدهکار، حساب_بستانکار، مبلغ_بدهکار، مبلغ_بستانکار، ماهیت_گردش_بانک، طرف_حساب، نحوه_تسویه، متن_مهرها_و_امضاها)" },
                   عنوان: { type: Type.STRING, description: "عنوان فارسی خوانا و استاندارد ستون" }
                 },
                 required: ["کلید", "عنوان"]
@@ -713,16 +768,20 @@ app.post("/api/extract", async (req, res) => {
       }
     }
 
-    // Dual-Pass AI Self-Correction & Math Audit (Cool accuracy-raising feature!)
-    if (tokenSettings && tokenSettings.highAccuracyDualPass === true) {
+    // Dual-Pass AI Self-Correction & Math Audit (Initiated if highAccuracyDualPass is true OR strictnessMode === 'audit')
+    const shouldRunDualPass = (tokenSettings && tokenSettings.highAccuracyDualPass === true) || strictnessMode === "audit";
+    if (shouldRunDualPass) {
       console.info("[Dual-Pass AI Audit] Initiating second pass audit and validation...");
+      
+      // Brief pause to prevent hitting consecutive request RPM/TPM limits
+      await new Promise((resolve) => setTimeout(resolve, 600));
 
       const auditConfig = {
         model: selectedModel,
         contents: {
           parts: [
             imagePart,
-            { text: `اطلاعات و داده‌های استخراج شده اولیه جهت ممیزی، بررسی تراز و اعتبارسنجی ارقام:\n\`\`\`json\n${JSON.stringify(parsedData)}\n\`\`\`` }
+            { text: `اطلاعات و داده‌های استخراج شده اولیه جهت ممیزی، بازبینی ریزجزئیات، بررسی تراز و اعتبارسنجی ارقام:\n\`\`\`json\n${JSON.stringify(parsedData)}\n\`\`\`` }
           ]
         },
         config: {
@@ -747,8 +806,13 @@ app.post("/api/extract", async (req, res) => {
           console.info("[Dual-Pass AI Audit] Success! Data was successfully audited and healed.");
           parsedData = auditedData;
         }
-      } catch (auditErr) {
-        console.warn("[Dual-Pass AI Audit] Audit failed or was bypassed, falling back to initial data:", auditErr);
+      } catch (auditErr: any) {
+        const errMsg = auditErr?.message || "";
+        if (errMsg.includes("سهمیه") || errMsg.includes("Quota") || errMsg.includes("429") || errMsg.includes("limit")) {
+          console.info("[Dual-Pass AI Audit] Second pass skipped due to API rate limit; using primary extracted data cleanly.");
+        } else {
+          console.warn("[Dual-Pass AI Audit] Audit pass bypassed, using primary extracted data:", errMsg || auditErr);
+        }
       }
     }
 
@@ -787,7 +851,10 @@ app.post("/api/audit-repair", async (req, res) => {
     }
 
     const ai = getGeminiClient();
-    const allowedRepairModels = ["gemini-3.7-flash", "gemini-flash-latest"];
+    const allowedRepairModels = [
+      "gemini-3.7-flash",
+      "gemini-3.6-flash"
+    ];
     const selectedModel = allowedRepairModels.includes(model) ? model : "gemini-3.7-flash";
 
     console.info("[API Audit Repair] Initiating on-demand mathematical alignment and OCR healing...");

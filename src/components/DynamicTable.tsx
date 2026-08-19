@@ -469,6 +469,24 @@ export default function DynamicTable({
           })}
           <td className={`px-4 py-3.5 border-t ${isDarkMode ? "border-slate-700" : "border-slate-200"}`}></td>
         </tr>
+        <tr className={`border-t bg-slate-100/50 dark:bg-slate-800/30 ${isDarkMode ? "border-slate-700" : "border-slate-200"}`}>
+          <td colSpan={hasSelectionSupport ? 3 : 2} className={`px-4 py-3 text-left font-bold border-l ${isDarkMode ? "border-slate-700 text-slate-400" : "border-slate-200 text-slate-500"}`}>
+            مانده نهایی (Balance):
+          </td>
+          <td colSpan={uniqueColumns.length + 1} className="px-4 py-3">
+             <div className="flex items-center gap-2">
+                {totalDebit === totalCredit ? (
+                    <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-black bg-emerald-100 dark:bg-emerald-500/20 px-3 py-1.5 rounded-lg text-xs shadow-sm">
+                       <ShieldCheck className="w-4 h-4" /> تراز برقرار است (اختلاف: ۰ ریال)
+                    </span>
+                ) : (
+                    <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-black bg-rose-100 dark:bg-rose-500/20 px-3 py-1.5 rounded-lg text-xs shadow-sm animate-pulse border border-rose-200 dark:border-rose-500/30">
+                       <AlertTriangle className="w-4 h-4" /> هشدار عدم توازن! اختلاف: {toPersianDigits(Math.abs(totalDebit - totalCredit).toLocaleString("en-US"))} ریال ({totalDebit > totalCredit ? 'بدهکار بیشتر است' : 'بستانکار بیشتر است'})
+                    </span>
+                )}
+             </div>
+          </td>
+        </tr>
       </tfoot>
     </table>
   </div>

@@ -40,7 +40,8 @@ export type ImagePreprocessingMode =
   | 'grayscale_bw'
   | 'binarize_adaptive'
   | 'sharpness_denoise'
-  | 'auto_enhance';
+  | 'auto_enhance'
+  | 'super_resolution_adaptive';
 
 export interface DocumentExtractionSettings {
   selectedModel: string;
