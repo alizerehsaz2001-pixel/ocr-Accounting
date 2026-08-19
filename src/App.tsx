@@ -984,18 +984,35 @@ export default function App() {
           };
 
           setPreviousScans(prev => {
-            const filtered = prev.filter(s => s.id !== scanId && s.file.name !== item.name);
-            return [
-              {
+            const existingIdx = prev.findIndex(s => s.id === scanId || (s.file && s.file.id === scanId));
+            if (existingIdx !== -1) {
+              const updated = [...prev];
+              updated[existingIdx] = {
+                ...updated[existingIdx],
                 id: scanId,
-                file: successFile,
+                file: {
+                  ...updated[existingIdx].file,
+                  ...successFile,
+                  status: "success"
+                },
                 transactions: extractedItems,
-                timestamp: Date.now(),
-                folder: item.folder,
+                folder: item.folder || updated[existingIdx].folder,
                 extractionSettings: (item as any).extractionSettings || currentDocExtractionSettings
-              },
-              ...filtered
-            ].slice(0, 500);
+              };
+              return updated;
+            } else {
+              return [
+                {
+                  id: scanId,
+                  file: successFile,
+                  transactions: extractedItems,
+                  timestamp: Date.now(),
+                  folder: item.folder,
+                  extractionSettings: (item as any).extractionSettings || currentDocExtractionSettings
+                },
+                ...prev.filter(s => s.id !== scanId)
+              ].slice(0, 500);
+            }
           });
 
           setTransactions(prev => [...extractedItems, ...prev]);
@@ -1201,20 +1218,23 @@ export default function App() {
     setIsBatchPanelOpen(true);
     setIsBatchPanelMinimized(false);
 
-    const initialItems: BatchOCRProgressItem[] = fileList.map((f, idx) => ({
-      id: f.id || `batch_item_${Date.now()}_${idx}_${Math.random().toString(36).substring(2,6)}`,
-      scanId: f.id,
-      name: f.name,
-      size: f.size,
-      preview: f.preview || `data:${f.mimeType};base64,${f.base64}`,
-      mimeType: f.mimeType,
-      base64: f.base64,
-      folder: f.folder,
-      status: "queued",
-      attempt: 0,
-      statusMessage: "در صف انتظار کارگران پردازش موازی...",
-      startTime: Date.now()
-    }));
+    const initialItems: BatchOCRProgressItem[] = fileList.map((f, idx) => {
+      const uniqueId = f.id || `scan_${Date.now()}_${idx}_${Math.random().toString(36).substring(2,8)}`;
+      return {
+        id: uniqueId,
+        scanId: uniqueId,
+        name: f.name,
+        size: f.size,
+        preview: f.preview || `data:${f.mimeType};base64,${f.base64}`,
+        mimeType: f.mimeType,
+        base64: f.base64,
+        folder: f.folder,
+        status: "queued",
+        attempt: 0,
+        statusMessage: "در صف انتظار کارگران پردازش موازی...",
+        startTime: Date.now()
+      };
+    });
 
     batchOCRItemsRef.current = initialItems;
     setBatchOCRItems(initialItems);
@@ -1248,7 +1268,7 @@ export default function App() {
 
     const extraStorageBytes = (currentUser?.extraStorage || 0) * 1024 * 1024 * 1024;
     const MAX_STORAGE = 5 * 1024 * 1024 * 1024 + extraStorageBytes;
-    const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file.size || 0), 0);
+    const usedStorage = previousScans.reduce((acc, scan) => acc + (scan.file?.size || 0), 0);
     const totalNewSize = validFiles.reduce((acc, f) => acc + f.size, 0);
 
     if (usedStorage + totalNewSize > MAX_STORAGE) {
@@ -1257,14 +1277,16 @@ export default function App() {
     }
 
     try {
-      showNotification(`در حال پیش‌پردازش ${validFiles.length.toLocaleString("fa-IR")} سند جهت پردازش موازی...`, "info");
+      showNotification(`در حال پیش‌پردازش ${validFiles.length.toLocaleString("fa-IR")} سند جهت آپلود و ثبت در مدیریت فایل‌ها...`, "info");
 
+      const now = Date.now();
       const convertedItems = await Promise.all(
-        validFiles.map(async (file) => {
+        validFiles.map(async (file, idx) => {
           const base64 = await convertFileToBase64(file);
           const targetMime = file.type === "application/pdf" ? "application/pdf" : "image/jpeg";
+          const scanId = `scan_${now}_${idx}_${Math.random().toString(36).substring(2, 9)}`;
           return {
-            id: "scan_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
+            id: scanId,
             name: file.name,
             size: file.size,
             base64,
@@ -1276,9 +1298,34 @@ export default function App() {
       );
 
       if (convertedItems.length > 0) {
+        // Create new scan objects for ALL uploaded files so they instantly appear in File Management & Recent Scans History
+        const newScans: PreviousScan[] = convertedItems.map((item, idx) => ({
+          id: item.id,
+          file: {
+            id: item.id,
+            name: item.name,
+            size: item.size,
+            preview: item.preview,
+            mimeType: item.mimeType,
+            status: "idle" as const,
+            error: null,
+            results: [],
+          },
+          transactions: [],
+          timestamp: now + idx,
+          folder: item.folder
+        }));
+
+        setPreviousScans(prev => {
+          const existingIds = new Set(newScans.map(s => s.id));
+          const filteredPrev = prev.filter(s => !existingIds.has(s.id));
+          return [...newScans, ...filteredPrev].slice(0, 500);
+        });
+
         setPendingFiles(prev => [...prev, ...convertedItems]);
         setCustomPrompt("");
-        // Instead of starting immediately, we allow user to review pending files
+        showNotification(`${convertedItems.length.toLocaleString("fa-IR")} سند با موفقیت بارگذاری گردید و به مدیریت فایل‌ها و تاریخچه اسکن‌ها افزوده شد.`, "success");
+        logEvent("آپلود دسته جمعی اسناد", `${convertedItems.length} سند در مدیریت فایل‌ها و تاریخچه ثبت شد.`);
       }
     } catch (error) {
       console.error(error);
@@ -1319,7 +1366,7 @@ export default function App() {
       setActiveTab("analysis");
       showNotification(`جدول و جزئیات سند «${scan.file.name}» باز شد.`, "success");
     } else {
-      const batchItem = batchOCRItems.find(i => i.scanId === scanId || i.id === scanId);
+      const batchItem: any = batchOCRItems.find(i => i.scanId === scanId || i.id === scanId);
       if (batchItem && batchItem.transactions) {
         const fileObj = {
           id: batchItem.id,
@@ -1331,7 +1378,7 @@ export default function App() {
           extractedJson: batchItem.transactions,
           documentAnalysis: batchItem.documentAnalysis || "",
           tokensUsed: batchItem.tokensUsed || 0,
-          processingTimeSec: batchItem.processingTimeSec || 0,
+          processingTimeSec: batchItem.processingTimeMs ? Math.round(batchItem.processingTimeMs / 1000) : 0,
           mimeType: batchItem.mimeType || "image/jpeg"
         };
         setActiveFile(fileObj);
@@ -1347,7 +1394,7 @@ export default function App() {
         setActiveTab("analysis");
         showNotification(`جدول و جزئیات سند «${batchItem.name}» باز شد.`, "success");
       } else {
-        showNotification("اطلاعات این سند در تاریخچه یافت نشد.", "warning");
+        showNotification("اطلاعات این سند در تاریخچه یافت نشد.", "info");
       }
     }
   };
